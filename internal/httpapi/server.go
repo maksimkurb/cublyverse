@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/maksimkurb/cublyverse/internal/auth"
 	"github.com/maksimkurb/cublyverse/internal/httpapi/gen"
 )
 
@@ -24,10 +25,32 @@ const (
 // Stable error codes used by the API. They are part of the contract and must
 // not change; the human readable message may.
 const (
-	codeBadRequest = "bad_request"
-	codeNotFound   = "not_found"
-	codeInternal   = "internal"
+	codeBadRequest      = "bad_request"
+	codeNotFound        = "not_found"
+	codeInternal        = "internal"
+	codeUnauthorized    = "unauthorized"
+	codeForbidden       = "forbidden"
+	codeInvalidInitData = "invalid_init_data"
+	codeUnavailable     = "unavailable"
 )
+
+// AuthService is the identity service the API depends on. It is an interface so
+// the tests can substitute it, while the real implementation is *auth.Service.
+type AuthService interface {
+	// ResolveSession authenticates a request through the Bearer header or the
+	// session cookie.
+	ResolveSession(ctx context.Context, r *http.Request) (auth.Session, bool)
+	// Profile returns the user and their messenger bindings.
+	Profile(ctx context.Context, principalID string) (auth.Profile, error)
+	// UpdateTimezone stores the user's IANA time zone.
+	UpdateTimezone(ctx context.Context, principalID, timezone string) (auth.Profile, error)
+	// RevokeSession invalidates the session of the current request.
+	RevokeSession(ctx context.Context, sessionID string) error
+	// AuthenticateTelegram exchanges Mini App initData for a session.
+	AuthenticateTelegram(ctx context.Context, initData string) (auth.TelegramAuthResult, error)
+	// ClearedSessionCookie serialises an expired session cookie.
+	ClearedSessionCookie() string
+}
 
 // Deps are the collaborators the HTTP layer needs.
 type Deps struct {
@@ -43,6 +66,12 @@ type Deps struct {
 	Web http.Handler
 	// Spec is the raw OpenAPI document served at /api/openapi.yaml.
 	Spec []byte
+	// Auth is the identity service. Without it every session-protected
+	// operation answers 401 and the sign-in pages are not mounted.
+	Auth AuthService
+	// AuthPages serves /auth/*: the OIDC round trip, the confirmation page and
+	// the Mini App initData check.
+	AuthPages http.Handler
 }
 
 // New builds the root HTTP handler: API, probes, documentation and the WebApp.
@@ -74,15 +103,26 @@ func New(deps Deps) http.Handler {
 		writeError(w, http.StatusInternalServerError, codeInternal, "Внутренняя ошибка сервера")
 	}
 
+	// The generated operations live on their own mux so the session middleware
+	// only touches /api/v1/* and never static files. The base path is stripped
+	// by the mount below, so the generated patterns are "/health", "/me", …
+	apiMux := http.NewServeMux()
 	strict := gen.NewStrictHandlerWithOptions(h, nil, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  rejectRequest,
 		ResponseErrorHandlerFunc: failRequest,
 	})
 	gen.HandlerWithOptions(strict, gen.StdHTTPServerOptions{
-		BaseURL:          apiBaseURL,
-		BaseRouter:       mux,
+		BaseRouter:       apiMux,
 		ErrorHandlerFunc: rejectRequest,
 	})
+	// Keep the JSON error contract for API paths the specification does not
+	// describe.
+	apiMux.HandleFunc("/", notFound)
+	mux.Handle("/api/v1/", http.StripPrefix(apiBaseURL, h.sessionMiddleware(apiMux)))
+
+	if deps.AuthPages != nil {
+		mux.Handle("/auth/", deps.AuthPages)
+	}
 
 	mux.HandleFunc("GET /healthz", h.healthz)
 	mux.HandleFunc("GET /readyz", h.readyz)

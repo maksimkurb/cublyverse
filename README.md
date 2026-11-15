@@ -5,12 +5,16 @@ MCP-сервер поверх одной PostgreSQL. Бот всегда раб�
 пользователя: вход по SSO (OIDC), аккаунты мессенджеров — проверенные привязки к
 SSO-пользователю.
 
-Сейчас в репозитории каркас (этап M0): собирается бинарник, работает OpenAPI
-конвейер, подключена PostgreSQL с миграциями, есть заготовка WebApp, Docker и CI.
+Сейчас в репозитории каркас (M0) и идентичность (M1): собирается бинарник,
+работает OpenAPI конвейер, подключена PostgreSQL с миграциями, есть заготовка
+WebApp, Docker и CI, вход по SSO с безопасной привязкой мессенджеров и сессиями.
 Фича «Напоминания» появится на этапе M3.
 
 - Архитектура и принятые решения — [docs/PLAN.md](docs/PLAN.md)
 - Стори с критериями приёмки — [docs/STORIES.md](docs/STORIES.md)
+- API и вход — [docs/API.md](docs/API.md)
+- Схема базы и миграции — [docs/DATABASE.md](docs/DATABASE.md)
+- Развёртывание — [docs/DEPLOY.md](docs/DEPLOY.md)
 - Правила разработки — [AGENTS.md](AGENTS.md)
 
 ## Что нужно
@@ -36,6 +40,14 @@ make dev                  # сервер на http://localhost:8080
 
 Минимально достаточно одной переменной `DATABASE_URL`: без токенов
 мессенджеров сервер поднимается и обслуживает API и WebApp.
+
+### Вход
+
+`GET /api/v1/me` требует сессию. В браузере вход начинается со страницы
+<http://localhost:8080/auth/login?return_to=/app/> — для неё нужен
+OIDC-провайдер (`OIDC_ISSUER`, `OIDC_CLIENT_ID`). Telegram Mini App входит через
+`POST /api/v1/auth/telegram` с `initData`. Как устроены сессии, подтверждение
+привязки и проверка `initData` — в [docs/API.md](docs/API.md).
 
 ### PostgreSQL без Docker
 
@@ -77,14 +89,16 @@ api/openapi.yaml          спецификация API — источник пр
 cmd/cublyverse/           main: serve | migrate
 internal/config/          конфигурация из env
 internal/store/           pgxpool, миграции goose, sqlc-запросы
+internal/auth/            пользователи, привязки, вход OIDC, сессии
+internal/interaction/     реестр действий в PostgreSQL (для бота)
 internal/httpapi/         сгенерированный strict-сервер и его реализация
 internal/app/             сборка приложения, реестр фич, фоновые задачи
-internal/bot/             роутер бота (наполняется в M2)
+internal/bot/             обработчик бота (роутер — в M2)
 internal/mcpserver/       MCP-сервер (наполняется в M5)
 unibot/                   наш фреймворк мессенджеров
 web/                      WebApp (Vite + React + TypeScript)
 deploy/                   Dockerfile, docker-compose
-docs/                     план и стори
+docs/                     план, стори, API, база, деплой
 ```
 
 Слои: бот, HTTP API и MCP — три тонких входа в один сервисный слой фичи, логика

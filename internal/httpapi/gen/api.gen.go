@@ -16,17 +16,90 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/oapi-codegen/runtime"
 )
+
+// Defines values for BindingPlatform.
+const (
+	Matrix   BindingPlatform = "matrix"
+	Telegram BindingPlatform = "telegram"
+)
+
+// Valid indicates whether the value is a known member of the BindingPlatform enum.
+func (e BindingPlatform) Valid() bool {
+	switch e {
+	case Matrix:
+		return true
+	case Telegram:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TelegramAuthResponseStatus.
+const (
+	LinkRequired TelegramAuthResponseStatus = "link_required"
+	Ok           TelegramAuthResponseStatus = "ok"
+)
+
+// Valid indicates whether the value is a known member of the TelegramAuthResponseStatus enum.
+func (e TelegramAuthResponseStatus) Valid() bool {
+	switch e {
+	case LinkRequired:
+		return true
+	case Ok:
+		return true
+	default:
+		return false
+	}
+}
+
+// Binding A messenger account linked to an SSO user. A messenger account belongs
+// to exactly one user: re-binding moves it, it never duplicates.
+type Binding struct {
+	// ConversationId Chat the bot talks to for this account. For Telegram private chats
+	// it equals the user id.
+	//
+	//
+	// Example: 279058397
+	ConversationId string `json:"conversation_id"`
+
+	// Platform Messenger of the binding.
+	//
+	// Example: telegram
+	Platform BindingPlatform `json:"platform"`
+
+	// RemoteUserId User id inside the messenger.
+	//
+	// Example: 279058397
+	RemoteUserId string `json:"remote_user_id"`
+
+	// VerifiedAt When the user confirmed the binding.
+	//
+	// Example: 2026-01-15T09:31:00Z
+	VerifiedAt time.Time `json:"verified_at"`
+}
+
+// BindingPlatform Messenger of the binding.
+//
+// Example: telegram
+type BindingPlatform string
 
 // Error Uniform error payload. `code` is a stable machine readable identifier,
 // `message` is a human readable explanation in Russian.
 type Error struct {
-	// Code Example: not_found
+	// Code Stable error code.
+	//
+	// Example: not_found
 	Code string `json:"code"`
 
-	// Message Example: Страница не найдена
+	// Message Human readable explanation in Russian.
+	//
+	// Example: Страница не найдена
 	Message string `json:"message"`
 }
 
@@ -43,11 +116,140 @@ type Health struct {
 	Version string `json:"version"`
 }
 
+// Me The authenticated user together with the messenger accounts bound to
+// them. Bindings are verified: an account only appears here after the user
+// confirmed the link, and a Telegram binding additionally requires the
+// matching Mini App `initData`.
+type Me struct {
+	// Bindings Verified messenger accounts of this user.
+	Bindings []Binding `json:"bindings"`
+
+	// CreatedAt When the user row was created.
+	//
+	// Example: 2026-01-15T09:30:00Z
+	CreatedAt time.Time `json:"created_at"`
+
+	// DisplayName Display name from the SSO provider, if it sends one.
+	//
+	// Example: Иван Петров
+	DisplayName *string `json:"display_name,omitempty"`
+
+	// Email E-mail from the SSO provider, if it sends one.
+	//
+	// Example: user@example.com
+	Email *string `json:"email,omitempty"`
+
+	// Id Principal id — the `users.id` UUID as a string.
+	//
+	// Example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+	Id string `json:"id"`
+
+	// Timezone IANA time zone used for the user's schedules and notifications.
+	// Defaults to `UTC` until changed with `PATCH /me`.
+	//
+	//
+	// Example: Europe/Moscow
+	Timezone string `json:"timezone"`
+}
+
+// TelegramAuthResponse Result of the Mini App sign-in. `status` decides which fields are set:
+// `ok` carries a session and the profile, `link_required` carries the
+// sign-in link.
+type TelegramAuthResponse struct {
+	// ExpiresAt Expiry of the session. Present only when status is `ok`.
+	//
+	// Example: 2026-01-16T09:30:00Z
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+
+	// LinkUrl Same-origin URL that starts the binding flow: absolute when
+	// `PUBLIC_BASE_URL` is configured, a relative path otherwise. Present
+	// only for `status: link_required`. Open it inside the Mini App — the
+	// webview keeps `initData`, and the server compares that payload with
+	// the pending binding.
+	//
+	//
+	// Example: /auth/login?state=Yk3n0bT1cQ4xr8wZ6yV3uK5pJ7hF0aS2dE4gH6jK8
+	LinkUrl *string `json:"link_url,omitempty"`
+
+	// Status `ok` — a session was issued; `link_required` — the Telegram account
+	// is not bound to any SSO user yet.
+	//
+	//
+	// Example: ok
+	Status TelegramAuthResponseStatus `json:"status"`
+
+	// Token Bearer session token. Present only for `status: ok`. Keep it in
+	// memory; it can be revoked by `POST /auth/logout`.
+	//
+	//
+	// Example: 9lGm2n0bT1cQ4xr8wZ6yV3uK5pJ7hF0aS2dE4gH6jK8
+	Token *string `json:"token,omitempty"`
+
+	// User The authenticated user together with the messenger accounts bound to
+	// them. Bindings are verified: an account only appears here after the user
+	// confirmed the link, and a Telegram binding additionally requires the
+	// matching Mini App `initData`.
+	User *Me `json:"user,omitempty"`
+}
+
+// TelegramAuthResponseStatus `ok` — a session was issued; `link_required` — the Telegram account
+// is not bound to any SSO user yet.
+//
+// Example: ok
+type TelegramAuthResponseStatus string
+
+// TelegramInitData Raw payload of the Telegram Mini App.
+type TelegramInitData struct {
+	// InitData The value of `Telegram.WebApp.initData`: a URL-encoded query string
+	// with a `hash` field. Its HMAC must verify with the bot token and
+	// `auth_date` must be younger than 24 hours.
+	//
+	//
+	// Example: query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A279058397%7D&auth_date=1768400000&hash=9f2c1b
+	InitData string `json:"init_data"`
+}
+
+// UpdateMeRequest Fields of the profile a user may change themselves.
+type UpdateMeRequest struct {
+	// Timezone IANA time zone name, for example `Europe/Moscow`. Unknown names are
+	// rejected with `400`.
+	//
+	//
+	// Example: Europe/Moscow
+	Timezone string `json:"timezone"`
+}
+
+// Forbidden Uniform error payload. `code` is a stable machine readable identifier,
+// `message` is a human readable explanation in Russian.
+type Forbidden = Error
+
+// Unauthorized Uniform error payload. `code` is a stable machine readable identifier,
+// `message` is a human readable explanation in Russian.
+type Unauthorized = Error
+
+// AuthTelegramJSONRequestBody defines body for AuthTelegram for application/json ContentType.
+type AuthTelegramJSONRequestBody = TelegramInitData
+
+// UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
+type UpdateMeJSONRequestBody = UpdateMeRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Logout Revoke the current session
+	// (POST /auth/logout)
+	Logout(w http.ResponseWriter, r *http.Request)
+	// AuthTelegram Sign in from the Telegram Mini App
+	// (POST /auth/telegram)
+	AuthTelegram(w http.ResponseWriter, r *http.Request)
 	// GetHealth Service health and version
 	// (GET /health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
+	// GetMe Current user profile and messenger bindings
+	// (GET /me)
+	GetMe(w http.ResponseWriter, r *http.Request)
+	// UpdateMe Update the current user's settings
+	// (PATCH /me)
+	UpdateMe(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -59,11 +261,67 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
+// Logout operation middleware
+func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Logout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AuthTelegram operation middleware
+func (siw *ServerInterfaceWrapper) AuthTelegram(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthTelegram(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetHealth operation middleware
 func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMe operation middleware
+func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateMe operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMe(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -194,11 +452,120 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/health", wrapper.GetHealth)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me", wrapper.GetMe)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me", wrapper.UpdateMe)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/logout", wrapper.Logout)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/telegram", wrapper.AuthTelegram)
 
 	return m
 }
 
 type ErrorJSONResponse Error
+
+type ForbiddenJSONResponse Error
+
+type UnauthorizedJSONResponse Error
+
+type LogoutRequestObject struct {
+}
+
+type LogoutResponseObject interface {
+	VisitLogoutResponse(w http.ResponseWriter) error
+}
+
+type Logout204ResponseHeaders struct {
+	SetCookie *string
+}
+
+type Logout204Response struct {
+	Headers Logout204ResponseHeaders
+}
+
+func (response Logout204Response) VisitLogoutResponse(w http.ResponseWriter) error {
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
+	w.WriteHeader(204)
+	return nil
+}
+
+type Logout403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response Logout403JSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthTelegramRequestObject struct {
+	Body *AuthTelegramJSONRequestBody
+}
+
+type AuthTelegramResponseObject interface {
+	VisitAuthTelegramResponse(w http.ResponseWriter) error
+}
+
+type AuthTelegram200JSONResponse TelegramAuthResponse
+
+func (response AuthTelegram200JSONResponse) VisitAuthTelegramResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthTelegram400JSONResponse Error
+
+func (response AuthTelegram400JSONResponse) VisitAuthTelegramResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthTelegram401JSONResponse Error
+
+func (response AuthTelegram401JSONResponse) VisitAuthTelegramResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthTelegram503JSONResponse Error
+
+func (response AuthTelegram503JSONResponse) VisitAuthTelegramResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type GetHealthRequestObject struct {
 }
@@ -221,11 +588,122 @@ func (response GetHealth200JSONResponse) VisitGetHealthResponse(w http.ResponseW
 	return err
 }
 
+type GetMeRequestObject struct {
+}
+
+type GetMeResponseObject interface {
+	VisitGetMeResponse(w http.ResponseWriter) error
+}
+
+type GetMe200JSONResponse Me
+
+func (response GetMe200JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMe401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetMe401JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMeRequestObject struct {
+	Body *UpdateMeJSONRequestBody
+}
+
+type UpdateMeResponseObject interface {
+	VisitUpdateMeResponse(w http.ResponseWriter) error
+}
+
+type UpdateMe200JSONResponse Me
+
+func (response UpdateMe200JSONResponse) VisitUpdateMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMe400JSONResponse Error
+
+func (response UpdateMe400JSONResponse) VisitUpdateMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMe401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateMe401JSONResponse) VisitUpdateMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMe403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateMe403JSONResponse) VisitUpdateMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Logout Revoke the current session
+	// (POST /auth/logout)
+	Logout(ctx context.Context, request LogoutRequestObject) (LogoutResponseObject, error)
+	// AuthTelegram Sign in from the Telegram Mini App
+	// (POST /auth/telegram)
+	AuthTelegram(ctx context.Context, request AuthTelegramRequestObject) (AuthTelegramResponseObject, error)
 	// GetHealth Service health and version
 	// (GET /health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
+	// GetMe Current user profile and messenger bindings
+	// (GET /me)
+	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// UpdateMe Update the current user's settings
+	// (PATCH /me)
+	UpdateMe(ctx context.Context, request UpdateMeRequestObject) (UpdateMeResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -267,6 +745,61 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
+// Logout operation middleware
+func (sh *strictHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var request LogoutRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.Logout(ctx, request.(LogoutRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "Logout")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LogoutResponseObject); ok {
+		if err := validResponse.VisitLogoutResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AuthTelegram operation middleware
+func (sh *strictHandler) AuthTelegram(w http.ResponseWriter, r *http.Request) {
+	var request AuthTelegramRequestObject
+
+	var body AuthTelegramJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthTelegram(ctx, request.(AuthTelegramRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthTelegram")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthTelegramResponseObject); ok {
+		if err := validResponse.VisitAuthTelegramResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetHealth operation middleware
 func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	var request GetHealthRequestObject
@@ -291,25 +824,131 @@ func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetMe operation middleware
+func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
+	var request GetMeRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMe(ctx, request.(GetMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMe")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeResponseObject); ok {
+		if err := validResponse.VisitGetMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateMe operation middleware
+func (sh *strictHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	var request UpdateMeRequestObject
+
+	var body UpdateMeJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateMe(ctx, request.(UpdateMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateMe")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateMeResponseObject); ok {
+		if err := validResponse.VisitUpdateMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

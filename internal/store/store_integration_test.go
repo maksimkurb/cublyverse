@@ -102,10 +102,18 @@ func TestMigrateAndUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MigrationStatus: %v", err)
 	}
-	if len(statuses) != 1 {
-		t.Fatalf("MigrationStatus returned %d migrations, want 1: %+v", len(statuses), statuses)
+	// Every embedded migration must be applied. The exact list grows with each
+	// milestone, so it is checked by version instead of by count.
+	applied := make(map[int64]bool, len(statuses))
+	for _, status := range statuses {
+		if status.State != "applied" {
+			t.Errorf("migration %d (%s) state = %q, want %q", status.Version, status.Path, status.State, "applied")
+		}
+		applied[status.Version] = true
 	}
-	if statuses[0].State != "applied" {
-		t.Errorf("migration state = %q, want %q", statuses[0].State, "applied")
+	for _, want := range []int64{1, 2, 3, 4, 5} {
+		if !applied[want] {
+			t.Errorf("migration %d is missing from the status: %+v", want, statuses)
+		}
 	}
 }

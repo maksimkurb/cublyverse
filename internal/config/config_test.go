@@ -46,6 +46,7 @@ func TestLoadFromValues(t *testing.T) {
 		"OIDC_ISSUER":        "https://id.example.com",
 		"OIDC_CLIENT_ID":     "cublyverse",
 		"OIDC_CLIENT_SECRET": "secret",
+		"OIDC_REDIRECT_URL":  "https://cublyverse.example.com/auth/callback",
 		"TELEGRAM_BOT_TOKEN": "123:abc",
 		"MATRIX_HOMESERVER":  "https://matrix.example.com",
 		"MATRIX_USERNAME":    "cubly",
@@ -67,6 +68,9 @@ func TestLoadFromValues(t *testing.T) {
 	}
 	if got, want := cfg.OIDC.ClientID, "cublyverse"; got != want {
 		t.Errorf("OIDC.ClientID = %q, want %q", got, want)
+	}
+	if got, want := cfg.OIDC.RedirectURL, "https://cublyverse.example.com/auth/callback"; got != want {
+		t.Errorf("OIDC.RedirectURL = %q, want %q", got, want)
 	}
 	if !cfg.TelegramEnabled() {
 		t.Error("TelegramEnabled() = false, want true")
@@ -122,6 +126,35 @@ func TestLoadFromErrors(t *testing.T) {
 				"MATRIX_PICKLE_KEY is required when MATRIX_HOMESERVER is set",
 				"MATRIX_USERNAME is required when MATRIX_HOMESERVER is set",
 			},
+		},
+		{
+			name: "oidc issuer without client id",
+			values: map[string]string{
+				"DATABASE_URL":    "postgres://localhost/cublyverse",
+				"PUBLIC_BASE_URL": "https://cublyverse.example.com",
+				"OIDC_ISSUER":     "https://id.example.com",
+			},
+			wantErr: []string{"OIDC_CLIENT_ID is required when OIDC_ISSUER is set"},
+		},
+		{
+			name: "oidc issuer without any callback base",
+			values: map[string]string{
+				"DATABASE_URL":   "postgres://localhost/cublyverse",
+				"OIDC_ISSUER":    "https://id.example.com",
+				"OIDC_CLIENT_ID": "cublyverse",
+			},
+			wantErr: []string{"OIDC_REDIRECT_URL or PUBLIC_BASE_URL is required when OIDC_ISSUER is set"},
+		},
+		{
+			name: "relative oidc redirect url",
+			values: map[string]string{
+				"DATABASE_URL":      "postgres://localhost/cublyverse",
+				"PUBLIC_BASE_URL":   "https://cublyverse.example.com",
+				"OIDC_ISSUER":       "https://id.example.com",
+				"OIDC_CLIENT_ID":    "cublyverse",
+				"OIDC_REDIRECT_URL": "/auth/callback",
+			},
+			wantErr: []string{"OIDC_REDIRECT_URL must be an absolute http(s) URL"},
 		},
 	}
 

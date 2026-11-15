@@ -106,6 +106,56 @@ func TestAppLifecycle(t *testing.T) {
 	}
 }
 
+// TestAppTransportWiring checks the conditions of the messenger startup: a bot
+// token alone is not enough (nobody could sign in), while a wrong OIDC issuer
+// fails the start instead of leaving a half-configured service running.
+func TestAppTransportWiring(t *testing.T) {
+	databaseURL := testdb.Start(t)
+	logger := testLogger()
+
+	t.Run("telegram without OIDC keeps the API up", func(t *testing.T) {
+		cfg := config.Config{
+			HTTPAddr:    freeAddr(t),
+			DatabaseURL: databaseURL,
+			LogFormat:   config.LogFormatText,
+			Telegram:    config.TelegramConfig{BotToken: "123456:test-token"},
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+		application, err := app.New(context.Background(), cfg, logger)
+		if err != nil {
+			t.Fatalf("New with a bot token but no OIDC: %v", err)
+		}
+		defer application.Close()
+
+		server := httptest.NewServer(application.Handler())
+		defer server.Close()
+		if got := statusOf(t, server.URL+"/api/v1/health"); got != http.StatusOK {
+			t.Errorf("GET /api/v1/health = %d, want %d", got, http.StatusOK)
+		}
+	})
+
+	t.Run("unreachable OIDC issuer fails the start", func(t *testing.T) {
+		cfg := config.Config{
+			HTTPAddr:      freeAddr(t),
+			DatabaseURL:   databaseURL,
+			LogFormat:     config.LogFormatText,
+			PublicBaseURL: "https://cublyverse.example.com",
+			OIDC: config.OIDCConfig{
+				Issuer:   "http://127.0.0.1:1",
+				ClientID: "cublyverse",
+			},
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+		if _, err := app.New(context.Background(), cfg, logger); err == nil {
+			t.Fatal("New succeeded with an unreachable OIDC issuer")
+		}
+	})
+}
+
 func waitFor(t *testing.T, url string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

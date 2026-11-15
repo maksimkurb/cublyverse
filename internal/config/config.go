@@ -49,6 +49,9 @@ type OIDCConfig struct {
 	Issuer       string
 	ClientID     string
 	ClientSecret string
+	// RedirectURL is the absolute /auth/callback URL registered at the
+	// provider. It is derived from PUBLIC_BASE_URL when empty.
+	RedirectURL string
 }
 
 // TelegramConfig holds the Telegram transport settings.
@@ -82,6 +85,7 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 			Issuer:       strings.TrimSpace(getenv("OIDC_ISSUER")),
 			ClientID:     strings.TrimSpace(getenv("OIDC_CLIENT_ID")),
 			ClientSecret: strings.TrimSpace(getenv("OIDC_CLIENT_SECRET")),
+			RedirectURL:  strings.TrimSpace(getenv("OIDC_REDIRECT_URL")),
 		},
 		Telegram: TelegramConfig{
 			BotToken: strings.TrimSpace(getenv("TELEGRAM_BOT_TOKEN")),
@@ -132,6 +136,17 @@ func (c Config) Validate() error {
 	if u, err := url.Parse(c.DatabaseURL); err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") {
 		problems = append(problems, "DATABASE_URL must be a postgres:// or postgresql:// URL")
 	}
+	if c.OIDC.Issuer != "" {
+		if c.OIDC.ClientID == "" {
+			problems = append(problems, "OIDC_CLIENT_ID is required when OIDC_ISSUER is set")
+		}
+		if c.OIDC.RedirectURL == "" && c.PublicBaseURL == "" {
+			problems = append(problems, "OIDC_REDIRECT_URL or PUBLIC_BASE_URL is required when OIDC_ISSUER is set")
+		}
+	}
+	if c.OIDC.RedirectURL != "" && !isAbsoluteHTTPURL(c.OIDC.RedirectURL) {
+		problems = append(problems, fmt.Sprintf("OIDC_REDIRECT_URL must be an absolute http(s) URL, got %q", c.OIDC.RedirectURL))
+	}
 	if c.Matrix.Homeserver != "" {
 		for name, value := range map[string]string{
 			"MATRIX_USERNAME":   c.Matrix.Username,
@@ -177,4 +192,14 @@ func defaultString(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// isAbsoluteHTTPURL reports whether value is an absolute http(s) URL with a
+// host, which is what OIDC providers require for a redirect URI.
+func isAbsoluteHTTPURL(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil {
+		return false
+	}
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }

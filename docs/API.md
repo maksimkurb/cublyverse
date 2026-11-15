@@ -1,0 +1,192 @@
+# API и вход
+
+HTTP-слой описан в `api/openapi.yaml` (OpenAPI 3.0.3). Спецификация — source of
+truth: из неё генерируются Go-сервер и TypeScript-клиент.
+
+## Конвейер
+
+```text
+api/openapi.yaml ──┬─ oapi-codegen ─→ internal/httpapi/gen (strict server + типы)
+                   └─ openapi-typescript ─→ web/src/api/schema.d.ts
+```
+
+- `make gen` запускает оба генератора (и `sqlc`).
+- `make check` через `scripts/check-gen.sh` перегенерирует всё и падает, если
+  содержимое изменилось: забыть `make gen` нельзя.
+- Живая документация: `/api/docs` (Swagger UI), сама спецификация —
+  `/api/openapi.yaml`.
+- Сгенерированный код (`internal/httpapi/gen`, `web/src/api/schema.d.ts`,
+  `internal/store/db`) не правится руками.
+
+### Как добавить операцию
+
+1. Добавить путь в `api/openapi.yaml`: `operationId`, `summary`,
+   `description`, тег, `security`, ответы со схемами, примеры у полей.
+2. `make gen`.
+3. Реализовать метод в `internal/httpapi/handlers.go` (тонкий адаптер:
+   разобрать запрос, вызвать сервис, отобразить ошибку).
+4. Добавить тест в `internal/httpapi` или в интеграционные тесты сервиса.
+5. Обновить `docs/API.md` и, если появились переменные окружения,
+   `.env.example` и `docs/DEPLOY.md`.
+
+### Базовый URL и ошибки
+
+Все операции — под `/api/v1`. Ошибка всегда JSON:
+
+```json
+{"code": "not_found", "message": "Страница не найдена"}
+```
+
+`code` стабилен и является частью контракта, `message` — человеческий текст на
+русском и может меняться.
+
+| `code` | Когда |
+|---|---|
+| `bad_request` | тело или параметры не разбираются, неизвестный часовой пояс |
+| `unauthorized` | нет сессии или она недействительна |
+| `forbidden` | сессия есть, но действие запрещено (CSRF-правило) |
+| `invalid_init_data` | подпись, формат или срок `initData` Telegram |
+| `unavailable` | функция не сконфигурирована (например, нет `TELEGRAM_BOT_TOKEN`) |
+| `not_found` | неизвестный путь |
+| `internal` | паника или непредвиденная ошибка |
+
+## Модель аутентификации
+
+Один вид сессии — непрозрачный токен из 32 случайных байт. В PostgreSQL
+хранится только sha256; отзыв мгновенный. Два транспорта:
+
+| Транспорт | Кто использует | Заголовок | Срок |
+|---|---|---|---|
+| `bearerAuth` | Telegram Mini App | `Authorization: Bearer <token>` | 24 часа |
+| `cookieAuth` | браузер | cookie `cv_session` | 30 дней |
+
+Правила:
+
+- Bearer-сессия принимается только из заголовка, cookie-сессия — только из
+  cookie; перепутать их нельзя.
+- Cookie: `HttpOnly`, `SameSite=Lax`, `Secure`, если `PUBLIC_BASE_URL`
+  начинается с `https://`, `Path=/`.
+- Изменяющие запросы с cookie-сессией обязаны иметь
+  `Content-Type: application/json` (иначе `403`). Это вместе с `SameSite=Lax`
+  закрывает CSRF: HTML-форма не может отправить такой тип.
+- `POST /api/v1/auth/logout` отзывает сессию и возвращает `Set-Cookie` с
+  истёкшей cookie. Операция идемпотентна: без сессии тоже `204`.
+
+Экраны, которые не являются JSON API, живут под `/auth/*` и описаны ниже.
+
+## Вход из Telegram Mini App
+
+```text
+Mini App ──POST /api/v1/auth/telegram {init_data}──────────────→ сервер
+   │                                                              │
+   │   подпись HMAC(bot token), auth_date ≤ 24 ч, user.id          │
+   │                                                              │
+   ├─ привязка есть → {status:"ok", token, expires_at, user}       │
+   └─ привязки нет → {status:"link_required", link_url}            │
+```
+
+- `init_data` — строка `Telegram.WebApp.initData`. Проверяются HMAC с токеном
+  бота и свежесть `auth_date` (24 часа). Неверная подпись, чужой бот и
+  просроченная дата неотличимы: `401 invalid_init_data`.
+- Telegram user id берётся только из подписанных данных. Поэтому `link_url`
+  создаётся для реального владельца аккаунта, а не для того, кого прислал
+  клиент.
+- `link_url` — адрес страницы входа. Внутри Mini App по нему нужно переходить в
+  том же webview (`window.location.assign`), тогда `initData` остаётся
+  доступным на следующей странице.
+
+## Привязка мессенджера (страницы `/auth/*`)
+
+Привязка — двухшаговый процесс. Без второго шага SSO-аккаунт жертвы мог бы
+привязаться к мессенджеру атакующего: ссылку входа легко переслать.
+
+```text
+бот: «Войти» (OpenApp)
+   │
+   ▼
+GET /auth/login?state=…            ← state из PG, TTL 10 минут
+   │  Telegram: страница грузит telegram-web-app.js и отправляет initData
+   ▼
+POST /auth/telegram/verify {state, init_data}
+   │  подпись + совпадение user.id с ожидающей привязкой
+   │  иначе 403 identity_mismatch, дальше не пускаем
+   ▼
+302 на OIDC-провайдера (PKCE S256 + nonce)
+   │
+   ▼
+GET /auth/callback?code=…&state=…
+   │  обмен кода, проверка nonce, UpsertFromOIDC → users
+   │  Telegram: без init_data_verified_at привязка не продолжается
+   ▼
+страница подтверждения (state + одноразовый confirm-токен)
+   │
+   ▼
+POST /auth/confirm (form: state, token)
+   │  сравнение sha256(token) в постоянном времени, атомарный переход
+   │  состояния, затем привязка в одной транзакции
+   ▼
+«✅ Аккаунт привязан» + сообщение в чат
+```
+
+Свойства:
+
+- `state`, confirm-токен, nonce и PKCE verifier — по 32 случайных байта.
+  State и confirm-токен хранятся как sha256; сравнение confirm-токена —
+  `crypto/subtle`.
+- Одноразовость обеспечивает PostgreSQL: переходы статусов
+  (`pending_oidc` → `awaiting_confirmation` → `completed`) выполняются
+  условным `UPDATE … WHERE status = … RETURNING`. Повторный callback, повторный
+  POST подтверждения и повторный `verify` получают `410`.
+- Страница подтверждения показывает платформу, id мессенджера и имя
+  SSO-аккаунта; до нажатия «Привязать» строки в `messenger_bindings` нет.
+- После подтверждения бот отправляет в чат «✅ Аккаунт привязан» и кнопку
+  «Открыть приложение» (`OnLinked` в `internal/app`).
+
+### Страницы
+
+| Метод и путь | Назначение |
+|---|---|
+| `GET /auth/login` | Старт входа в браузере; `return_to` — относительный путь |
+| `GET /auth/login?state=…` | Продолжение входа из бота или Mini App |
+| `GET /auth/callback` | Возврат от OIDC-провайдера |
+| `POST /auth/telegram/verify` | Проверка `initData` для ожидающей Telegram-привязки |
+| `POST /auth/confirm` | Подтверждение привязки (form: `state`, `token`) |
+
+Все они отдают HTML на русском, не кэшируются (`Cache-Control: no-store`) и
+запрещают отправку `Referer` (`Referrer-Policy: no-referrer`), чтобы state не
+утекал провайдеру.
+
+### `return_to`
+
+Принимается только относительный путь этого сайта: `/app/`,
+`/app/?tab=reminders`. Отклоняются абсолютные URL, `//host`, `/\host`,
+`scheme:`, управляющие символы и значения длиннее 2048 байт. Иначе `400`:
+искать открытый редирект не придётся.
+
+### Вход из браузера
+
+`GET /auth/login?return_to=/app/` → OIDC → callback ставит cookie-сессию и
+отвечает `303` на `return_to` (по умолчанию `/app/`). Привязки мессенджера при
+этом не создаются.
+
+## Сессии в WebApp
+
+- Mini App держит токен в памяти и отправляет `Authorization: Bearer …`.
+  Каждое открытие приложения присылает свежий `initData` и получает новую
+  сессию; старые отзываются по сроку.
+- Браузер ничего не знает о токене: cookie `HttpOnly` ставится на callback.
+- `GET /api/v1/me` возвращает профиль и привязки, `PATCH /api/v1/me` меняет
+  часовой пояс (IANA-имя, проверяется через `time.LoadLocation`).
+
+## TypeScript-клиент
+
+`web/src/api/client.ts` использует `openapi-fetch` с типами из
+`web/src/api/schema.d.ts`. Адреса относительные (`/api/v1`), потому что и
+WebApp, и API отдаёт один бинарник; в dev-режиме Vite проксирует `/api` и
+`/auth` на бэкенд.
+
+## Ограничения
+
+- Rate limiting на `/auth/*` и API — в бэклоге (`docs/PLAN.md` §7).
+- Вход Element-виджета через Matrix OpenID — в бэклоге.
+- OAuth 2.1 для MCP — в бэклоге; на M5 будет PAT.

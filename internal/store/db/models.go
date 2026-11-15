@@ -10,6 +10,63 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AuthPending struct {
+	ID                 pgtype.UUID        `json:"id"`
+	StateHash          []byte             `json:"state_hash"`
+	Status             string             `json:"status"`
+	Flow               string             `json:"flow"`
+	Nonce              string             `json:"nonce"`
+	Verifier           string             `json:"verifier"`
+	Platform           string             `json:"platform"`
+	RemoteUserID       string             `json:"remote_user_id"`
+	ConversationID     string             `json:"conversation_id"`
+	ReturnTo           string             `json:"return_to"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	ConfirmTokenHash   []byte             `json:"confirm_token_hash"`
+	InitDataVerifiedAt pgtype.Timestamptz `json:"init_data_verified_at"`
+	ExpiresAt          time.Time          `json:"expires_at"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+}
+
+type Interaction struct {
+	ID             pgtype.UUID `json:"id"`
+	TokenHash      []byte      `json:"token_hash"`
+	Platform       *string     `json:"platform"`
+	ConversationID *string     `json:"conversation_id"`
+	MessageID      *string     `json:"message_id"`
+	ActionKey      *string     `json:"action_key"`
+	ActionID       string      `json:"action_id"`
+	ChoiceID       string      `json:"choice_id"`
+	OptionID       string      `json:"option_id"`
+	ExpectedUserID string      `json:"expected_user_id"`
+	ExpiresAt      time.Time   `json:"expires_at"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type MessengerBinding struct {
+	ID             pgtype.UUID `json:"id"`
+	UserID         pgtype.UUID `json:"user_id"`
+	Platform       string      `json:"platform"`
+	RemoteUserID   string      `json:"remote_user_id"`
+	ConversationID string      `json:"conversation_id"`
+	VerifiedAt     time.Time   `json:"verified_at"`
+	Metadata       []byte      `json:"metadata"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+}
+
+type Session struct {
+	ID         pgtype.UUID        `json:"id"`
+	TokenHash  []byte             `json:"token_hash"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Kind       string             `json:"kind"`
+	ExpiresAt  time.Time          `json:"expires_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt  time.Time          `json:"created_at"`
+}
+
 type User struct {
 	ID          pgtype.UUID `json:"id"`
 	OidcIssuer  string      `json:"oidc_issuer"`

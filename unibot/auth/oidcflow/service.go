@@ -2,8 +2,7 @@ package oidcflow
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"html/template"
@@ -14,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	unibot "github.com/maksimkurb/cublyverse/unibot"
 	"github.com/coreos/go-oidc/v3/oidc"
+	unibot "github.com/maksimkurb/cublyverse/unibot"
 	"golang.org/x/oauth2"
 )
 
@@ -30,9 +29,27 @@ type Config struct {
 	PendingTTL    time.Duration
 }
 
+// Claims is the verified identity of an SSO login. Empty strings mean the
+// provider did not send the claim.
+type Claims struct {
+	Issuer  string
+	Subject string
+	Email   string
+	Name    string
+}
+
+// ResolvePrincipal maps verified SSO claims to the application principal.
+//
+// The application decides what a principal is: the starter used to derive it
+// from a hash of issuer and subject, while a real deployment upserts a user row
+// and returns its id. Keeping this behind a callback means the flow never has to
+// guess the identity model.
+type ResolvePrincipal func(context.Context, Claims) (unibot.PrincipalID, error)
+
 type Service struct {
 	cfg      Config
 	identity unibot.IdentityStore
+	resolve  ResolvePrincipal
 	provider *oidc.Provider
 	verifier *oidc.IDTokenVerifier
 	oauth    oauth2.Config
@@ -50,9 +67,12 @@ type pendingAuth struct {
 	Expires  time.Time
 }
 
-func New(ctx context.Context, cfg Config, identity unibot.IdentityStore) (*Service, error) {
+func New(ctx context.Context, cfg Config, identity unibot.IdentityStore, resolve ResolvePrincipal) (*Service, error) {
 	if identity == nil {
 		return nil, errors.New("identity store is required")
+	}
+	if resolve == nil {
+		return nil, errors.New("principal resolver is required")
 	}
 	if cfg.Issuer == "" || cfg.ClientID == "" || cfg.RedirectURL == "" || cfg.PublicBaseURL == "" {
 		return nil, errors.New("issuer, client id, redirect url and public base url are required")
@@ -82,6 +102,7 @@ func New(ctx context.Context, cfg Config, identity unibot.IdentityStore) (*Servi
 	return &Service{
 		cfg:      cfg,
 		identity: identity,
+		resolve:  resolve,
 		provider: provider,
 		verifier: provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
 		oauth:    oauthCfg,
@@ -95,11 +116,11 @@ func (s *Service) BeginURL(binding unibot.Binding) (string, error) {
 	if binding.Platform == "" || binding.RemoteUserID == "" {
 		return "", errors.New("platform and remote user id are required")
 	}
-	state, err := unibot.RandomToken(24)
+	state, err := unibot.RandomToken(32)
 	if err != nil {
 		return "", err
 	}
-	nonce, err := unibot.RandomToken(24)
+	nonce, err := unibot.RandomToken(32)
 	if err != nil {
 		return "", err
 	}
@@ -191,11 +212,35 @@ func (s *Service) handleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid ID token", http.StatusUnauthorized)
 		return
 	}
-	if idToken.Nonce != pending.Nonce {
+	if subtle.ConstantTimeCompare([]byte(idToken.Nonce), []byte(pending.Nonce)) != 1 {
 		http.Error(w, "invalid OIDC nonce", http.StatusUnauthorized)
 		return
 	}
-	principal := principalID(s.cfg.Issuer, idToken.Subject)
+
+	var claims struct {
+		Email             string `json:"email"`
+		Name              string `json:"name"`
+		PreferredUsername string `json:"preferred_username"`
+	}
+	if err := idToken.Claims(&claims); err != nil {
+		http.Error(w, "invalid ID token claims", http.StatusUnauthorized)
+		return
+	}
+	name := claims.Name
+	if name == "" {
+		name = claims.PreferredUsername
+	}
+	principal, err := s.resolve(ctx, Claims{
+		Issuer:  idToken.Issuer,
+		Subject: idToken.Subject,
+		Email:   claims.Email,
+		Name:    name,
+	})
+	if err != nil {
+		http.Error(w, "failed to resolve the SSO principal", http.StatusInternalServerError)
+		return
+	}
+
 	binding := pending.Binding
 	binding.PrincipalID = principal
 	binding.VerifiedAt = time.Now()
@@ -210,11 +255,6 @@ func (s *Service) handleCallback(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = linkedPage.Execute(w, map[string]string{"Platform": string(binding.Platform)})
-}
-
-func principalID(issuer, subject string) unibot.PrincipalID {
-	sum := sha256.Sum256([]byte(issuer + "\x00" + subject))
-	return unibot.PrincipalID(base64.RawURLEncoding.EncodeToString(sum[:]))
 }
 
 func (s *Service) getPending(state string) (pendingAuth, bool) {

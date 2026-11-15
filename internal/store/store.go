@@ -51,6 +51,27 @@ func (s *Store) Queries() *db.Queries { return s.queries }
 // Pool exposes the underlying pool for code that needs transactions.
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
+// InTx runs fn inside a single database transaction. It commits when fn
+// returns nil and rolls back otherwise, so a multi-statement state change is
+// all-or-nothing.
+func (s *Store) InTx(ctx context.Context, fn func(*db.Queries) error) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	// Rollback after a successful commit reports ErrTxClosed, which is
+	// expected and therefore ignored.
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := fn(db.New(tx)); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
+}
+
 // Ping verifies that the database still answers. It backs the readiness probe.
 func (s *Store) Ping(ctx context.Context) error {
 	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)

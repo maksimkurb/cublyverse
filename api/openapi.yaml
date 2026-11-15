@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: Cublyverse API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     HTTP API of the Cublyverse personal assistant.
 
@@ -12,6 +12,24 @@ info:
     All operations are served under `/api/v1`. The specification itself is
     available at `/api/openapi.yaml` and rendered at `/api/docs`.
 
+    ## Authentication
+
+    Two transports carry the same kind of opaque session token:
+
+    * `bearerAuth` — the Telegram Mini App receives a token from
+      `POST /auth/telegram` and sends it in the `Authorization` header.
+    * `cookieAuth` — a browser session created by the `/auth/login` flow; the
+      token lives in an `HttpOnly; SameSite=Lax` cookie and never reaches
+      JavaScript.
+
+    Session tokens are random 32-byte values; the server stores only their
+    sha256 and can revoke them instantly. Mutating requests authenticated with
+    the cookie must send `Content-Type: application/json` (CSRF defence on top
+    of `SameSite=Lax`).
+
+    The HTML pages that start a sign-in live under `/auth/*` outside this
+    specification; they are documented in `docs/API.md`.
+
 servers:
   - url: /api/v1
     description: Same origin as the WebApp and the messenger links.
@@ -19,6 +37,10 @@ servers:
 tags:
   - name: system
     description: Service metadata and health checks.
+  - name: identity
+    description: Profile of the signed-in user and their messenger bindings.
+  - name: auth
+    description: Sessions and Telegram Mini App sign-in.
 
 paths:
   /health:
@@ -38,7 +60,166 @@ paths:
               schema:
                 $ref: "#/components/schemas/Health"
 
+  /me:
+    get:
+      operationId: getMe
+      tags:
+        - identity
+      summary: Current user profile and messenger bindings
+      description: |
+        Returns the SSO profile of the session owner together with every
+        verified messenger account. The `id` field is the principal id used by
+        the bot, the API and MCP alike.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: The authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      operationId: updateMe
+      tags:
+        - identity
+      summary: Update the current user's settings
+      description: |
+        Updates the profile fields a user may change themselves. Only the time
+        zone is editable so far.
+
+        A request authenticated with the browser cookie must send
+        `Content-Type: application/json`. Together with `SameSite=Lax` this
+        prevents cross-site request forgery: a plain HTML form cannot send that
+        media type.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeRequest"
+      responses:
+        "200":
+          description: The updated profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          description: The payload is invalid, for example an unknown time zone.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags:
+        - auth
+      summary: Revoke the current session
+      description: |
+        Revokes the session used for this request and clears the browser cookie.
+
+        The call is idempotent: without a valid session it still answers 204, so
+        a client can always drop its local state. A request that was
+        authenticated with the cookie must send `Content-Type:
+        application/json` — an empty `{}` body is fine.
+      security:
+        - {}
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The session was revoked, or there was nothing to revoke.
+          headers:
+            Set-Cookie:
+              description: Clears the browser session cookie.
+              schema:
+                type: string
+                example: "cv_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /auth/telegram:
+    post:
+      operationId: authTelegram
+      tags:
+        - auth
+      summary: Sign in from the Telegram Mini App
+      description: |
+        Validates the `initData` payload of the Telegram Mini App and exchanges
+        it for a session. The signature is an HMAC with the bot token, and
+        `auth_date` must be younger than 24 hours.
+
+        * `ok` — the Telegram account is bound to an SSO user; the body carries
+          a Bearer token and the profile.
+        * `link_required` — the Telegram account has no binding yet; open
+          `link_url` inside the Mini App and confirm the binding there.
+
+        The Telegram user id is taken from the signed payload, never from the
+        request body, so a client cannot ask for a link to somebody else's
+        account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramInitData"
+      responses:
+        "200":
+          description: A session, or the link that starts the binding flow.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelegramAuthResponse"
+        "400":
+          description: The request body is not valid JSON or misses `init_data`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: |
+            The initData signature is invalid, the payload belongs to another bot
+            or `auth_date` is too old.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Telegram sign-in is not configured on this server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Opaque session token issued by `POST /auth/telegram` and sent as
+        `Authorization: Bearer <token>`. Only its sha256 is stored on the server.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: cv_session
+      description: |
+        Browser session cookie created by `/auth/login`. It is `HttpOnly`,
+        `SameSite=Lax` and `Secure` whenever the public URL is HTTPS.
+
   schemas:
     Health:
       type: object
@@ -56,6 +237,157 @@ components:
           description: Build version of the running binary.
           example: 0.1.0
 
+    Me:
+      type: object
+      additionalProperties: false
+      description: |
+        The authenticated user together with the messenger accounts bound to
+        them. Bindings are verified: an account only appears here after the user
+        confirmed the link, and a Telegram binding additionally requires the
+        matching Mini App `initData`.
+      required:
+        - id
+        - timezone
+        - created_at
+        - bindings
+      properties:
+        id:
+          type: string
+          description: Principal id — the `users.id` UUID as a string.
+          example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+        email:
+          type: string
+          nullable: true
+          description: E-mail from the SSO provider, if it sends one.
+          example: user@example.com
+        display_name:
+          type: string
+          nullable: true
+          description: Display name from the SSO provider, if it sends one.
+          example: Иван Петров
+        timezone:
+          type: string
+          description: |
+            IANA time zone used for the user's schedules and notifications.
+            Defaults to `UTC` until changed with `PATCH /me`.
+          example: Europe/Moscow
+        created_at:
+          type: string
+          format: date-time
+          description: When the user row was created.
+          example: "2026-01-15T09:30:00Z"
+        bindings:
+          type: array
+          description: Verified messenger accounts of this user.
+          items:
+            $ref: "#/components/schemas/Binding"
+
+    Binding:
+      type: object
+      additionalProperties: false
+      description: |
+        A messenger account linked to an SSO user. A messenger account belongs
+        to exactly one user: re-binding moves it, it never duplicates.
+      required:
+        - platform
+        - remote_user_id
+        - conversation_id
+        - verified_at
+      properties:
+        platform:
+          type: string
+          enum:
+            - telegram
+            - matrix
+          description: Messenger of the binding.
+          example: telegram
+        remote_user_id:
+          type: string
+          description: User id inside the messenger.
+          example: "279058397"
+        conversation_id:
+          type: string
+          description: |
+            Chat the bot talks to for this account. For Telegram private chats
+            it equals the user id.
+          example: "279058397"
+        verified_at:
+          type: string
+          format: date-time
+          description: When the user confirmed the binding.
+          example: "2026-01-15T09:31:00Z"
+
+    UpdateMeRequest:
+      type: object
+      additionalProperties: false
+      description: Fields of the profile a user may change themselves.
+      required:
+        - timezone
+      properties:
+        timezone:
+          type: string
+          description: |
+            IANA time zone name, for example `Europe/Moscow`. Unknown names are
+            rejected with `400`.
+          example: Europe/Moscow
+
+    TelegramInitData:
+      type: object
+      additionalProperties: false
+      description: Raw payload of the Telegram Mini App.
+      required:
+        - init_data
+      properties:
+        init_data:
+          type: string
+          description: |
+            The value of `Telegram.WebApp.initData`: a URL-encoded query string
+            with a `hash` field. Its HMAC must verify with the bot token and
+            `auth_date` must be younger than 24 hours.
+          example: query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A279058397%7D&auth_date=1768400000&hash=9f2c1b
+
+    TelegramAuthResponse:
+      type: object
+      additionalProperties: false
+      description: |
+        Result of the Mini App sign-in. `status` decides which fields are set:
+        `ok` carries a session and the profile, `link_required` carries the
+        sign-in link.
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - link_required
+          description: |
+            `ok` — a session was issued; `link_required` — the Telegram account
+            is not bound to any SSO user yet.
+          example: ok
+        token:
+          type: string
+          description: |
+            Bearer session token. Present only for `status: ok`. Keep it in
+            memory; it can be revoked by `POST /auth/logout`.
+          example: 9lGm2n0bT1cQ4xr8wZ6yV3uK5pJ7hF0aS2dE4gH6jK8
+        expires_at:
+          type: string
+          format: date-time
+          description: Expiry of the session. Present only when status is `ok`.
+          example: "2026-01-16T09:30:00Z"
+        user:
+          $ref: "#/components/schemas/Me"
+        link_url:
+          type: string
+          description: |
+            Same-origin URL that starts the binding flow: absolute when
+            `PUBLIC_BASE_URL` is configured, a relative path otherwise. Present
+            only for `status: link_required`. Open it inside the Mini App — the
+            webview keeps `initData`, and the server compares that payload with
+            the pending binding.
+          example: /auth/login?state=Yk3n0bT1cQ4xr8wZ6yV3uK5pJ7hF0aS2dE4gH6jK8
+
     Error:
       type: object
       additionalProperties: false
@@ -68,14 +400,34 @@ components:
       properties:
         code:
           type: string
+          description: Stable error code.
           example: not_found
         message:
           type: string
+          description: Human readable explanation in Russian.
           example: Страница не найдена
 
   responses:
     Error:
       description: Error response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    Unauthorized:
+      description: |
+        No valid session: the header or cookie is missing, the token is unknown,
+        expired or revoked.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    Forbidden:
+      description: |
+        The session is valid but the request is not allowed, for example a
+        mutating request from a cookie session without a JSON body.
       content:
         application/json:
           schema:

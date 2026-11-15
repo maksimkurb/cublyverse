@@ -113,7 +113,7 @@
 
 ## M1 — Идентичность и сессии
 
-### ⬜ M1-1 — Пользователи и PG-хранилище привязок
+### ✅ M1-1 — Пользователи и PG-хранилище привязок
 - Таблица `messenger_bindings` (`user_id`, `platform`, `remote_user_id`,
   `conversation_id`, `verified_at`, `metadata jsonb`; unique
   `(platform, remote_user_id)`).
@@ -125,14 +125,14 @@
 КП: интеграционные тесты Bind/Resolve/Bindings; перепривязка мессенджера к
 другому пользователю переносит привязку, а не дублирует.
 
-### ⬜ M1-2 — PG-хранилище действий (InteractionStore)
+### ✅ M1-2 — PG-хранилище действий (InteractionStore)
 - Таблица `interactions` (токен или ключ сообщения → действие, `expires_at`).
 - Реализация `unibot.InteractionStore`; фоновая очистка просроченных.
 
 КП: действие переживает рестарт процесса (интеграционный тест); просроченное
 не разрешается.
 
-### ⬜ M1-3 — Сессии и middleware авторизации
+### ✅ M1-3 — Сессии и middleware авторизации
 - Таблица `sessions` (`token_hash`, `user_id`, `kind`, `expires_at`,
   `last_used_at`). Токен — 32 случайных байта, в БД только sha256.
 - В `openapi.yaml`: security schemes `bearerAuth` и `cookieAuth`;
@@ -144,7 +144,7 @@
 
 КП: тесты 401/200, истёкшая сессия, logout отзывает токен.
 
-### ⬜ M1-4 — Безопасная привязка мессенджера через OIDC
+### ✅ M1-4 — Безопасная привязка мессенджера через OIDC
 - Состояние ожидающего входа — в PG (`auth_pending`), TTL 10 минут.
 - После OIDC-callback — страница подтверждения с названием платформы,
   идентификатором мессенджера и именем SSO-аккаунта; привязка создаётся только
@@ -160,7 +160,7 @@
 создаётся; повторное использование state/токена невозможно; `return_to`
 принимает только относительные пути.
 
-### ⬜ M1-5 — Сессия Telegram Mini App
+### ✅ M1-5 — Сессия Telegram Mini App
 - `POST /auth/telegram {init_data}` → `{status: "ok", token, expires_at, user}`
   либо `{status: "link_required", link_url}`.
 - Проверка `initData`: HMAC токеном бота (есть в `unibot/webapp`), `auth_date`

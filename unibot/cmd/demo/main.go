@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -71,7 +73,7 @@ func main() {
 			ClientSecret:  os.Getenv("OIDC_CLIENT_SECRET"),
 			RedirectURL:   redirectURL,
 			PublicBaseURL: publicBaseURL,
-		}, identityStore)
+		}, identityStore, demoPrincipal)
 		must(err)
 		authService = service
 	}
@@ -198,6 +200,14 @@ func main() {
 
 type demoSession struct {
 	Turns int
+}
+
+// demoPrincipal keeps the starter self-contained: the principal is a hash of
+// the SSO identity. A real service upserts a user row and returns its id — see
+// internal/auth in this repository.
+func demoPrincipal(_ context.Context, claims oidcflow.Claims) (unibot.PrincipalID, error) {
+	sum := sha256.Sum256([]byte(claims.Issuer + "\x00" + claims.Subject))
+	return unibot.PrincipalID(base64.RawURLEncoding.EncodeToString(sum[:])), nil
 }
 
 func sendDemo(ctx context.Context, botctx *unibot.Context, webAppURL string, turn int) error {

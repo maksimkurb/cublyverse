@@ -25,6 +25,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current user profile and messenger bindings
+         * @description Returns the SSO profile of the session owner together with every
+         *     verified messenger account. The `id` field is the principal id used by
+         *     the bot, the API and MCP alike.
+         */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update the current user's settings
+         * @description Updates the profile fields a user may change themselves. Only the time
+         *     zone is editable so far.
+         *
+         *     A request authenticated with the browser cookie must send
+         *     `Content-Type: application/json`. Together with `SameSite=Lax` this
+         *     prevents cross-site request forgery: a plain HTML form cannot send that
+         *     media type.
+         */
+        patch: operations["updateMe"];
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke the current session
+         * @description Revokes the session used for this request and clears the browser cookie.
+         *
+         *     The call is idempotent: without a valid session it still answers 204, so
+         *     a client can always drop its local state. A request that was
+         *     authenticated with the cookie must send `Content-Type:
+         *     application/json` — an empty `{}` body is fine.
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/telegram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in from the Telegram Mini App
+         * @description Validates the `initData` payload of the Telegram Mini App and exchanges
+         *     it for a session. The signature is an HMAC with the bot token, and
+         *     `auth_date` must be younger than 24 hours.
+         *
+         *     * `ok` — the Telegram account is bound to an SSO user; the body carries
+         *       a Bearer token and the profile.
+         *     * `link_required` — the Telegram account has no binding yet; open
+         *       `link_url` inside the Mini App and confirm the binding there.
+         *
+         *     The Telegram user id is taken from the signed payload, never from the
+         *     request body, so a client cannot ask for a link to somebody else's
+         *     account.
+         */
+        post: operations["authTelegram"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -42,19 +130,170 @@ export interface components {
             version: string;
         };
         /**
+         * @description The authenticated user together with the messenger accounts bound to
+         *     them. Bindings are verified: an account only appears here after the user
+         *     confirmed the link, and a Telegram binding additionally requires the
+         *     matching Mini App `initData`.
+         */
+        Me: {
+            /**
+             * @description Principal id — the `users.id` UUID as a string.
+             * @example 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+             */
+            id: string;
+            /**
+             * @description E-mail from the SSO provider, if it sends one.
+             * @example user@example.com
+             */
+            email?: string | null;
+            /**
+             * @description Display name from the SSO provider, if it sends one.
+             * @example Иван Петров
+             */
+            display_name?: string | null;
+            /**
+             * @description IANA time zone used for the user's schedules and notifications.
+             *     Defaults to `UTC` until changed with `PATCH /me`.
+             * @example Europe/Moscow
+             */
+            timezone: string;
+            /**
+             * Format: date-time
+             * @description When the user row was created.
+             * @example 2026-01-15T09:30:00Z
+             */
+            created_at: string;
+            /** @description Verified messenger accounts of this user. */
+            bindings: components["schemas"]["Binding"][];
+        };
+        /**
+         * @description A messenger account linked to an SSO user. A messenger account belongs
+         *     to exactly one user: re-binding moves it, it never duplicates.
+         */
+        Binding: {
+            /**
+             * @description Messenger of the binding.
+             * @example telegram
+             * @enum {string}
+             */
+            platform: "telegram" | "matrix";
+            /**
+             * @description User id inside the messenger.
+             * @example 279058397
+             */
+            remote_user_id: string;
+            /**
+             * @description Chat the bot talks to for this account. For Telegram private chats
+             *     it equals the user id.
+             * @example 279058397
+             */
+            conversation_id: string;
+            /**
+             * Format: date-time
+             * @description When the user confirmed the binding.
+             * @example 2026-01-15T09:31:00Z
+             */
+            verified_at: string;
+        };
+        /** @description Fields of the profile a user may change themselves. */
+        UpdateMeRequest: {
+            /**
+             * @description IANA time zone name, for example `Europe/Moscow`. Unknown names are
+             *     rejected with `400`.
+             * @example Europe/Moscow
+             */
+            timezone: string;
+        };
+        /** @description Raw payload of the Telegram Mini App. */
+        TelegramInitData: {
+            /**
+             * @description The value of `Telegram.WebApp.initData`: a URL-encoded query string
+             *     with a `hash` field. Its HMAC must verify with the bot token and
+             *     `auth_date` must be younger than 24 hours.
+             * @example query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A279058397%7D&auth_date=1768400000&hash=9f2c1b
+             */
+            init_data: string;
+        };
+        /**
+         * @description Result of the Mini App sign-in. `status` decides which fields are set:
+         *     `ok` carries a session and the profile, `link_required` carries the
+         *     sign-in link.
+         */
+        TelegramAuthResponse: {
+            /**
+             * @description `ok` — a session was issued; `link_required` — the Telegram account
+             *     is not bound to any SSO user yet.
+             * @example ok
+             * @enum {string}
+             */
+            status: "ok" | "link_required";
+            /**
+             * @description Bearer session token. Present only for `status: ok`. Keep it in
+             *     memory; it can be revoked by `POST /auth/logout`.
+             * @example 9lGm2n0bT1cQ4xr8wZ6yV3uK5pJ7hF0aS2dE4gH6jK8
+             */
+            token?: string;
+            /**
+             * Format: date-time
+             * @description Expiry of the session. Present only when status is `ok`.
+             * @example 2026-01-16T09:30:00Z
+             */
+            expires_at?: string;
+            user?: components["schemas"]["Me"];
+            /**
+             * @description Same-origin URL that starts the binding flow: absolute when
+             *     `PUBLIC_BASE_URL` is configured, a relative path otherwise. Present
+             *     only for `status: link_required`. Open it inside the Mini App — the
+             *     webview keeps `initData`, and the server compares that payload with
+             *     the pending binding.
+             * @example /auth/login?state=Yk3n0bT1cQ4xr8wZ6yV3uK5pJ7hF0aS2dE4gH6jK8
+             */
+            link_url?: string;
+        };
+        /**
          * @description Uniform error payload. `code` is a stable machine readable identifier,
          *     `message` is a human readable explanation in Russian.
          */
         Error: {
-            /** @example not_found */
+            /**
+             * @description Stable error code.
+             * @example not_found
+             */
             code: string;
-            /** @example Страница не найдена */
+            /**
+             * @description Human readable explanation in Russian.
+             * @example Страница не найдена
+             */
             message: string;
         };
     };
     responses: {
         /** @description Error response. */
         Error: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
+         * @description No valid session: the header or cookie is missing, the token is unknown,
+         *     expired or revoked.
+         */
+        Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
+         * @description The session is valid but the request is not allowed, for example a
+         *     mutating request from a cookie session without a JSON body.
+         */
+        Forbidden: {
             headers: {
                 [name: string]: unknown;
             };
@@ -86,6 +325,137 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    updateMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMeRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated profile. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description The payload is invalid, for example an unknown time zone. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session was revoked, or there was nothing to revoke. */
+            204: {
+                headers: {
+                    /** @description Clears the browser session cookie. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    authTelegram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelegramInitData"];
+            };
+        };
+        responses: {
+            /** @description A session, or the link that starts the binding flow. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramAuthResponse"];
+                };
+            };
+            /** @description The request body is not valid JSON or misses `init_data`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The initData signature is invalid, the payload belongs to another bot
+             *     or `auth_date` is too old.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Telegram sign-in is not configured on this server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

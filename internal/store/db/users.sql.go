@@ -97,3 +97,79 @@ func (q *Queries) GetUserByOIDC(ctx context.Context, arg GetUserByOIDCParams) (U
 	)
 	return i, err
 }
+
+const updateUserTimezone = `-- name: UpdateUserTimezone :one
+UPDATE users
+SET timezone   = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, oidc_issuer, oidc_subject, email, display_name, timezone, created_at, updated_at
+`
+
+type UpdateUserTimezoneParams struct {
+	ID       pgtype.UUID `json:"id"`
+	Timezone string      `json:"timezone"`
+}
+
+func (q *Queries) UpdateUserTimezone(ctx context.Context, arg UpdateUserTimezoneParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserTimezone, arg.ID, arg.Timezone)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.OidcIssuer,
+		&i.OidcSubject,
+		&i.Email,
+		&i.DisplayName,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertUserFromOIDC = `-- name: UpsertUserFromOIDC :one
+INSERT INTO users (
+    oidc_issuer,
+    oidc_subject,
+    email,
+    display_name
+) VALUES (
+    $1, $2, $3, $4
+)
+ON CONFLICT (oidc_issuer, oidc_subject) DO UPDATE
+SET email        = COALESCE(EXCLUDED.email, users.email),
+    display_name = COALESCE(EXCLUDED.display_name, users.display_name),
+    updated_at   = now()
+RETURNING id, oidc_issuer, oidc_subject, email, display_name, timezone, created_at, updated_at
+`
+
+type UpsertUserFromOIDCParams struct {
+	OidcIssuer  string  `json:"oidc_issuer"`
+	OidcSubject string  `json:"oidc_subject"`
+	Email       *string `json:"email"`
+	DisplayName *string `json:"display_name"`
+}
+
+// Sign-in is the only way a user row appears or changes: the SSO account is the
+// source of truth for the e-mail and the display name. Missing claims never
+// erase data that is already stored.
+func (q *Queries) UpsertUserFromOIDC(ctx context.Context, arg UpsertUserFromOIDCParams) (User, error) {
+	row := q.db.QueryRow(ctx, upsertUserFromOIDC,
+		arg.OidcIssuer,
+		arg.OidcSubject,
+		arg.Email,
+		arg.DisplayName,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.OidcIssuer,
+		&i.OidcSubject,
+		&i.Email,
+		&i.DisplayName,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

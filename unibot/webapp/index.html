@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>UniBot WebApp</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; padding: 24px; background: Canvas; color: CanvasText; }
+    main { max-width: 560px; margin: auto; }
+    .card { border: 1px solid color-mix(in srgb, CanvasText 15%, transparent); border-radius: 16px; padding: 18px; }
+    code { font-size: .9em; }
+    button { font: inherit; padding: 10px 14px; border-radius: 10px; border: 1px solid; cursor: pointer; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>Universal WebApp</h1>
+    <p id="host">Detecting host…</p>
+    <p id="context"></p>
+    <button id="close">Close</button>
+  </div>
+</main>
+<script type="module">
+  function widgetParams() {
+    // Matrix's widget-api example recommends passing widget context in the URL
+    // fragment so IDs are not leaked to the HTTP server. Keep query support for
+    // compatibility with widgets installed by older UniBot versions.
+    const hash = location.hash.replace(/^#\/?\??/, "");
+    return hash ? new URLSearchParams(hash) : new URLSearchParams(location.search);
+  }
+
+  const params = widgetParams();
+  let host = "browser";
+  let matrixApi = null;
+
+  if (window.Telegram?.WebApp?.initData) {
+    host = "telegram";
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
+    document.getElementById("context").textContent =
+      `Telegram user: ${Telegram.WebApp.initDataUnsafe?.user?.id ?? "unknown"}`;
+  } else if (window.parent !== window && params.get("widgetId")) {
+    host = "matrix-element";
+    try {
+      // 1.18.0 is the latest published matrix-widget-api release. The old demo
+      // referenced 1.19.0, so the dynamic import failed before content_loaded
+      // could ever be sent to Element.
+      const { WidgetApi } = await import("https://esm.sh/matrix-widget-api@1.18.0?bundle");
+      matrixApi = new WidgetApi(params.get("widgetId"));
+      matrixApi.start();
+
+      // Safe even though the demo installs widgets with waitForIframeLoad=true;
+      // it also keeps compatibility with existing room state created with false.
+      await matrixApi.sendContentLoaded();
+
+      document.getElementById("context").textContent =
+        `Matrix user: ${params.get("userId") ?? "unknown"}; room: ${params.get("roomId") ?? "unknown"}`;
+    } catch (err) {
+      console.error("Matrix Widget API initialization failed", err);
+      document.getElementById("context").textContent = `Widget API error: ${err}`;
+    }
+  }
+
+  document.getElementById("host").textContent = `Host bridge: ${host}`;
+  document.getElementById("close").addEventListener("click", () => {
+    if (host === "telegram") Telegram.WebApp.close();
+    else window.close();
+  });
+</script>
+</body>
+</html>

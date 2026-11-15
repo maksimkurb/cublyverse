@@ -1,0 +1,46 @@
+# Local deployment: PostgreSQL plus the application.
+#
+#   docker compose -f deploy/docker-compose.yml up --build
+#
+# The values are development defaults, not secrets.
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: cublyverse
+      POSTGRES_PASSWORD: cublyverse
+      POSTGRES_DB: cublyverse
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cublyverse -d cublyverse"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      DATABASE_URL: postgres://cublyverse:cublyverse@db:5432/cublyverse?sslmode=disable
+      HTTP_ADDR: ":8080"
+      PUBLIC_BASE_URL: http://localhost:8080
+      LOG_FORMAT: json
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  pgdata:

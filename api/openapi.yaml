@@ -1,0 +1,82 @@
+openapi: 3.0.3
+
+info:
+  title: Cublyverse API
+  version: 0.1.0
+  description: |
+    HTTP API of the Cublyverse personal assistant.
+
+    The specification is the single source of truth for the HTTP layer: the Go
+    server and the TypeScript client are generated from it (`make gen`).
+
+    All operations are served under `/api/v1`. The specification itself is
+    available at `/api/openapi.yaml` and rendered at `/api/docs`.
+
+servers:
+  - url: /api/v1
+    description: Same origin as the WebApp and the messenger links.
+
+tags:
+  - name: system
+    description: Service metadata and health checks.
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags:
+        - system
+      summary: Service health and version
+      description: |
+        Reports that the HTTP process is alive together with the build version
+        of the running binary. No authentication is required.
+      responses:
+        "200":
+          description: The service is running.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+components:
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - version
+      properties:
+        status:
+          type: string
+          description: Always `ok` for a successful response.
+          example: ok
+        version:
+          type: string
+          description: Build version of the running binary.
+          example: 0.1.0
+
+    Error:
+      type: object
+      additionalProperties: false
+      description: |
+        Uniform error payload. `code` is a stable machine readable identifier,
+        `message` is a human readable explanation in Russian.
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: not_found
+        message:
+          type: string
+          example: Страница не найдена
+
+  responses:
+    Error:
+      description: Error response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

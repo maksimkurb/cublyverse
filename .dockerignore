@@ -1,0 +1,13 @@
+# Never copy these into the build context.
+.git
+.github
+bin
+data
+coverage
+*.db
+*.db-shm
+*.db-wal
+.env
+.envrc
+web/node_modules
+web/dist

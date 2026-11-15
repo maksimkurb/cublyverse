@@ -1,0 +1,12 @@
+.env
+.envrc
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+/data/
+/bin/
+node_modules/
+/web/dist/*
+!/web/dist/.gitkeep
+/coverage/

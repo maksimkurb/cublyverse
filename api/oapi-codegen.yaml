@@ -1,0 +1,12 @@
+# oapi-codegen configuration; run through `go tool oapi-codegen` (see Makefile).
+package: gen
+output: internal/httpapi/gen/api.gen.go
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+  # Embedding the document makes every edit of api/openapi.yaml visible in the
+  # generated file, so `make check` catches a forgotten `make gen`.
+  embedded-spec: true
+output-options:
+  skip-prune: true

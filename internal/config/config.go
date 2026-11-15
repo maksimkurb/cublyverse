@@ -15,10 +15,15 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 )
 
 // DefaultHTTPAddr is used when HTTP_ADDR is not set.
 const DefaultHTTPAddr = ":8080"
+
+// DefaultBotHandlerTimeout bounds one bot handler run when
+// BOT_HANDLER_TIMEOUT is not set.
+const DefaultBotHandlerTimeout = 30 * time.Second
 
 // Supported values for LOG_FORMAT.
 const (
@@ -42,6 +47,13 @@ type Config struct {
 	OIDC     OIDCConfig
 	Telegram TelegramConfig
 	Matrix   MatrixConfig
+	Bot      BotConfig
+}
+
+// BotConfig holds messenger-runtime settings.
+type BotConfig struct {
+	// HandlerTimeout bounds one bot handler run. Default 30 seconds.
+	HandlerTimeout time.Duration
 }
 
 // OIDCConfig holds the OpenID Connect client settings used for sign in.
@@ -98,10 +110,30 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 			PickleKey:    getenv("MATRIX_PICKLE_KEY"),
 		},
 	}
+	handlerTimeout, err := durationFromEnv(getenv, "BOT_HANDLER_TIMEOUT", DefaultBotHandlerTimeout)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.Bot = BotConfig{HandlerTimeout: handlerTimeout}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// durationFromEnv parses a duration variable, falling back to fallback when it
+// is empty. An invalid value is reported by name instead of being silently
+// replaced.
+func durationFromEnv(getenv func(string) string, name string, fallback time.Duration) (time.Duration, error) {
+	value := strings.TrimSpace(getenv(name))
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a duration like 30s or 2m: %w", name, err)
+	}
+	return parsed, nil
 }
 
 // Validate reports the first group of problems found in the configuration.
@@ -158,6 +190,9 @@ func (c Config) Validate() error {
 			}
 		}
 	}
+	if c.Bot.HandlerTimeout < 0 {
+		problems = append(problems, "BOT_HANDLER_TIMEOUT must be positive")
+	}
 
 	if len(problems) > 0 {
 		// Sorting keeps the message deterministic for tests and humans.
@@ -185,6 +220,14 @@ func (c Config) TelegramEnabled() bool { return c.Telegram.BotToken != "" }
 
 // MatrixEnabled reports whether the Matrix transport has a homeserver.
 func (c Config) MatrixEnabled() bool { return c.Matrix.Homeserver != "" }
+
+// BotHandlerTimeoutOr returns the configured handler timeout or the default.
+func (c Config) BotHandlerTimeoutOr() time.Duration {
+	if c.Bot.HandlerTimeout <= 0 {
+		return DefaultBotHandlerTimeout
+	}
+	return c.Bot.HandlerTimeout
+}
 
 func defaultString(value, fallback string) string {
 	value = strings.TrimSpace(value)

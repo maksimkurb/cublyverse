@@ -39,6 +39,47 @@ Matrix poll + answer ID ─────┘
 
 Persist this registry in production if interactions must survive process restarts.
 
+An interaction row carries two optional restrictions and one payload:
+
+- `ExpectedUserID` is checked by the adapter before an event is emitted (the
+  messenger account);
+- `PrincipalID` is checked by the runtime after `Resolve` (the SSO account), so
+  relinking the messenger cannot redirect a button to another person;
+- `Payload` is the opaque `Action.Payload` (up to 512 bytes) returned in
+  `ActionEvent.Payload`; Telegram's 64-byte `callback_data` cannot hold ids, so
+  they live here;
+- `ExpiresAt` is `Action.TTL` from `now()`; the default is
+  `unibot.DefaultActionTTL` (24 hours). Expired rows are not resolved, so a stale
+  button never reaches the handler.
+
+## 4a. Acknowledgement of interactive events
+
+Telegram requires an `answerCallbackQuery` for every callback query. Answering
+immediately with an empty result makes it impossible to show "Подтверждено ✅" or
+"This reminder is not yours".
+
+The adapter therefore only publishes the event with `Event.AckToken` set. The
+handler calls `botctx.Ack(ctx, text, alert)`, and the runtime sends an empty
+acknowledgement after the handler returns when it did not. The runtime also
+acknowledges after a handler timeout or panic, so the client never spins
+forever. Transports without the concept (`Acknowledger` is optional) simply do
+nothing, which is what the Matrix adapter does.
+
+## 4b. Event ordering and bounded work
+
+The runtime guarantees that events of the same remote user are handled one at a
+time, in arrival order, while different users run in parallel. Work is bounded:
+
+- `MaxConcurrentHandlers` handlers at once (default 32);
+- `MaxPendingEvents` buffered events (default 1024) plus a bounded transport
+  hand-off channel — backpressure instead of unbounded goroutines;
+- a per-handler timeout (default 30s, `RuntimeConfig.HandlerTimeout`);
+- errors and `Resolve` failures are logged, panics are recovered per event;
+- `Close` stops the transports, the scheduler and the handlers.
+
+The ordering key is `(platform, remote user id)`: the same person on two
+messengers is two independent streams.
+
 ## 5. Element action strategy
 
 `ActionSubmit` is rendered as a reaction because Element already presents reactions as compact controls attached to the message.
@@ -87,3 +128,28 @@ runtime.SendToPrincipal(ctx, principal, msg, unibot.DeliveryOptions{
 If Telegram delivery errors, the runtime tries Matrix. `Fanout: true` sends through every usable binding.
 
 The framework deliberately does not infer that "no read receipt" means a transport is unavailable. Availability/failover policy should later be a separate service using explicit delivery errors and whatever acknowledgement semantics the application needs.
+
+## 10. Formatting
+
+`Message.Text` is always the plain fallback. `Message.HTML` is a restricted
+subset — `b`, `i`, `code`, `a href` — validated by `unibot.ValidateHTML` before
+a transport sees the message. Telegram renders it with `parse_mode=HTML`; Matrix
+puts it into `formatted_body` with `format=org.matrix.custom.html`. `Text` stays
+the Matrix `body`, so clients without HTML support still show the message.
+
+Actions attached to an HTML message are appended to both variants: the plain
+body gets `icon label` lines, the formatted body gets escaped HTML lines.
+
+## 11. Telegram: private chats, commands, menu
+
+The adapter serves private chats only. Group/channel messages are dropped, and
+callback queries from them are answered empty so the client stops its spinner.
+Private-chat text starting with `/` is parsed by `unibot.ParseCommand`
+(`/start`, `/help`, `/cmd@botname args`) and travels in
+`IncomingMessage.Command`; the same parser is used by the Matrix adapter, so
+command dispatch does not depend on the messenger.
+
+On start the adapter publishes `setMyCommands` (scope `all_private_chats`,
+`language_code=ru`) and a `web_app` `setChatMenuButton` when a WebApp URL is
+configured. Both calls are best effort: failures are logged and do not fail the
+start.

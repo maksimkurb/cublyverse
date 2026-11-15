@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 )
 
 // env returns a getenv function backed by a map, so tests never touch the real
@@ -35,24 +36,28 @@ func TestLoadFromDefaults(t *testing.T) {
 	if cfg.MatrixEnabled() {
 		t.Error("MatrixEnabled() = true, want false without MATRIX_HOMESERVER")
 	}
+	if got, want := cfg.Bot.HandlerTimeout, DefaultBotHandlerTimeout; got != want {
+		t.Errorf("Bot.HandlerTimeout = %v, want %v", got, want)
+	}
 }
 
 func TestLoadFromValues(t *testing.T) {
 	cfg, err := LoadFrom(env(map[string]string{
-		"HTTP_ADDR":          "127.0.0.1:9000",
-		"PUBLIC_BASE_URL":    "https://cublyverse.example.com/",
-		"DATABASE_URL":       "postgresql://cublyverse@db:5432/cublyverse",
-		"LOG_FORMAT":         "json",
-		"OIDC_ISSUER":        "https://id.example.com",
-		"OIDC_CLIENT_ID":     "cublyverse",
-		"OIDC_CLIENT_SECRET": "secret",
-		"OIDC_REDIRECT_URL":  "https://cublyverse.example.com/auth/callback",
-		"TELEGRAM_BOT_TOKEN": "123:abc",
-		"MATRIX_HOMESERVER":  "https://matrix.example.com",
-		"MATRIX_USERNAME":    "cubly",
-		"MATRIX_PASSWORD":    "pass",
-		"MATRIX_PICKLE_KEY":  "pickle",
-		"MATRIX_CRYPTO_DB":   "/tmp/crypto.db",
+		"HTTP_ADDR":           "127.0.0.1:9000",
+		"PUBLIC_BASE_URL":     "https://cublyverse.example.com/",
+		"DATABASE_URL":        "postgresql://cublyverse@db:5432/cublyverse",
+		"LOG_FORMAT":          "json",
+		"OIDC_ISSUER":         "https://id.example.com",
+		"OIDC_CLIENT_ID":      "cublyverse",
+		"OIDC_CLIENT_SECRET":  "secret",
+		"OIDC_REDIRECT_URL":   "https://cublyverse.example.com/auth/callback",
+		"TELEGRAM_BOT_TOKEN":  "123:abc",
+		"MATRIX_HOMESERVER":   "https://matrix.example.com",
+		"MATRIX_USERNAME":     "cubly",
+		"MATRIX_PASSWORD":     "pass",
+		"MATRIX_PICKLE_KEY":   "pickle",
+		"MATRIX_CRYPTO_DB":    "/tmp/crypto.db",
+		"BOT_HANDLER_TIMEOUT": "45s",
 	}))
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
@@ -77,6 +82,9 @@ func TestLoadFromValues(t *testing.T) {
 	}
 	if !cfg.MatrixEnabled() {
 		t.Error("MatrixEnabled() = false, want true")
+	}
+	if got, want := cfg.Bot.HandlerTimeout, 45*time.Second; got != want {
+		t.Errorf("Bot.HandlerTimeout = %v, want %v", got, want)
 	}
 }
 
@@ -144,6 +152,14 @@ func TestLoadFromErrors(t *testing.T) {
 				"OIDC_CLIENT_ID": "cublyverse",
 			},
 			wantErr: []string{"OIDC_REDIRECT_URL or PUBLIC_BASE_URL is required when OIDC_ISSUER is set"},
+		},
+		{
+			name: "invalid bot handler timeout",
+			values: map[string]string{
+				"DATABASE_URL":        "postgres://localhost/cublyverse",
+				"BOT_HANDLER_TIMEOUT": "soon",
+			},
+			wantErr: []string{"BOT_HANDLER_TIMEOUT must be a duration"},
 		},
 		{
 			name: "relative oidc redirect url",

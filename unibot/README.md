@@ -40,6 +40,114 @@ The same handler receives normalized `message`, `action`, and `choice` events re
 - In-memory reference stores for identity and interaction mappings.
 - Demo application showing SSO linking, actions, choices and WebApp launching.
 
+## Message formatting
+
+`Message.Text` is the plain body every transport can render. `Message.HTML` is an
+optional formatted variant limited to `b`, `i`, `code` and `a href`:
+
+```go
+unibot.Message{
+    Text: "Первое напоминание: 15.11.2026",
+    HTML: "Первое напоминание: <b>15.11.2026</b>",
+}
+```
+
+- `unibot.EscapeHTML(text)` escapes user data for that subset;
+  `unibot.ValidateHTML` is the validator `Message.Validate` uses. Any other tag,
+  an attribute outside `a href`, an unbalanced tag or a non-http(s)/tg link is
+  rejected before a transport is called.
+- Telegram sends `parse_mode=HTML`.
+- Matrix sends `format=org.matrix.custom.html` plus `formatted_body` and keeps
+  `Text` as `body`. An HTML-only message gets `unibot.HTMLToText(HTML)` as the
+  plain body.
+
+## Commands, acknowledgements, action data
+
+Incoming texts starting with `/` are parsed by `unibot.ParseCommand` into
+`IncomingMessage.Command` (`Name`, `Addressee` from `/cmd@botname`, `Args`), so
+command handling is transport independent.
+
+A pressed button can be answered from the handler:
+
+```go
+func handle(ctx context.Context, botctx *unibot.Context, evt unibot.ResolvedEvent) error {
+    if err := botctx.Ack(ctx, "Подтверждено ✅", false); err != nil {
+        return err
+    }
+    _, err := botctx.Reply(ctx, unibot.Message{Text: "Готово"})
+    return err
+}
+```
+
+- The adapter no longer answers immediately: it puts the platform handle of the
+  event into `Event.AckToken`.
+- If the handler does not call `Ack`, the runtime sends an empty acknowledgement
+  after it returns (also after a timeout or a panic), so a Telegram button never
+  keeps spinning.
+- `alert=true` shows a modal dialog instead of a toast.
+- Matrix has no acknowledgement concept: its `Ack` is a no-op.
+
+`Action` carries data that must survive the 64-byte Telegram `callback_data`
+limit:
+
+| Field | Meaning |
+|---|---|
+| `Payload` | opaque string up to `MaxActionPayloadBytes` (512), returned in `ActionEvent.Payload` |
+| `PrincipalID` | optional restriction to one SSO account |
+| `TTL` | how long the button stays valid; zero means `DefaultActionTTL` (24h) |
+
+The interaction registry stores them (`Interaction.Payload`,
+`Interaction.PrincipalID`, `Interaction.ExpiresAt`). An expired button is not
+resolved, so it never reaches the handler.
+
+## Runtime guarantees
+
+`unibot.Runtime` serializes events of one remote user, runs different users in
+parallel and bounds the work:
+
+- at most `MaxConcurrentHandlers` handlers (default 32) run at once;
+- at most `MaxPendingEvents` (1024) events wait for their user, and the
+  transport hand-off channel is bounded — a flood creates backpressure, not
+  goroutines;
+- each handler gets a context with `HandlerTimeout` (default 30s);
+- handler errors, `Resolve` errors, timeouts and panics are logged through the
+  optional `*slog.Logger`; a panic in one handler does not stop the bot;
+- `Close` cancels the context, closes the transports, waits for the scheduler
+  and the handlers and is safe to call twice.
+
+```go
+runtime, err := unibot.NewRuntimeWithConfig(unibot.RuntimeConfig{
+    Logger:         logger,
+    HandlerTimeout: 30 * time.Second,
+}, identityStore, handler, transports...)
+```
+
+## Telegram: private chats, commands, menu
+
+The Telegram adapter serves **private chats only**: messages and callback
+queries from groups, supergroups and channels are dropped (callback queries are
+still acknowledged so the client stops its spinner).
+
+`telegram.Config` can publish the command menu and the Mini App menu button on
+start:
+
+```go
+adapter, err := telegram.New(telegram.Config{
+    Token:    token,
+    Logger:   logger,
+    Commands: []telegram.Command{
+        {Command: "start", Description: "начать работу"},
+        {Command: "help", Description: "список команд"},
+    },
+    WebAppURL: "https://bot.example.com/app/", // https only
+}, interactions)
+```
+
+`setMyCommands` is registered for `all_private_chats` with `language_code=ru`;
+`setChatMenuButton` creates a `web_app` button. Both failures are logged as
+warnings and never fail the start — a bot without a menu still works.
+
+
 ## Semantic UI
 
 Application code never creates Telegram buttons or Matrix events directly:

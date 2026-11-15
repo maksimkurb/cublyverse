@@ -82,8 +82,10 @@ cublyverse migrate status
 | `token_hash` | `bytea` | sha256 непрозрачного токена (Telegram `callback_data`) |
 | `platform`, `conversation_id`, `message_id`, `action_key` | `text` | ключ сообщения (Matrix: событие + эмодзи) |
 | `action_id`, `choice_id`, `option_id` | `text` | смысл действия |
-| `expected_user_id` | `text` | кто вправе нажать |
-| `expires_at` | `timestamptz` | TTL действия |
+| `expected_user_id` | `text` | какой аккаунт мессенджера вправе нажать |
+| `principal_id` | `uuid` → `users` | необязательное ограничение на SSO-аккаунт |
+| `payload` | `text` | непрозрачные данные действия (до 512 байт), возвращаются в событие |
+| `expires_at` | `timestamptz` | TTL действия (по умолчанию 24 часа) |
 | `created_at` | `timestamptz` | |
 
 Две формы адресации: по токену или по ключу сообщения. Уникальные индексы
@@ -91,6 +93,23 @@ cublyverse migrate status
 action_key)` не мешают друг другу, потому что в PostgreSQL `NULL` считается
 различным: у строки-токена ключ сообщения пуст, у строки-сообщения пуст
 `token_hash`. Токен хранится только как sha256.
+
+`expected_user_id` проверяет адаптер (id внутри мессенджера), `principal_id` —
+рантайм после `Resolve` (SSO-аккаунт). Второе переживает перепривязку
+мессенджера и не даёт подтвердить чужое напоминание. `payload` нужен потому,
+что Telegram ограничивает `callback_data` 64 байтами: идентификаторы
+напоминания и срабатывания хранятся здесь и приходят в `ActionEvent.Payload`.
+Внешний ключ на `users` удаляет действия пользователя вместе с аккаунтом.
+
+```sql
+-- 00006_interaction_principal_payload.sql
+ALTER TABLE interactions
+    ADD COLUMN principal_id uuid REFERENCES users (id) ON DELETE CASCADE,
+    ADD COLUMN payload text NOT NULL DEFAULT '';
+```
+
+Миграция только добавляющая: существующие строки получают `principal_id = NULL`
+(без ограничения) и пустой payload.
 
 ### `sessions`
 

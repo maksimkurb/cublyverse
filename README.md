@@ -10,7 +10,8 @@ SSO-пользователю.
 WebApp, Docker и CI, вход по SSO с безопасной привязкой мессенджеров и сессиями.
 Фича «Напоминания» появится на этапе M3.
 
-- Архитектура и принятые решения — [docs/PLAN.md](docs/PLAN.md)
+- Обзор архитектуры — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- План и принятые решения — [docs/PLAN.md](docs/PLAN.md)
 - Стори с критериями приёмки — [docs/STORIES.md](docs/STORIES.md)
 - API и вход — [docs/API.md](docs/API.md)
 - Схема базы и миграции — [docs/DATABASE.md](docs/DATABASE.md)
@@ -98,7 +99,7 @@ internal/mcpserver/       MCP-сервер (наполняется в M5)
 unibot/                   наш фреймворк мессенджеров
 web/                      WebApp (Vite + React + TypeScript)
 deploy/                   Dockerfile, docker-compose
-docs/                     план, стори, API, база, деплой
+docs/                     архитектура, план, стори, API, база, деплой
 ```
 
 Слои: бот, HTTP API и MCP — три тонких входа в один сервисный слой фичи, логика

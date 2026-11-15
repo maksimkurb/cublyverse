@@ -42,6 +42,8 @@ type Interaction struct {
 	ExpectedUserID string      `json:"expected_user_id"`
 	ExpiresAt      time.Time   `json:"expires_at"`
 	CreatedAt      time.Time   `json:"created_at"`
+	PrincipalID    pgtype.UUID `json:"principal_id"`
+	Payload        string      `json:"payload"`
 }
 
 type MessengerBinding struct {

@@ -150,6 +150,10 @@ func (a *Adapter) onMessage(ctx context.Context, evt *event.Event) {
 	if content == nil {
 		return
 	}
+	message := &unibot.IncomingMessage{Text: content.Body}
+	if command, ok := unibot.ParseCommand(content.Body); ok {
+		message.Command = &command
+	}
 	a.emit(ctx, unibot.Event{
 		Kind:           unibot.EventMessage,
 		Platform:       unibot.PlatformMatrix,
@@ -157,9 +161,13 @@ func (a *Adapter) onMessage(ctx context.Context, evt *event.Event) {
 		ConversationID: evt.RoomID.String(),
 		RemoteEventID:  evt.ID.String(),
 		ReceivedAt:     time.Now(),
-		Message:        &unibot.IncomingMessage{Text: content.Body},
+		Message:        message,
 	})
 }
+
+// Ack implements unibot.Acknowledger. A Matrix reaction needs no
+// acknowledgement, so the call is accepted and ignored.
+func (a *Adapter) Ack(context.Context, string, string, bool) error { return nil }
 
 func (a *Adapter) onReaction(ctx context.Context, evt *event.Event) {
 	if evt.Sender == a.client.UserID {
@@ -185,7 +193,11 @@ func (a *Adapter) onReaction(ctx context.Context, evt *event.Event) {
 		ConversationID: evt.RoomID.String(),
 		RemoteEventID:  evt.ID.String(),
 		ReceivedAt:     time.Now(),
-		Action:         &unibot.ActionEvent{ActionID: interaction.ActionID},
+		Action: &unibot.ActionEvent{
+			ActionID:    interaction.ActionID,
+			Payload:     interaction.Payload,
+			PrincipalID: interaction.PrincipalID,
+		},
 	})
 }
 
@@ -200,6 +212,7 @@ func (a *Adapter) onPollResponse(ctx context.Context, evt *event.Event) {
 	pollID := content.RelatesTo.EventID.String()
 	optionIDs := make([]string, 0, len(content.Response.Answers))
 	var choiceID string
+	var principalID unibot.PrincipalID
 	for _, answerID := range content.Response.Answers {
 		interaction, found, err := a.interactions.ResolveMessageKey(ctx, unibot.PlatformMatrix, evt.RoomID.String(), pollID, answerID)
 		if err != nil || !found {
@@ -210,8 +223,9 @@ func (a *Adapter) onPollResponse(ctx context.Context, evt *event.Event) {
 		}
 		if choiceID == "" {
 			choiceID = interaction.ChoiceID
+			principalID = interaction.PrincipalID
 		}
-		if interaction.ChoiceID != choiceID {
+		if interaction.ChoiceID != choiceID || interaction.PrincipalID != principalID {
 			continue
 		}
 		optionIDs = append(optionIDs, interaction.OptionID)
@@ -226,7 +240,7 @@ func (a *Adapter) onPollResponse(ctx context.Context, evt *event.Event) {
 		ConversationID: evt.RoomID.String(),
 		RemoteEventID:  evt.ID.String(),
 		ReceivedAt:     time.Now(),
-		Choice:         &unibot.ChoiceEvent{ChoiceID: choiceID, OptionIDs: optionIDs},
+		Choice:         &unibot.ChoiceEvent{ChoiceID: choiceID, OptionIDs: optionIDs, PrincipalID: principalID},
 	})
 }
 
@@ -259,7 +273,9 @@ func (a *Adapter) Send(ctx context.Context, address unibot.Address, message unib
 		if err := a.interactions.PutMessageKey(ctx, unibot.PlatformMatrix, roomID.String(), resp.EventID.String(), reaction, unibot.Interaction{
 			ActionID:       action.ID,
 			ExpectedUserID: address.RemoteUserID,
-			ExpiresAt:      time.Now().Add(24 * time.Hour),
+			PrincipalID:    action.PrincipalID,
+			Payload:        action.Payload,
+			ExpiresAt:      time.Now().Add(actionTTL(action)),
 		}); err != nil {
 			return unibot.SentMessage{}, err
 		}
@@ -325,7 +341,7 @@ func (a *Adapter) sendChoice(ctx context.Context, roomID id.RoomID, remoteUserID
 			ChoiceID:       choice.ID,
 			OptionID:       item.optionID,
 			ExpectedUserID: remoteUserID,
-			ExpiresAt:      time.Now().Add(24 * time.Hour),
+			ExpiresAt:      time.Now().Add(unibot.DefaultActionTTL),
 		}); err != nil {
 			return unibot.SentMessage{}, err
 		}
@@ -339,9 +355,18 @@ func (a *Adapter) sendChoice(ctx context.Context, roomID id.RoomID, remoteUserID
 }
 
 func renderMessage(message unibot.Message) (*event.MessageEventContent, map[string]unibot.Action, error) {
+	// Body is the plain fallback Element shows when HTML rendering is
+	// unavailable; FormattedBody is the rich variant.
 	body := message.Text
 	formatted := html.EscapeString(message.Text)
 	formatted = strings.ReplaceAll(formatted, "\n", "<br>")
+	if message.HTML != "" {
+		formatted = message.HTML
+		if body == "" {
+			body = unibot.HTMLToText(message.HTML)
+		}
+	}
+	hasHTML := message.HTML != ""
 	reactions := make(map[string]unibot.Action)
 	used := make(map[string]struct{})
 	fallback := []string{"1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"}
@@ -376,15 +401,24 @@ func renderMessage(message unibot.Message) (*event.MessageEventContent, map[stri
 			default:
 				return nil, nil, fmt.Errorf("unsupported action kind %q", action.Kind)
 			}
+			hasHTML = true
 		}
 	}
 
 	content := &event.MessageEventContent{MsgType: event.MsgText, Body: body}
-	if len(message.Actions) > 0 {
+	if hasHTML {
 		content.Format = event.FormatHTML
 		content.FormattedBody = formatted
 	}
 	return content, reactions, nil
+}
+
+// actionTTL is how long a reaction or poll answer stays valid.
+func actionTTL(action unibot.Action) time.Duration {
+	if action.TTL <= 0 {
+		return unibot.DefaultActionTTL
+	}
+	return action.TTL
 }
 
 func (a *Adapter) Edit(ctx context.Context, sent unibot.SentMessage, message unibot.Message) error {
@@ -392,6 +426,13 @@ func (a *Adapter) Edit(ctx context.Context, sent unibot.SentMessage, message uni
 		return errors.New("starter Matrix editor only edits plain text; re-send interactive messages instead")
 	}
 	content := &event.MessageEventContent{MsgType: event.MsgText, Body: message.Text}
+	if message.HTML != "" {
+		content.Format = event.FormatHTML
+		content.FormattedBody = message.HTML
+		if content.Body == "" {
+			content.Body = unibot.HTMLToText(message.HTML)
+		}
+	}
 	content.SetEdit(id.EventID(sent.RemoteMessageID))
 	_, err := a.client.SendMessageEvent(ctx, id.RoomID(sent.ConversationID), event.EventMessage, content)
 	return err

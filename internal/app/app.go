@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,6 +46,7 @@ type App struct {
 
 	auth    *auth.Service
 	runtime *unibot.Runtime
+	router  *bot.Router
 
 	// extraJobs are the cleanup tasks of the identity layer and the
 	// interaction registry; features bring their own through the registry.
@@ -129,8 +131,8 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 }
 
 // startBot wires the messenger runtime when a transport and OIDC are
-// configured. The bot only replies with the sign-in button in this milestone;
-// M2 replaces the handler with the real router.
+// configured: the bot router (core commands plus features), the transports and
+// the runtime that orders and bounds event handling.
 func (a *App) startBot(ctx context.Context, interactions unibot.InteractionStore) error {
 	if !a.cfg.TelegramEnabled() && !a.cfg.MatrixEnabled() {
 		if !a.cfg.TelegramEnabled() {
@@ -146,7 +148,18 @@ func (a *App) startBot(ctx context.Context, interactions unibot.InteractionStore
 		return nil
 	}
 
-	transports, err := a.transports(interactions)
+	// The router is the single messenger entry point: core commands plus
+	// everything the features registered. It exists before the transports so
+	// the Telegram adapter can publish the command menu on start.
+	router := bot.NewRouter(
+		bot.WithLogger(a.logger),
+		bot.WithLoginLinks(a.auth),
+		bot.WithWebAppURL(a.webAppURL()),
+	)
+	a.registry.RegisterBot(router)
+	a.router = router
+
+	transports, err := a.transports(interactions, router)
 	if err != nil {
 		return err
 	}
@@ -154,12 +167,10 @@ func (a *App) startBot(ctx context.Context, interactions unibot.InteractionStore
 		return nil
 	}
 
-	botHandler := &bot.Handler{
-		Links:     a.auth,
-		WebAppURL: a.webAppURL(),
-		Logger:    a.logger,
-	}
-	runtime, err := unibot.NewRuntime(a.auth, botHandler.Handle, transports...)
+	runtime, err := unibot.NewRuntimeWithConfig(unibot.RuntimeConfig{
+		Logger:         a.logger,
+		HandlerTimeout: a.cfg.BotHandlerTimeoutOr(),
+	}, a.auth, router.Handle, transports...)
 	if err != nil {
 		return fmt.Errorf("build messenger runtime: %w", err)
 	}
@@ -190,11 +201,20 @@ func (a *App) startBot(ctx context.Context, interactions unibot.InteractionStore
 }
 
 // transports builds the messenger adapters that are configured.
-func (a *App) transports(interactions unibot.InteractionStore) ([]unibot.Transport, error) {
+func (a *App) transports(interactions unibot.InteractionStore, router *bot.Router) ([]unibot.Transport, error) {
 	var transports []unibot.Transport
 	if a.cfg.TelegramEnabled() {
+		// Telegram accepts web_app menu buttons only over https, so the menu is
+		// published only for a public https URL (local development is http).
+		menuURL := ""
+		if strings.HasPrefix(a.cfg.PublicBaseURL, "https://") {
+			menuURL = a.webAppURL()
+		}
 		adapter, err := telegramtransport.New(telegramtransport.Config{
-			Token: a.cfg.Telegram.BotToken,
+			Token:     a.cfg.Telegram.BotToken,
+			Logger:    a.logger,
+			Commands:  telegramCommands(router.Commands()),
+			WebAppURL: menuURL,
 		}, interactions)
 		if err != nil {
 			return nil, fmt.Errorf("configure telegram transport: %w", err)
@@ -225,6 +245,18 @@ func (a *App) webAppURL() string {
 	return a.cfg.PublicBaseURL + "/app/"
 }
 
+// telegramCommands maps the router commands to the Telegram command menu.
+func telegramCommands(commands []bot.CommandInfo) []telegramtransport.Command {
+	out := make([]telegramtransport.Command, 0, len(commands))
+	for _, command := range commands {
+		out = append(out, telegramtransport.Command{
+			Command:     command.Name,
+			Description: command.Description,
+		})
+	}
+	return out
+}
+
 // authConfig maps the process configuration to the identity service.
 func authConfig(cfg config.Config) auth.Config {
 	return auth.Config{
@@ -248,6 +280,10 @@ func (a *App) Store() *store.Store { return a.store }
 
 // Auth returns the identity service.
 func (a *App) Auth() *auth.Service { return a.auth }
+
+// Router returns the bot router, or nil when no messenger transport is
+// configured.
+func (a *App) Router() *bot.Router { return a.router }
 
 // Run starts the background jobs, the messenger transports and the HTTP server,
 // then blocks until ctx is cancelled or the server fails. Shutdown waits up to

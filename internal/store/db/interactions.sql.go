@@ -8,6 +8,8 @@ package db
 import (
 	"context"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createInteractionByToken = `-- name: CreateInteractionByToken :one
@@ -17,20 +19,24 @@ INSERT INTO interactions (
     choice_id,
     option_id,
     expected_user_id,
+    principal_id,
+    payload,
     expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7, $8
 )
-RETURNING id, token_hash, platform, conversation_id, message_id, action_key, action_id, choice_id, option_id, expected_user_id, expires_at, created_at
+RETURNING id, token_hash, platform, conversation_id, message_id, action_key, action_id, choice_id, option_id, expected_user_id, expires_at, created_at, principal_id, payload
 `
 
 type CreateInteractionByTokenParams struct {
-	TokenHash      []byte    `json:"token_hash"`
-	ActionID       string    `json:"action_id"`
-	ChoiceID       string    `json:"choice_id"`
-	OptionID       string    `json:"option_id"`
-	ExpectedUserID string    `json:"expected_user_id"`
-	ExpiresAt      time.Time `json:"expires_at"`
+	TokenHash      []byte      `json:"token_hash"`
+	ActionID       string      `json:"action_id"`
+	ChoiceID       string      `json:"choice_id"`
+	OptionID       string      `json:"option_id"`
+	ExpectedUserID string      `json:"expected_user_id"`
+	PrincipalID    pgtype.UUID `json:"principal_id"`
+	Payload        string      `json:"payload"`
+	ExpiresAt      time.Time   `json:"expires_at"`
 }
 
 // The token itself is never stored: only its sha256, because the token is a
@@ -42,6 +48,8 @@ func (q *Queries) CreateInteractionByToken(ctx context.Context, arg CreateIntera
 		arg.ChoiceID,
 		arg.OptionID,
 		arg.ExpectedUserID,
+		arg.PrincipalID,
+		arg.Payload,
 		arg.ExpiresAt,
 	)
 	var i Interaction
@@ -58,6 +66,8 @@ func (q *Queries) CreateInteractionByToken(ctx context.Context, arg CreateIntera
 		&i.ExpectedUserID,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.PrincipalID,
+		&i.Payload,
 	)
 	return i, err
 }
@@ -76,7 +86,7 @@ func (q *Queries) DeleteExpiredInteractions(ctx context.Context) (int64, error) 
 }
 
 const getInteractionByMessageKey = `-- name: GetInteractionByMessageKey :one
-SELECT id, token_hash, platform, conversation_id, message_id, action_key, action_id, choice_id, option_id, expected_user_id, expires_at, created_at FROM interactions
+SELECT id, token_hash, platform, conversation_id, message_id, action_key, action_id, choice_id, option_id, expected_user_id, expires_at, created_at, principal_id, payload FROM interactions
 WHERE platform = $1
   AND conversation_id = $2
   AND message_id = $3
@@ -112,12 +122,14 @@ func (q *Queries) GetInteractionByMessageKey(ctx context.Context, arg GetInterac
 		&i.ExpectedUserID,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.PrincipalID,
+		&i.Payload,
 	)
 	return i, err
 }
 
 const getInteractionByTokenHash = `-- name: GetInteractionByTokenHash :one
-SELECT id, token_hash, platform, conversation_id, message_id, action_key, action_id, choice_id, option_id, expected_user_id, expires_at, created_at FROM interactions
+SELECT id, token_hash, platform, conversation_id, message_id, action_key, action_id, choice_id, option_id, expected_user_id, expires_at, created_at, principal_id, payload FROM interactions
 WHERE token_hash = $1
   AND expires_at > now()
 `
@@ -138,6 +150,8 @@ func (q *Queries) GetInteractionByTokenHash(ctx context.Context, tokenHash []byt
 		&i.ExpectedUserID,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.PrincipalID,
+		&i.Payload,
 	)
 	return i, err
 }
@@ -152,29 +166,35 @@ INSERT INTO interactions (
     choice_id,
     option_id,
     expected_user_id,
+    principal_id,
+    payload,
     expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 ON CONFLICT (platform, conversation_id, message_id, action_key) DO UPDATE
 SET action_id       = EXCLUDED.action_id,
     choice_id       = EXCLUDED.choice_id,
     option_id       = EXCLUDED.option_id,
     expected_user_id = EXCLUDED.expected_user_id,
+    principal_id    = EXCLUDED.principal_id,
+    payload         = EXCLUDED.payload,
     expires_at      = EXCLUDED.expires_at
-RETURNING id, token_hash, platform, conversation_id, message_id, action_key, action_id, choice_id, option_id, expected_user_id, expires_at, created_at
+RETURNING id, token_hash, platform, conversation_id, message_id, action_key, action_id, choice_id, option_id, expected_user_id, expires_at, created_at, principal_id, payload
 `
 
 type UpsertInteractionByMessageKeyParams struct {
-	Platform       *string   `json:"platform"`
-	ConversationID *string   `json:"conversation_id"`
-	MessageID      *string   `json:"message_id"`
-	ActionKey      *string   `json:"action_key"`
-	ActionID       string    `json:"action_id"`
-	ChoiceID       string    `json:"choice_id"`
-	OptionID       string    `json:"option_id"`
-	ExpectedUserID string    `json:"expected_user_id"`
-	ExpiresAt      time.Time `json:"expires_at"`
+	Platform       *string     `json:"platform"`
+	ConversationID *string     `json:"conversation_id"`
+	MessageID      *string     `json:"message_id"`
+	ActionKey      *string     `json:"action_key"`
+	ActionID       string      `json:"action_id"`
+	ChoiceID       string      `json:"choice_id"`
+	OptionID       string      `json:"option_id"`
+	ExpectedUserID string      `json:"expected_user_id"`
+	PrincipalID    pgtype.UUID `json:"principal_id"`
+	Payload        string      `json:"payload"`
+	ExpiresAt      time.Time   `json:"expires_at"`
 }
 
 func (q *Queries) UpsertInteractionByMessageKey(ctx context.Context, arg UpsertInteractionByMessageKeyParams) (Interaction, error) {
@@ -187,6 +207,8 @@ func (q *Queries) UpsertInteractionByMessageKey(ctx context.Context, arg UpsertI
 		arg.ChoiceID,
 		arg.OptionID,
 		arg.ExpectedUserID,
+		arg.PrincipalID,
+		arg.Payload,
 		arg.ExpiresAt,
 	)
 	var i Interaction
@@ -203,6 +225,8 @@ func (q *Queries) UpsertInteractionByMessageKey(ctx context.Context, arg UpsertI
 		&i.ExpectedUserID,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.PrincipalID,
+		&i.Payload,
 	)
 	return i, err
 }

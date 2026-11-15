@@ -111,7 +111,7 @@ func TestMigrateAndUsers(t *testing.T) {
 		}
 		applied[status.Version] = true
 	}
-	for _, want := range []int64{1, 2, 3, 4, 5} {
+	for _, want := range []int64{1, 2, 3, 4, 5, 6} {
 		if !applied[want] {
 			t.Errorf("migration %d is missing from the status: %+v", want, statuses)
 		}

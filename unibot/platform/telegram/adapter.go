@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,16 +17,34 @@ import (
 	unibot "github.com/maksimkurb/cublyverse/unibot"
 )
 
+// Command is one entry of the bot command menu published with setMyCommands.
+type Command struct {
+	// Command is the name without the leading slash, for example "help".
+	Command     string `json:"command"`
+	Description string `json:"description"`
+}
+
 type Config struct {
 	Token       string
 	BaseURL     string
 	PollTimeout time.Duration
 	HTTPClient  *http.Client
+	// Logger records setup and background failures. Nil means slog.Default().
+	Logger *slog.Logger
+	// Commands are published with setMyCommands on start. Empty skips the call.
+	Commands []Command
+	// WebAppURL is the HTTPS address of the Mini App used by the chat menu
+	// button (setChatMenuButton). Empty skips the call.
+	WebAppURL string
+	// MenuButtonText is the label of the menu button. Defaults to a Russian
+	// "Открыть приложение".
+	MenuButtonText string
 }
 
 type Adapter struct {
 	cfg          Config
 	interactions unibot.InteractionStore
+	logger       *slog.Logger
 	http         *http.Client
 	events       chan unibot.Event
 	cancel       context.CancelFunc
@@ -45,6 +64,12 @@ func New(cfg Config, interactions unibot.InteractionStore) (*Adapter, error) {
 	if cfg.PollTimeout <= 0 {
 		cfg.PollTimeout = 30 * time.Second
 	}
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
+	if cfg.MenuButtonText == "" {
+		cfg.MenuButtonText = "Открыть приложение"
+	}
 	client := cfg.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: cfg.PollTimeout + 10*time.Second}
@@ -52,6 +77,7 @@ func New(cfg Config, interactions unibot.InteractionStore) (*Adapter, error) {
 	return &Adapter{
 		cfg:          cfg,
 		interactions: interactions,
+		logger:       cfg.Logger,
 		http:         client,
 		events:       make(chan unibot.Event, 128),
 	}, nil
@@ -77,7 +103,36 @@ func (a *Adapter) Start(parent context.Context) error {
 	ctx, cancel := context.WithCancel(parent)
 	a.cancel = cancel
 	go a.poll(ctx)
+	go a.setup(ctx)
 	return nil
+}
+
+// setup publishes the command menu and the Mini App menu button. The bot works
+// without them, so failures are logged as warnings instead of failing the
+// start: a messenger outage must not stop message delivery.
+func (a *Adapter) setup(ctx context.Context) {
+	if len(a.cfg.Commands) > 0 {
+		payload := map[string]any{
+			"commands":      a.cfg.Commands,
+			"scope":         map[string]any{"type": "all_private_chats"},
+			"language_code": "ru",
+		}
+		if err := a.call(ctx, "setMyCommands", payload, nil); err != nil {
+			a.logger.WarnContext(ctx, "telegram setMyCommands failed", slog.String("error", err.Error()))
+		}
+	}
+	if a.cfg.WebAppURL != "" {
+		payload := map[string]any{
+			"menu_button": map[string]any{
+				"type":    "web_app",
+				"text":    a.cfg.MenuButtonText,
+				"web_app": map[string]any{"url": a.cfg.WebAppURL},
+			},
+		}
+		if err := a.call(ctx, "setChatMenuButton", payload, nil); err != nil {
+			a.logger.WarnContext(ctx, "telegram setChatMenuButton failed", slog.String("error", err.Error()))
+		}
+	}
 }
 
 func (a *Adapter) Close() error {
@@ -114,6 +169,15 @@ func (a *Adapter) poll(ctx context.Context) {
 func (a *Adapter) handleUpdate(ctx context.Context, update tgUpdate) {
 	now := time.Now()
 	if update.Message != nil && update.Message.From != nil {
+		// The bot only serves private chats: group and channel messages are
+		// ignored, so no reminder or binding can leak into a shared room.
+		if update.Message.Chat.Type != chatTypePrivate {
+			return
+		}
+		message := &unibot.IncomingMessage{Text: update.Message.Text}
+		if command, ok := unibot.ParseCommand(update.Message.Text); ok {
+			message.Command = &command
+		}
 		a.emit(ctx, unibot.Event{
 			Kind:           unibot.EventMessage,
 			Platform:       unibot.PlatformTelegram,
@@ -121,7 +185,7 @@ func (a *Adapter) handleUpdate(ctx context.Context, update tgUpdate) {
 			ConversationID: strconv.FormatInt(update.Message.Chat.ID, 10),
 			RemoteEventID:  strconv.FormatInt(update.Message.MessageID, 10),
 			ReceivedAt:     now,
-			Message:        &unibot.IncomingMessage{Text: update.Message.Text},
+			Message:        message,
 		})
 		return
 	}
@@ -130,16 +194,31 @@ func (a *Adapter) handleUpdate(ctx context.Context, update tgUpdate) {
 	if q == nil || q.Message == nil {
 		return
 	}
-	_ = a.answerCallbackQuery(ctx, q.ID)
+	// Callback queries are only served from private chats. Telegram expects an
+	// answer for every callback query, so the dropped ones are acknowledged
+	// here; handled ones are acknowledged by the runtime or the handler.
+	if q.Message.Chat.Type != chatTypePrivate {
+		a.answerQuietly(ctx, q.ID)
+		return
+	}
 	if !strings.HasPrefix(q.Data, "u:") {
+		a.answerQuietly(ctx, q.ID)
 		return
 	}
 	interaction, ok, err := a.interactions.ResolveToken(ctx, strings.TrimPrefix(q.Data, "u:"))
-	if err != nil || !ok {
+	if err != nil {
+		a.logger.ErrorContext(ctx, "resolve callback token failed", slog.String("error", err.Error()))
+		a.answerQuietly(ctx, q.ID)
+		return
+	}
+	if !ok {
+		// The button expired or was already cleaned up: stop the spinner.
+		a.answerQuietly(ctx, q.ID)
 		return
 	}
 	remoteUserID := strconv.FormatInt(q.From.ID, 10)
 	if interaction.ExpectedUserID != "" && interaction.ExpectedUserID != remoteUserID {
+		a.answerQuietly(ctx, q.ID)
 		return
 	}
 	base := unibot.Event{
@@ -148,15 +227,48 @@ func (a *Adapter) handleUpdate(ctx context.Context, update tgUpdate) {
 		ConversationID: strconv.FormatInt(q.Message.Chat.ID, 10),
 		RemoteEventID:  q.ID,
 		ReceivedAt:     now,
+		// The callback stays unanswered until the handler calls Context.Ack or
+		// the runtime sends an empty acknowledgement.
+		AckToken: q.ID,
 	}
 	if interaction.ChoiceID != "" {
 		base.Kind = unibot.EventChoice
-		base.Choice = &unibot.ChoiceEvent{ChoiceID: interaction.ChoiceID, OptionIDs: []string{interaction.OptionID}}
+		base.Choice = &unibot.ChoiceEvent{
+			ChoiceID:    interaction.ChoiceID,
+			OptionIDs:   []string{interaction.OptionID},
+			PrincipalID: interaction.PrincipalID,
+		}
 	} else {
 		base.Kind = unibot.EventAction
-		base.Action = &unibot.ActionEvent{ActionID: interaction.ActionID}
+		base.Action = &unibot.ActionEvent{
+			ActionID:    interaction.ActionID,
+			Payload:     interaction.Payload,
+			PrincipalID: interaction.PrincipalID,
+		}
 	}
 	a.emit(ctx, base)
+}
+
+// answerQuietly acknowledges a callback query that produces no event.
+func (a *Adapter) answerQuietly(ctx context.Context, id string) {
+	if err := a.Ack(ctx, id, "", false); err != nil {
+		a.logger.WarnContext(ctx, "telegram answerCallbackQuery failed", slog.String("error", err.Error()))
+	}
+}
+
+// Ack implements unibot.Acknowledger with answerCallbackQuery.
+func (a *Adapter) Ack(ctx context.Context, token, text string, alert bool) error {
+	if token == "" {
+		return nil
+	}
+	payload := map[string]any{"callback_query_id": token}
+	if text != "" {
+		payload["text"] = text
+	}
+	if alert {
+		payload["show_alert"] = true
+	}
+	return a.call(ctx, "answerCallbackQuery", payload, nil)
 }
 
 func (a *Adapter) emit(ctx context.Context, event unibot.Event) {
@@ -181,7 +293,10 @@ func (a *Adapter) Send(ctx context.Context, address unibot.Address, message unib
 	}
 	payload := map[string]any{
 		"chat_id": chatIDValue(address.ConversationID),
-		"text":    message.Text,
+		"text":    textPayload(message),
+	}
+	if message.HTML != "" {
+		payload["parse_mode"] = "HTML"
 	}
 	if len(keyboard.InlineKeyboard) > 0 {
 		payload["reply_markup"] = keyboard
@@ -209,7 +324,7 @@ func (a *Adapter) sendChoice(ctx context.Context, address unibot.Address, choice
 			ChoiceID:       choice.ID,
 			OptionID:       option.ID,
 			ExpectedUserID: address.RemoteUserID,
-			ExpiresAt:      time.Now().Add(24 * time.Hour),
+			ExpiresAt:      time.Now().Add(unibot.DefaultActionTTL),
 		}); err != nil {
 			return unibot.SentMessage{}, err
 		}
@@ -255,7 +370,9 @@ func (a *Adapter) renderKeyboard(ctx context.Context, address unibot.Address, ac
 				if err := a.interactions.PutToken(ctx, token, unibot.Interaction{
 					ActionID:       action.ID,
 					ExpectedUserID: address.RemoteUserID,
-					ExpiresAt:      time.Now().Add(24 * time.Hour),
+					PrincipalID:    action.PrincipalID,
+					Payload:        action.Payload,
+					ExpiresAt:      time.Now().Add(actionTTL(action)),
 				}); err != nil {
 					return tgInlineKeyboardMarkup{}, err
 				}
@@ -275,6 +392,14 @@ func label(action unibot.Action) string {
 		return action.Label
 	}
 	return action.Icon + " " + action.Label
+}
+
+// actionTTL is how long a submit button stays valid.
+func actionTTL(action unibot.Action) time.Duration {
+	if action.TTL <= 0 {
+		return unibot.DefaultActionTTL
+	}
+	return action.TTL
 }
 
 func telegramStyle(style unibot.ActionStyle) string {
@@ -309,12 +434,24 @@ func (a *Adapter) Edit(ctx context.Context, sent unibot.SentMessage, message uni
 	payload := map[string]any{
 		"chat_id":    chatIDValue(sent.ConversationID),
 		"message_id": messageID,
-		"text":       message.Text,
+		"text":       textPayload(message),
+	}
+	if message.HTML != "" {
+		payload["parse_mode"] = "HTML"
 	}
 	if len(keyboard.InlineKeyboard) > 0 {
 		payload["reply_markup"] = keyboard
 	}
 	return a.call(ctx, "editMessageText", payload, nil)
+}
+
+// textPayload returns what Telegram should render: the HTML variant when it is
+// set, the plain text otherwise.
+func textPayload(message unibot.Message) string {
+	if message.HTML != "" {
+		return message.HTML
+	}
+	return message.Text
 }
 
 func (a *Adapter) Delete(ctx context.Context, sent unibot.SentMessage) error {
@@ -336,10 +473,6 @@ func (a *Adapter) getUpdates(ctx context.Context, offset int64) ([]tgUpdate, err
 		"allowed_updates": []string{"message", "callback_query"},
 	}, &result)
 	return result, err
-}
-
-func (a *Adapter) answerCallbackQuery(ctx context.Context, id string) error {
-	return a.call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": id}, nil)
 }
 
 func (a *Adapter) call(ctx context.Context, method string, payload any, result any) error {
@@ -413,8 +546,12 @@ type tgUser struct {
 }
 
 type tgChat struct {
-	ID int64 `json:"id"`
+	ID   int64  `json:"id"`
+	Type string `json:"type"`
 }
+
+// chatTypePrivate is the only chat type this bot serves.
+const chatTypePrivate = "private"
 
 type tgInlineKeyboardMarkup struct {
 	InlineKeyboard [][]tgInlineKeyboardButton `json:"inline_keyboard"`

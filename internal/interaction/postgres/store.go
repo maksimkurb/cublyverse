@@ -1,9 +1,3 @@
-// Package postgres implements the unibot interaction registry on PostgreSQL.
-//
-// Messenger callbacks are addressed either by an opaque token (Telegram
-// callback_data) or by a message key (Matrix event + reaction key). Both point
-// at the semantic action or choice option of a feature. Keeping the registry in
-// PostgreSQL means a button still works after a restart.
 package postgres
 
 import (
@@ -14,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/maksimkurb/cublyverse/internal/store"
 	"github.com/maksimkurb/cublyverse/internal/store/db"
@@ -21,7 +16,7 @@ import (
 )
 
 // defaultTTL is used when an interaction has no explicit expiry.
-const defaultTTL = 24 * time.Hour
+const defaultTTL = unibot.DefaultActionTTL
 
 // Store is the PostgreSQL interaction registry.
 type Store struct {
@@ -40,6 +35,10 @@ func (s *Store) PutToken(ctx context.Context, token string, interaction unibot.I
 	if token == "" {
 		return errors.New("interaction token is required")
 	}
+	principalID, err := parsePrincipal(interaction.PrincipalID)
+	if err != nil {
+		return err
+	}
 	expiresAt := expiry(interaction)
 	sum := sha256.Sum256([]byte(token))
 	if _, err := s.st.Queries().CreateInteractionByToken(ctx, db.CreateInteractionByTokenParams{
@@ -48,6 +47,8 @@ func (s *Store) PutToken(ctx context.Context, token string, interaction unibot.I
 		ChoiceID:       interaction.ChoiceID,
 		OptionID:       interaction.OptionID,
 		ExpectedUserID: interaction.ExpectedUserID,
+		PrincipalID:    principalID,
+		Payload:        interaction.Payload,
 		ExpiresAt:      expiresAt,
 	}); err != nil {
 		return fmt.Errorf("store interaction token: %w", err)
@@ -77,6 +78,10 @@ func (s *Store) PutMessageKey(ctx context.Context, platform unibot.Platform, con
 	if platform == "" || conversationID == "" || messageID == "" || key == "" {
 		return errors.New("platform, conversation, message and key are required")
 	}
+	principalID, err := parsePrincipal(interaction.PrincipalID)
+	if err != nil {
+		return err
+	}
 	expiresAt := expiry(interaction)
 	if _, err := s.st.Queries().UpsertInteractionByMessageKey(ctx, db.UpsertInteractionByMessageKeyParams{
 		Platform:       strPtr(string(platform)),
@@ -87,6 +92,8 @@ func (s *Store) PutMessageKey(ctx context.Context, platform unibot.Platform, con
 		ChoiceID:       interaction.ChoiceID,
 		OptionID:       interaction.OptionID,
 		ExpectedUserID: interaction.ExpectedUserID,
+		PrincipalID:    principalID,
+		Payload:        interaction.Payload,
 		ExpiresAt:      expiresAt,
 	}); err != nil {
 		return fmt.Errorf("store interaction message key: %w", err)
@@ -133,14 +140,40 @@ func expiry(interaction unibot.Interaction) time.Time {
 	return interaction.ExpiresAt.UTC()
 }
 
+// parsePrincipal turns the optional principal restriction into a SQL value.
+// An empty principal means "no restriction" and is stored as NULL.
+func parsePrincipal(principal unibot.PrincipalID) (pgtype.UUID, error) {
+	if principal == "" {
+		return pgtype.UUID{}, nil
+	}
+	var parsed pgtype.UUID
+	if err := parsed.Scan(string(principal)); err != nil {
+		return pgtype.UUID{}, fmt.Errorf("invalid principal id %q: %w", principal, err)
+	}
+	if !parsed.Valid {
+		return pgtype.UUID{}, fmt.Errorf("invalid principal id %q", principal)
+	}
+	return parsed, nil
+}
+
 func interactionFromRow(row db.Interaction) unibot.Interaction {
 	return unibot.Interaction{
 		ActionID:       row.ActionID,
 		ChoiceID:       row.ChoiceID,
 		OptionID:       row.OptionID,
 		ExpectedUserID: row.ExpectedUserID,
+		PrincipalID:    formatPrincipal(row.PrincipalID),
+		Payload:        row.Payload,
 		ExpiresAt:      row.ExpiresAt,
 	}
+}
+
+func formatPrincipal(principal pgtype.UUID) unibot.PrincipalID {
+	if !principal.Valid {
+		return ""
+	}
+	b := principal.Bytes
+	return unibot.PrincipalID(fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]))
 }
 
 func strPtr(value string) *string { return &value }

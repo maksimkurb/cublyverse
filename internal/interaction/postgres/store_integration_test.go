@@ -2,13 +2,17 @@ package postgres_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	interactionpg "github.com/maksimkurb/cublyverse/internal/interaction/postgres"
 	"github.com/maksimkurb/cublyverse/internal/store"
+	"github.com/maksimkurb/cublyverse/internal/store/db"
 	"github.com/maksimkurb/cublyverse/internal/store/testdb"
 	unibot "github.com/maksimkurb/cublyverse/unibot"
 )
@@ -17,9 +21,16 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+// uuidString renders a uuid column in the canonical 8-4-4-4-12 form.
+func uuidString(u pgtype.UUID) string {
+	b := u.Bytes
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
 // TestInteractionStore is the M1-2 acceptance test: an action survives a
 // process restart (a new pool over the same database) and an expired action is
-// not resolved.
+// not resolved. It also covers the M2-3 additions: the principal restriction
+// and the opaque payload.
 func TestInteractionStore(t *testing.T) {
 	databaseURL := testdb.Start(t)
 	ctx := context.Background()
@@ -34,9 +45,20 @@ func TestInteractionStore(t *testing.T) {
 	}
 	storeOne := interactionpg.New(first)
 
+	user, err := first.Queries().CreateUser(ctx, db.CreateUserParams{
+		OidcIssuer:  "https://id.example.com",
+		OidcSubject: "subject-1",
+	})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	principal := unibot.PrincipalID(uuidString(user.ID))
+
 	action := unibot.Interaction{
-		ActionID:       "reminders.done:7:9",
+		ActionID:       "reminders.done",
 		ExpectedUserID: "279058397",
+		PrincipalID:    principal,
+		Payload:        "reminder-7:occurrence-9",
 		ExpiresAt:      time.Now().Add(time.Hour),
 	}
 	if err := storeOne.PutToken(ctx, "token-survives-restart", action); err != nil {
@@ -47,10 +69,19 @@ func TestInteractionStore(t *testing.T) {
 	if err := storeOne.PutToken(ctx, "token-expired", expired); err != nil {
 		t.Fatalf("PutToken(expired): %v", err)
 	}
+	// An interaction without an explicit expiry gets the 24 hour default.
+	noExpiry := action
+	noExpiry.ExpiresAt = time.Time{}
+	noExpiry.PrincipalID = ""
+	noExpiry.Payload = ""
+	if err := storeOne.PutToken(ctx, "token-default-ttl", noExpiry); err != nil {
+		t.Fatalf("PutToken(default ttl): %v", err)
+	}
 	if err := storeOne.PutMessageKey(ctx, unibot.PlatformMatrix, "!room:example.com", "$event", "👍", unibot.Interaction{
 		ChoiceID:       "environment",
 		OptionID:       "prod",
 		ExpectedUserID: "@user:example.com",
+		PrincipalID:    principal,
 		ExpiresAt:      time.Now().Add(time.Hour),
 	}); err != nil {
 		t.Fatalf("PutMessageKey: %v", err)
@@ -75,8 +106,29 @@ func TestInteractionStore(t *testing.T) {
 	if got.ActionID != action.ActionID || got.ExpectedUserID != action.ExpectedUserID {
 		t.Fatalf("resolved interaction = %+v, want %+v", got, action)
 	}
+	if got.PrincipalID != principal {
+		t.Errorf("principal_id = %q, want %q", got.PrincipalID, principal)
+	}
+	if got.Payload != action.Payload {
+		t.Errorf("payload = %q, want %q", got.Payload, action.Payload)
+	}
 	if got.ExpiresAt.Unix() != action.ExpiresAt.Unix() {
 		t.Errorf("expires_at = %v, want %v", got.ExpiresAt, action.ExpiresAt)
+	}
+
+	// An interaction without a principal keeps the restriction empty.
+	defaultTTL, ok, err := storeTwo.ResolveToken(ctx, "token-default-ttl")
+	if err != nil {
+		t.Fatalf("ResolveToken(default ttl): %v", err)
+	}
+	if !ok {
+		t.Fatal("the interaction with the default ttl was not stored")
+	}
+	if defaultTTL.PrincipalID != "" {
+		t.Errorf("principal_id = %q, want empty", defaultTTL.PrincipalID)
+	}
+	if ttl := time.Until(defaultTTL.ExpiresAt); ttl < unibot.DefaultActionTTL-time.Minute || ttl > unibot.DefaultActionTTL {
+		t.Errorf("default ttl = %v, want about %v", ttl, unibot.DefaultActionTTL)
 	}
 
 	// The stored token is a hash, never the token itself.
@@ -108,6 +160,9 @@ func TestInteractionStore(t *testing.T) {
 	if !ok || key.ChoiceID != "environment" || key.OptionID != "prod" {
 		t.Fatalf("resolved message key = (%+v, %v)", key, ok)
 	}
+	if key.PrincipalID != principal {
+		t.Errorf("message key principal = %q, want %q", key.PrincipalID, principal)
+	}
 	// Re-registering the same button replaces the target instead of failing.
 	if err := storeTwo.PutMessageKey(ctx, unibot.PlatformMatrix, "!room:example.com", "$event", "👍", unibot.Interaction{
 		ChoiceID:  "environment",
@@ -123,6 +178,9 @@ func TestInteractionStore(t *testing.T) {
 	if key.OptionID != "dev" {
 		t.Fatalf("option after upsert = %q, want dev", key.OptionID)
 	}
+	if key.PrincipalID != "" {
+		t.Errorf("principal after upsert = %q, want empty", key.PrincipalID)
+	}
 	if _, ok, err := storeTwo.ResolveMessageKey(ctx, unibot.PlatformMatrix, "!room:example.com", "$other", "👍"); err != nil || ok {
 		t.Fatalf("ResolveMessageKey for another message = (%v, %v), want false", ok, err)
 	}
@@ -137,5 +195,37 @@ func TestInteractionStore(t *testing.T) {
 	}
 	if _, ok, err := storeTwo.ResolveToken(ctx, "token-survives-restart"); err != nil || !ok {
 		t.Fatalf("live interaction disappeared after cleanup: ok=%v err=%v", ok, err)
+	}
+}
+
+// TestPrincipalRestrictionRequiresAUser checks that the principal restriction
+// references a real user: an arbitrary principal cannot be stored.
+func TestPrincipalRestrictionRequiresAUser(t *testing.T) {
+	databaseURL := testdb.Start(t)
+	ctx := context.Background()
+	if err := store.Migrate(ctx, databaseURL, testLogger()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	st, err := store.Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(st.Close)
+
+	interactions := interactionpg.New(st)
+	err = interactions.PutToken(ctx, "token", unibot.Interaction{
+		ActionID:    "reminders.done",
+		PrincipalID: "00000000-0000-0000-0000-000000000001",
+		ExpiresAt:   time.Now().Add(time.Hour),
+	})
+	if err == nil {
+		t.Fatal("PutToken with an unknown principal succeeded, want a foreign key violation")
+	}
+	// An empty principal is "no restriction" and must be accepted.
+	if err := interactions.PutToken(ctx, "token", unibot.Interaction{
+		ActionID:  "reminders.done",
+		ExpiresAt: time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("PutToken without a principal: %v", err)
 	}
 }

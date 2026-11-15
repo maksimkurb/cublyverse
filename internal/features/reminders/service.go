@@ -144,9 +144,10 @@ type Input struct {
 // Service is the reminders business logic. Every method takes the principal id
 // of the authenticated user and never returns data of another user.
 type Service struct {
-	st     *store.Store
-	logger *slog.Logger
-	clock  func() time.Time
+	st       *store.Store
+	logger   *slog.Logger
+	clock    func() time.Time
+	delivery Delivery
 }
 
 // API is the small surface every adapter uses: the HTTP handlers now, the bot
@@ -191,6 +192,13 @@ func WithLogger(logger *slog.Logger) Option {
 			s.logger = logger
 		}
 	}
+}
+
+// WithDelivery sets the messenger delivery. Without one the scheduler does not
+// fire and a completion cannot edit the chat message; the HTTP API and the bot
+// commands still work.
+func WithDelivery(delivery Delivery) Option {
+	return func(s *Service) { s.delivery = delivery }
 }
 
 // New returns a service backed by st. A clock may be injected with WithClock.
@@ -358,6 +366,26 @@ func (s *Service) Delete(ctx context.Context, principalID, id string) error {
 	return nil
 }
 
+// CompletionResult is the outcome of a confirmation request. The bot turns it
+// into the answer shown to the user; the HTTP API keeps its older contract
+// (404/409/200), so both entry points share one state change but keep their own
+// error shapes.
+type CompletionResult string
+
+const (
+	// CompletionCompleted means the occurrence was active and is now completed.
+	CompletionCompleted CompletionResult = "completed"
+	// CompletionAlready means it had already been confirmed.
+	CompletionAlready CompletionResult = "already"
+	// CompletionStale means the rule changed or was disabled: the occurrence is
+	// no longer actual.
+	CompletionStale CompletionResult = "stale"
+	// CompletionNotOwner means the reminder belongs to another user.
+	CompletionNotOwner CompletionResult = "not_owner"
+	// CompletionNotFound means the reminder or the occurrence is gone.
+	CompletionNotFound CompletionResult = "not_found"
+)
+
 // Complete confirms the pending occurrence of a reminder. ErrNoActiveOccurrence
 // means there was nothing to confirm, for example because the occurrence was
 // already completed or the rule changed.
@@ -378,18 +406,157 @@ func (s *Service) Complete(ctx context.Context, principalID, id string) (Reminde
 		}
 		return Reminder{}, fmt.Errorf("get reminder: %w", err)
 	}
-	completedAt := s.now()
-	if _, err := s.st.Queries().CompleteActiveOccurrence(ctx, db.CompleteActiveOccurrenceParams{
-		ID:          reminderID,
-		UserID:      userID,
-		CompletedAt: timestamp(&completedAt),
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Reminder{}, ErrNoActiveOccurrence
-		}
-		return Reminder{}, fmt.Errorf("complete occurrence: %w", err)
+	active, err := s.activeOccurrence(ctx, reminderID)
+	if err != nil {
+		return Reminder{}, err
 	}
-	return s.Get(ctx, principalID, id)
+	if active == nil {
+		return Reminder{}, ErrNoActiveOccurrence
+	}
+
+	// The confirmation itself is the same atomic statement the chat button uses.
+	result, err := s.completeOccurrence(ctx, userID, reminderID, active.ID)
+	if err != nil {
+		return Reminder{}, err
+	}
+	switch result {
+	case CompletionCompleted:
+		return s.Get(ctx, principalID, id)
+	case CompletionNotFound, CompletionNotOwner:
+		return Reminder{}, ErrNotFound
+	default:
+		// Another entry point won the race: there is nothing left to confirm.
+		return Reminder{}, ErrNoActiveOccurrence
+	}
+}
+
+// CompleteOccurrence confirms one specific occurrence of a reminder, exactly as
+// the «✅ Выполнено» button asks. The state change is a single guarded UPDATE, so
+// the chat, the HTTP API and MCP can race and only one of them wins.
+//
+// The typed result is not an error: every outcome except an infrastructure
+// failure has a user-facing answer.
+func (s *Service) CompleteOccurrence(ctx context.Context, principalID, reminderID, occurrenceID string) (CompletionResult, error) {
+	userID, err := parsePrincipal(principalID)
+	if err != nil {
+		return CompletionNotFound, err
+	}
+	parsedReminder, err := parseReminderID(reminderID)
+	if err != nil {
+		return CompletionNotFound, nil
+	}
+	parsedOccurrence, err := parseOccurrenceID(occurrenceID)
+	if err != nil {
+		return CompletionNotFound, nil
+	}
+	return s.completeOccurrence(ctx, userID, parsedReminder, parsedOccurrence)
+}
+
+// completeOccurrence is the shared implementation. It classifies the outcome
+// before the update (so the caller can answer "already", "stale" or "not your
+// reminder") and then performs the guarded update that decides the winner.
+func (s *Service) completeOccurrence(ctx context.Context, userID, reminderID, occurrenceID pgtype.UUID) (CompletionResult, error) {
+	// The owner is read without the ownership filter, because the answer differs
+	// between a foreign reminder and a vanishing one.
+	owner, err := s.st.Queries().GetReminderOwner(ctx, reminderID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CompletionNotFound, nil
+	}
+	if err != nil {
+		return CompletionNotFound, fmt.Errorf("get reminder owner: %w", err)
+	}
+	if owner != userID {
+		return CompletionNotOwner, nil
+	}
+
+	occurrence, err := s.st.Queries().GetOccurrence(ctx, db.GetOccurrenceParams{
+		ID:         occurrenceID,
+		ReminderID: reminderID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return CompletionNotFound, nil
+	case err != nil:
+		return CompletionNotFound, fmt.Errorf("get occurrence: %w", err)
+	case OccurrenceStatus(occurrence.Status) == OccurrenceCompleted:
+		return CompletionAlready, nil
+	case OccurrenceStatus(occurrence.Status) != OccurrenceActive:
+		return CompletionStale, nil
+	}
+
+	completedAt := s.now()
+	completed, err := s.st.Queries().CompleteOccurrence(ctx, db.CompleteOccurrenceParams{
+		CompletedAt:  completedAt,
+		OccurrenceID: occurrenceID,
+		ReminderID:   reminderID,
+		UserID:       userID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Somebody else completed or cancelled it between the lookup and the
+		// update: report the state that actually won.
+		return s.classifyOccurrence(ctx, reminderID, occurrenceID)
+	case err != nil:
+		return CompletionNotFound, fmt.Errorf("complete occurrence: %w", err)
+	}
+
+	row, err := s.st.Queries().GetReminder(ctx, db.GetReminderParams{ID: reminderID, UserID: userID})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "load reminder after completion failed",
+			slog.String("reminder_id", formatUUID(reminderID)),
+			slog.String("error", err.Error()),
+		)
+		return CompletionCompleted, nil
+	}
+	s.editCompleted(ctx, reminderFromRow(row, nil), occurrenceFromRow(completed), completed.Deliveries, completedAt)
+	return CompletionCompleted, nil
+}
+
+// classifyOccurrence re-reads an occurrence that lost a race and maps its state
+// to a result.
+func (s *Service) classifyOccurrence(ctx context.Context, reminderID, occurrenceID pgtype.UUID) (CompletionResult, error) {
+	occurrence, err := s.st.Queries().GetOccurrence(ctx, db.GetOccurrenceParams{
+		ID:         occurrenceID,
+		ReminderID: reminderID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return CompletionNotFound, nil
+	case err != nil:
+		return CompletionNotFound, fmt.Errorf("get occurrence: %w", err)
+	case OccurrenceStatus(occurrence.Status) == OccurrenceCompleted:
+		return CompletionAlready, nil
+	default:
+		return CompletionStale, nil
+	}
+}
+
+// editCompleted rewrites the delivered messages into the completion text with
+// the button removed. It is best effort: the confirmation is already stored, and
+// a messenger problem must not undo it.
+func (s *Service) editCompleted(ctx context.Context, reminder Reminder, occurrence Occurrence, deliveries []byte, completedAt time.Time) {
+	if s.delivery == nil {
+		return
+	}
+	sent, err := decodeDeliveries(deliveries)
+	if err != nil {
+		s.logger.WarnContext(ctx, "delivered messages of the occurrence are unknown",
+			slog.String("reminder_id", reminder.ID),
+			slog.String("occurrence_id", occurrence.ID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	if len(sent) == 0 {
+		return
+	}
+	if err := s.delivery.Edit(ctx, sent, completedMessage(reminder, occurrence, completedAt)); err != nil {
+		s.logger.WarnContext(ctx, "update completed reminder message failed",
+			slog.String("reminder_id", reminder.ID),
+			slog.String("occurrence_id", occurrence.ID),
+			slog.String("error", err.Error()),
+		)
+	}
 }
 
 // activeOccurrence loads the pending occurrence of a reminder. Missing is not an
@@ -499,6 +666,16 @@ func parsePrincipal(principalID string) (pgtype.UUID, error) {
 // parseReminderID treats a malformed id exactly like an unknown one, so the API
 // cannot be used to probe for the existence of reminders.
 func parseReminderID(id string) (pgtype.UUID, error) {
+	var parsed pgtype.UUID
+	if err := parsed.Scan(id); err != nil || !parsed.Valid {
+		return pgtype.UUID{}, ErrNotFound
+	}
+	return parsed, nil
+}
+
+// parseOccurrenceID treats a malformed id exactly like an unknown one: the id
+// travels as an opaque button payload.
+func parseOccurrenceID(id string) (pgtype.UUID, error) {
 	var parsed pgtype.UUID
 	if err := parsed.Scan(id); err != nil || !parsed.Valid {
 		return pgtype.UUID{}, ErrNotFound

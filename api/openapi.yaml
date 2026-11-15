@@ -386,7 +386,13 @@ paths:
         Marks the pending occurrence of the reminder as completed and stops the
         repeats. This is the API and MCP counterpart of the «✅ Выполнено»
         button in the chat, so the same occurrence cannot be confirmed twice
-        through different entry points.
+        through different entry points: the state change is one guarded
+        statement, and the first request wins.
+
+        The chat message that is waiting for confirmation is updated in place:
+        it shows when the reminder was completed and loses the button. A
+        messenger failure on that edit is logged and does not affect the
+        response.
 
         The response is the reminder after completion: `active_occurrence` is
         absent because nothing is pending any more.

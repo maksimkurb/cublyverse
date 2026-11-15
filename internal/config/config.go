@@ -25,6 +25,10 @@ const DefaultHTTPAddr = ":8080"
 // BOT_HANDLER_TIMEOUT is not set.
 const DefaultBotHandlerTimeout = 30 * time.Second
 
+// DefaultRemindersTickInterval is how often the reminders scheduler looks for
+// due work when REMINDERS_TICK_INTERVAL is not set.
+const DefaultRemindersTickInterval = 15 * time.Second
+
 // Supported values for LOG_FORMAT.
 const (
 	LogFormatText = "text"
@@ -44,16 +48,24 @@ type Config struct {
 	// LogFormat is either LogFormatText or LogFormatJSON.
 	LogFormat string
 
-	OIDC     OIDCConfig
-	Telegram TelegramConfig
-	Matrix   MatrixConfig
-	Bot      BotConfig
+	OIDC      OIDCConfig
+	Telegram  TelegramConfig
+	Matrix    MatrixConfig
+	Bot       BotConfig
+	Reminders RemindersConfig
 }
 
 // BotConfig holds messenger-runtime settings.
 type BotConfig struct {
 	// HandlerTimeout bounds one bot handler run. Default 30 seconds.
 	HandlerTimeout time.Duration
+}
+
+// RemindersConfig holds the reminders scheduler settings.
+type RemindersConfig struct {
+	// TickInterval is how often the scheduler looks for due reminders. Default
+	// 15 seconds.
+	TickInterval time.Duration
 }
 
 // OIDCConfig holds the OpenID Connect client settings used for sign in.
@@ -115,6 +127,13 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 	cfg.Bot = BotConfig{HandlerTimeout: handlerTimeout}
+
+	tickInterval, err := durationFromEnv(getenv, "REMINDERS_TICK_INTERVAL", DefaultRemindersTickInterval)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.Reminders = RemindersConfig{TickInterval: tickInterval}
+
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
@@ -193,6 +212,9 @@ func (c Config) Validate() error {
 	if c.Bot.HandlerTimeout < 0 {
 		problems = append(problems, "BOT_HANDLER_TIMEOUT must be positive")
 	}
+	if c.Reminders.TickInterval < 0 {
+		problems = append(problems, "REMINDERS_TICK_INTERVAL must be positive")
+	}
 
 	if len(problems) > 0 {
 		// Sorting keeps the message deterministic for tests and humans.
@@ -227,6 +249,14 @@ func (c Config) BotHandlerTimeoutOr() time.Duration {
 		return DefaultBotHandlerTimeout
 	}
 	return c.Bot.HandlerTimeout
+}
+
+// RemindersTickIntervalOr returns the configured scheduler tick or the default.
+func (c Config) RemindersTickIntervalOr() time.Duration {
+	if c.Reminders.TickInterval <= 0 {
+		return DefaultRemindersTickInterval
+	}
+	return c.Reminders.TickInterval
 }
 
 func defaultString(value, fallback string) string {

@@ -103,19 +103,12 @@ func (r *Router) replyStaleAction(ctx context.Context, botctx *unibot.Context) e
 	return err
 }
 
-// replyWithAppButton sends text and, when the WebApp is configured, the
-// «Открыть приложение» button.
+// replyWithAppButton sends text and, when the WebApp is published over https,
+// the «Открыть приложение» button.
 func (r *Router) replyWithAppButton(ctx context.Context, botctx *unibot.Context, text string) error {
 	message := unibot.Message{Text: text}
-	if r.webAppURL != "" {
-		message.Actions = [][]unibot.Action{{{
-			ID:    actionOpenApp,
-			Label: "Открыть приложение",
-			Icon:  "🧩",
-			Kind:  unibot.ActionOpenApp,
-			Style: unibot.ActionStylePrimary,
-			URL:   r.webAppURL,
-		}}}
+	if action, ok := r.AppAction(); ok {
+		message.Actions = [][]unibot.Action{{action}}
 	}
 	_, err := botctx.Reply(ctx, message)
 	return err

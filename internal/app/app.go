@@ -49,6 +49,10 @@ type App struct {
 	runtime *unibot.Runtime
 	router  *bot.Router
 
+	// delivery is the reminders messenger adapter; it is attached to the
+	// runtime in startBot.
+	delivery *messengerDelivery
+
 	// extraJobs are the cleanup tasks of the identity layer and the
 	// interaction registry; features bring their own through the registry.
 	extraJobs []Job
@@ -85,11 +89,18 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		return nil, fmt.Errorf("configure auth: %w", err)
 	}
 
-	// The reminders service is shared by every entry point: the HTTP API now,
-	// the bot and MCP in the following stories.
-	reminderService := reminders.New(st, reminders.WithLogger(logger))
+	// The reminders service is shared by every entry point: the HTTP API, the
+	// bot commands and the scheduler. The delivery adapter is attached to the
+	// messenger runtime in startBot.
+	delivery := newMessengerDelivery(logger)
+	reminderService := reminders.New(st,
+		reminders.WithLogger(logger),
+		reminders.WithDelivery(delivery),
+	)
 
-	registry := NewRegistry(reminders.NewFeature(reminderService, logger))
+	registry := NewRegistry(reminders.NewFeature(reminderService, logger,
+		reminders.WithTickInterval(cfg.RemindersTickIntervalOr()),
+	))
 	logger.Info("features registered", slog.Any("features", registry.Names()))
 
 	interactions := postgres.New(st)
@@ -101,6 +112,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		registry: registry,
 		jobs:     NewRunner(logger),
 		auth:     authService,
+		delivery: delivery,
 	}
 
 	handler := httpapi.New(httpapi.Deps{
@@ -181,6 +193,9 @@ func (a *App) startBot(ctx context.Context, interactions unibot.InteractionStore
 		return fmt.Errorf("build messenger runtime: %w", err)
 	}
 	a.runtime = runtime
+	// From now on reminders can reach the user; before this point a send fails
+	// with a clear error and the scheduler retries on the next tick.
+	a.delivery.attach(runtime)
 
 	// Tell the user in the chat once the binding is confirmed.
 	a.auth.OnLinked = func(ctx context.Context, binding unibot.Binding) {

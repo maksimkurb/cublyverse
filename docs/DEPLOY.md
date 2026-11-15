@@ -25,6 +25,7 @@ client secret) живут только в окружении и никогда �
 | `MATRIX_CRYPTO_DB` | нет | `matrix-crypto.db` | файл SQLite с криптосостоянием; должен переживать перезапуск |
 | `MATRIX_PICKLE_KEY` | при `MATRIX_HOMESERVER` | — | ключ шифрования криптосостояния, не короче 16 байт |
 | `BOT_HANDLER_TIMEOUT` | нет | `30s` | предел выполнения одного обработчика бота; формат Go-длительности (`30s`, `2m`) |
+| `REMINDERS_TICK_INTERVAL` | нет | `15s` | как часто планировщик напоминаний ищет должные срабатывания; формат Go-длительности (`15s`, `1m`) |
 
 Правила валидации (`internal/config`):
 
@@ -33,6 +34,8 @@ client secret) живут только в окружении и никогда �
   `PUBLIC_BASE_URL` тоже (callback некуда вести);
 - `MATRIX_HOMESERVER` без логина, пароля или pickle-ключа — ошибка;
 - `BOT_HANDLER_TIMEOUT` обязан быть длительностью Go (`30s`, `2m`), иначе
+  процесс не стартует;
+- `REMINDERS_TICK_INTERVAL` обязан быть длительностью Go (`15s`, `1m`), иначе
   процесс не стартует;
 - `PUBLIC_BASE_URL` и `OIDC_REDIRECT_URL` обязаны быть абсолютными http(s) URL.
 

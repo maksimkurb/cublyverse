@@ -139,6 +139,25 @@ func (r *Router) Commands() []CommandInfo {
 	return out
 }
 
+// AppAction returns the «Открыть приложение» button of the configured WebApp.
+//
+// Messengers accept web_app buttons only over https (Telegram rejects an http
+// URL with an error), so an empty or http URL yields false and the caller sends
+// the message without the button.
+func (r *Router) AppAction() (unibot.Action, bool) {
+	if !strings.HasPrefix(r.webAppURL, "https://") {
+		return unibot.Action{}, false
+	}
+	return unibot.Action{
+		ID:    actionOpenApp,
+		Label: "Открыть приложение",
+		Icon:  "🧩",
+		Kind:  unibot.ActionOpenApp,
+		Style: unibot.ActionStylePrimary,
+		URL:   r.webAppURL,
+	}, true
+}
+
 // Handle is the unibot.Handler entry point of the router.
 func (r *Router) Handle(ctx context.Context, botctx *unibot.Context, event unibot.ResolvedEvent) error {
 	if !event.Linked {

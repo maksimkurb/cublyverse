@@ -530,13 +530,46 @@ func (r *Runtime) SendToAddress(ctx context.Context, address Address, message Me
 	if err := message.Validate(); err != nil {
 		return SentMessage{}, err
 	}
-	r.mu.RLock()
-	transport := r.transports[address.Platform]
-	r.mu.RUnlock()
-	if transport == nil {
-		return SentMessage{}, fmt.Errorf("no transport for %s", address.Platform)
+	transport, err := r.transport(address.Platform)
+	if err != nil {
+		return SentMessage{}, err
 	}
 	return transport.Send(ctx, address, message)
+}
+
+// Edit replaces an already sent message in place. Features use it to turn a
+// reminder into its «✅ Выполнено» form without sending a second message.
+func (r *Runtime) Edit(ctx context.Context, sent SentMessage, message Message) error {
+	if err := message.Validate(); err != nil {
+		return err
+	}
+	transport, err := r.transport(sent.Platform)
+	if err != nil {
+		return err
+	}
+	return transport.Edit(ctx, sent, message)
+}
+
+// Delete removes an already sent message. Deleting is always best effort: the
+// message may already be gone, and a failure must not break the caller's state
+// change.
+func (r *Runtime) Delete(ctx context.Context, sent SentMessage) error {
+	transport, err := r.transport(sent.Platform)
+	if err != nil {
+		return err
+	}
+	return transport.Delete(ctx, sent)
+}
+
+// transport returns the registered transport of one platform.
+func (r *Runtime) transport(platform Platform) (Transport, error) {
+	r.mu.RLock()
+	transport := r.transports[platform]
+	r.mu.RUnlock()
+	if transport == nil {
+		return nil, fmt.Errorf("no transport for %s", platform)
+	}
+	return transport, nil
 }
 
 type DeliveryOptions struct {

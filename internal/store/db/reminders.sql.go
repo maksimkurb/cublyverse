@@ -31,30 +31,174 @@ func (q *Queries) CancelActiveOccurrence(ctx context.Context, reminderID pgtype.
 	return result.RowsAffected(), nil
 }
 
-const completeActiveOccurrence = `-- name: CompleteActiveOccurrence :one
+const claimDueReminders = `-- name: ClaimDueReminders :many
+WITH due AS (
+    SELECT r.id
+    FROM reminders r
+    WHERE r.enabled
+      AND (r.lock_until IS NULL OR r.lock_until < $2::timestamptz)
+      AND (
+            (
+                r.next_due_at IS NOT NULL
+                AND r.next_due_at <= $2::timestamptz
+                AND NOT EXISTS (
+                    SELECT 1 FROM reminder_occurrences o
+                    WHERE o.reminder_id = r.id
+                      AND o.status = 'active'
+                )
+            )
+            OR EXISTS (
+                SELECT 1 FROM reminder_occurrences o
+                WHERE o.reminder_id = r.id
+                  AND o.status = 'active'
+                  AND o.next_repeat_at IS NOT NULL
+                  AND o.next_repeat_at <= $2::timestamptz
+            )
+      )
+    ORDER BY r.next_due_at NULLS LAST, r.id
+    LIMIT $3::int
+    FOR UPDATE SKIP LOCKED
+)
+UPDATE reminders r
+SET lock_until = $1::timestamptz
+FROM due
+WHERE r.id = due.id
+RETURNING r.id, r.user_id, r.message, r.timezone, r.schedule_kind, r.schedule_days, r.time_hhmm, r.repeat_minutes, r.enabled, r.next_due_at, r.last_error, r.lock_until, r.created_at, r.updated_at
+`
+
+type ClaimDueRemindersParams struct {
+	LockUntil time.Time `json:"lock_until"`
+	Now       time.Time `json:"now"`
+	BatchSize int32     `json:"batch_size"`
+}
+
+// Claims a batch of due work for one scheduler tick. The rows stay locked for
+// the rest of the short transaction, so two replicas never claim the same
+// reminder: SKIP LOCKED sends the second one to the next reminder instead of
+// making it wait. lock_until is the lease that protects the row while the
+// message travels through the messenger.
+func (q *Queries) ClaimDueReminders(ctx context.Context, arg ClaimDueRemindersParams) ([]Reminder, error) {
+	rows, err := q.db.Query(ctx, claimDueReminders, arg.LockUntil, arg.Now, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Reminder{}
+	for rows.Next() {
+		var i Reminder
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Message,
+			&i.Timezone,
+			&i.ScheduleKind,
+			&i.ScheduleDays,
+			&i.TimeHhmm,
+			&i.RepeatMinutes,
+			&i.Enabled,
+			&i.NextDueAt,
+			&i.LastError,
+			&i.LockUntil,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const completeOccurrence = `-- name: CompleteOccurrence :one
 UPDATE reminder_occurrences o
 SET status         = 'completed',
-    completed_at   = $2,
+    completed_at   = $1::timestamptz,
     next_repeat_at = NULL,
-    updated_at     = now()
+    updated_at     = $1::timestamptz
 FROM reminders r
-WHERE o.reminder_id = r.id
-  AND r.id = $1
-  AND r.user_id = $3
+WHERE o.id = $2::uuid
+  AND o.reminder_id = r.id
+  AND r.id = $3::uuid
+  AND r.user_id = $4::uuid
   AND o.status = 'active'
 RETURNING o.id, o.reminder_id, o.scheduled_at, o.first_sent_at, o.repeat_count, o.next_repeat_at, o.status, o.completed_at, o.deliveries, o.created_at, o.updated_at
 `
 
-type CompleteActiveOccurrenceParams struct {
-	ID          pgtype.UUID        `json:"id"`
-	CompletedAt pgtype.Timestamptz `json:"completed_at"`
-	UserID      pgtype.UUID        `json:"user_id"`
+type CompleteOccurrenceParams struct {
+	CompletedAt  time.Time   `json:"completed_at"`
+	OccurrenceID pgtype.UUID `json:"occurrence_id"`
+	ReminderID   pgtype.UUID `json:"reminder_id"`
+	UserID       pgtype.UUID `json:"user_id"`
 }
 
-// The owner check lives in the same statement, so a foreign reminder can never
-// be completed even if the caller skips the lookup.
-func (q *Queries) CompleteActiveOccurrence(ctx context.Context, arg CompleteActiveOccurrenceParams) (ReminderOccurrence, error) {
-	row := q.db.QueryRow(ctx, completeActiveOccurrence, arg.ID, arg.CompletedAt, arg.UserID)
+// Confirms one specific occurrence of the owner's reminder. The WHERE clause is
+// the guard: only an active occurrence changes, and the owner check is part of
+// the same statement, so the chat button, the HTTP API and MCP have exactly one
+// winner and one answer.
+func (q *Queries) CompleteOccurrence(ctx context.Context, arg CompleteOccurrenceParams) (ReminderOccurrence, error) {
+	row := q.db.QueryRow(ctx, completeOccurrence,
+		arg.CompletedAt,
+		arg.OccurrenceID,
+		arg.ReminderID,
+		arg.UserID,
+	)
+	var i ReminderOccurrence
+	err := row.Scan(
+		&i.ID,
+		&i.ReminderID,
+		&i.ScheduledAt,
+		&i.FirstSentAt,
+		&i.RepeatCount,
+		&i.NextRepeatAt,
+		&i.Status,
+		&i.CompletedAt,
+		&i.Deliveries,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createFiredOccurrence = `-- name: CreateFiredOccurrence :one
+INSERT INTO reminder_occurrences (
+    id,
+    reminder_id,
+    scheduled_at,
+    first_sent_at,
+    repeat_count,
+    next_repeat_at,
+    status,
+    deliveries
+) VALUES (
+    $1, $2, $3, $4, 1, $5, 'active', $6
+)
+RETURNING id, reminder_id, scheduled_at, first_sent_at, repeat_count, next_repeat_at, status, completed_at, deliveries, created_at, updated_at
+`
+
+type CreateFiredOccurrenceParams struct {
+	ID           pgtype.UUID        `json:"id"`
+	ReminderID   pgtype.UUID        `json:"reminder_id"`
+	ScheduledAt  time.Time          `json:"scheduled_at"`
+	FirstSentAt  pgtype.Timestamptz `json:"first_sent_at"`
+	NextRepeatAt pgtype.Timestamptz `json:"next_repeat_at"`
+	Deliveries   []byte             `json:"deliveries"`
+}
+
+// The scheduler creates the row of a first firing. The id is generated before
+// the message is sent, because the «✅ Выполнено» button carries it in its
+// payload: the button must work even if this insert is delayed.
+func (q *Queries) CreateFiredOccurrence(ctx context.Context, arg CreateFiredOccurrenceParams) (ReminderOccurrence, error) {
+	row := q.db.QueryRow(ctx, createFiredOccurrence,
+		arg.ID,
+		arg.ReminderID,
+		arg.ScheduledAt,
+		arg.FirstSentAt,
+		arg.NextRepeatAt,
+		arg.Deliveries,
+	)
 	var i ReminderOccurrence
 	err := row.Scan(
 		&i.ID,
@@ -189,6 +333,98 @@ func (q *Queries) DeleteReminder(ctx context.Context, arg DeleteReminderParams) 
 	return result.RowsAffected(), nil
 }
 
+const finishReminderFirstFire = `-- name: FinishReminderFirstFire :one
+UPDATE reminders
+SET next_due_at = $1::timestamptz,
+    last_error  = NULL,
+    lock_until  = NULL,
+    updated_at  = $2::timestamptz
+WHERE id = $3::uuid
+  AND lock_until = $4::timestamptz
+  AND updated_at = $5::timestamptz
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at
+`
+
+type FinishReminderFirstFireParams struct {
+	NextDueAt      time.Time   `json:"next_due_at"`
+	Now            time.Time   `json:"now"`
+	ReminderID     pgtype.UUID `json:"reminder_id"`
+	LockUntil      time.Time   `json:"lock_until"`
+	UnchangedSince time.Time   `json:"unchanged_since"`
+}
+
+// Persists a successful first firing: the next due time moves from "now", the
+// delivery error is gone and the lease is released. updated_at is part of the
+// guard, so a rule the user changed while the message was in flight is never
+// overwritten by the stale worker.
+func (q *Queries) FinishReminderFirstFire(ctx context.Context, arg FinishReminderFirstFireParams) (Reminder, error) {
+	row := q.db.QueryRow(ctx, finishReminderFirstFire,
+		arg.NextDueAt,
+		arg.Now,
+		arg.ReminderID,
+		arg.LockUntil,
+		arg.UnchangedSince,
+	)
+	var i Reminder
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Message,
+		&i.Timezone,
+		&i.ScheduleKind,
+		&i.ScheduleDays,
+		&i.TimeHhmm,
+		&i.RepeatMinutes,
+		&i.Enabled,
+		&i.NextDueAt,
+		&i.LastError,
+		&i.LockUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const finishReminderRepeat = `-- name: FinishReminderRepeat :one
+UPDATE reminders
+SET last_error = NULL,
+    lock_until = NULL,
+    updated_at = $1::timestamptz
+WHERE id = $2::uuid
+  AND lock_until = $3::timestamptz
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at
+`
+
+type FinishReminderRepeatParams struct {
+	Now        time.Time   `json:"now"`
+	ReminderID pgtype.UUID `json:"reminder_id"`
+	LockUntil  time.Time   `json:"lock_until"`
+}
+
+// Releases the lease after a successful repeat. The schedule does not change:
+// next_due_at already points at the following firing of the rule.
+func (q *Queries) FinishReminderRepeat(ctx context.Context, arg FinishReminderRepeatParams) (Reminder, error) {
+	row := q.db.QueryRow(ctx, finishReminderRepeat, arg.Now, arg.ReminderID, arg.LockUntil)
+	var i Reminder
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Message,
+		&i.Timezone,
+		&i.ScheduleKind,
+		&i.ScheduleDays,
+		&i.TimeHhmm,
+		&i.RepeatMinutes,
+		&i.Enabled,
+		&i.NextDueAt,
+		&i.LastError,
+		&i.LockUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getActiveOccurrence = `-- name: GetActiveOccurrence :one
 SELECT id, reminder_id, scheduled_at, first_sent_at, repeat_count, next_repeat_at, status, completed_at, deliveries, created_at, updated_at FROM reminder_occurrences
 WHERE reminder_id = $1
@@ -197,6 +433,38 @@ WHERE reminder_id = $1
 
 func (q *Queries) GetActiveOccurrence(ctx context.Context, reminderID pgtype.UUID) (ReminderOccurrence, error) {
 	row := q.db.QueryRow(ctx, getActiveOccurrence, reminderID)
+	var i ReminderOccurrence
+	err := row.Scan(
+		&i.ID,
+		&i.ReminderID,
+		&i.ScheduledAt,
+		&i.FirstSentAt,
+		&i.RepeatCount,
+		&i.NextRepeatAt,
+		&i.Status,
+		&i.CompletedAt,
+		&i.Deliveries,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOccurrence = `-- name: GetOccurrence :one
+SELECT id, reminder_id, scheduled_at, first_sent_at, repeat_count, next_repeat_at, status, completed_at, deliveries, created_at, updated_at FROM reminder_occurrences
+WHERE id = $1
+  AND reminder_id = $2
+`
+
+type GetOccurrenceParams struct {
+	ID         pgtype.UUID `json:"id"`
+	ReminderID pgtype.UUID `json:"reminder_id"`
+}
+
+// One occurrence of one reminder. Callers classify the status themselves: a
+// confirmation answers differently for completed, cancelled and unknown rows.
+func (q *Queries) GetOccurrence(ctx context.Context, arg GetOccurrenceParams) (ReminderOccurrence, error) {
+	row := q.db.QueryRow(ctx, getOccurrence, arg.ID, arg.ReminderID)
 	var i ReminderOccurrence
 	err := row.Scan(
 		&i.ID,
@@ -247,6 +515,21 @@ func (q *Queries) GetReminder(ctx context.Context, arg GetReminderParams) (Remin
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getReminderOwner = `-- name: GetReminderOwner :one
+SELECT user_id FROM reminders
+WHERE id = $1
+`
+
+// Deliberately not scoped by the owner: a confirmation has to tell "already
+// confirmed" from "not your reminder" from "gone", so the owner id is compared
+// in Go. The id comes from a button of that chat and is not enumerable.
+func (q *Queries) GetReminderOwner(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getReminderOwner, id)
+	var user_id pgtype.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
 }
 
 const listActiveOccurrencesByUser = `-- name: ListActiveOccurrencesByUser :many
@@ -329,6 +612,84 @@ func (q *Queries) ListReminders(ctx context.Context, userID pgtype.UUID) ([]Remi
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordOccurrenceRepeat = `-- name: RecordOccurrenceRepeat :one
+UPDATE reminder_occurrences
+SET repeat_count   = repeat_count + 1,
+    next_repeat_at = $2,
+    deliveries     = $3,
+    updated_at     = $4
+WHERE id = $1
+  AND status = 'active'
+RETURNING id, reminder_id, scheduled_at, first_sent_at, repeat_count, next_repeat_at, status, completed_at, deliveries, created_at, updated_at
+`
+
+type RecordOccurrenceRepeatParams struct {
+	ID           pgtype.UUID        `json:"id"`
+	NextRepeatAt pgtype.Timestamptz `json:"next_repeat_at"`
+	Deliveries   []byte             `json:"deliveries"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+}
+
+// One repeat of an active occurrence: the counter grows, the next repeat moves
+// and the delivery refs point at the newest message (the previous one was
+// deleted). Only an active occurrence is touched, so a confirmation that won
+// the race is never overwritten.
+func (q *Queries) RecordOccurrenceRepeat(ctx context.Context, arg RecordOccurrenceRepeatParams) (ReminderOccurrence, error) {
+	row := q.db.QueryRow(ctx, recordOccurrenceRepeat,
+		arg.ID,
+		arg.NextRepeatAt,
+		arg.Deliveries,
+		arg.UpdatedAt,
+	)
+	var i ReminderOccurrence
+	err := row.Scan(
+		&i.ID,
+		&i.ReminderID,
+		&i.ScheduledAt,
+		&i.FirstSentAt,
+		&i.RepeatCount,
+		&i.NextRepeatAt,
+		&i.Status,
+		&i.CompletedAt,
+		&i.Deliveries,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const releaseReminderLease = `-- name: ReleaseReminderLease :execrows
+UPDATE reminders
+SET last_error = $1,
+    lock_until = NULL,
+    updated_at = $2::timestamptz
+WHERE id = $3::uuid
+  AND lock_until = $4::timestamptz
+`
+
+type ReleaseReminderLeaseParams struct {
+	LastError  *string     `json:"last_error"`
+	Now        time.Time   `json:"now"`
+	ReminderID pgtype.UUID `json:"reminder_id"`
+	LockUntil  time.Time   `json:"lock_until"`
+}
+
+// Gives the lease back after a failed delivery without changing any state: the
+// next tick retries the same firing, so a messenger outage delays a reminder
+// instead of losing it.
+func (q *Queries) ReleaseReminderLease(ctx context.Context, arg ReleaseReminderLeaseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseReminderLease,
+		arg.LastError,
+		arg.Now,
+		arg.ReminderID,
+		arg.LockUntil,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateReminder = `-- name: UpdateReminder :one

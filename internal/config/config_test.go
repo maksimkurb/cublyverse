@@ -39,25 +39,29 @@ func TestLoadFromDefaults(t *testing.T) {
 	if got, want := cfg.Bot.HandlerTimeout, DefaultBotHandlerTimeout; got != want {
 		t.Errorf("Bot.HandlerTimeout = %v, want %v", got, want)
 	}
+	if got, want := cfg.Reminders.TickInterval, DefaultRemindersTickInterval; got != want {
+		t.Errorf("Reminders.TickInterval = %v, want %v", got, want)
+	}
 }
 
 func TestLoadFromValues(t *testing.T) {
 	cfg, err := LoadFrom(env(map[string]string{
-		"HTTP_ADDR":           "127.0.0.1:9000",
-		"PUBLIC_BASE_URL":     "https://cublyverse.example.com/",
-		"DATABASE_URL":        "postgresql://cublyverse@db:5432/cublyverse",
-		"LOG_FORMAT":          "json",
-		"OIDC_ISSUER":         "https://id.example.com",
-		"OIDC_CLIENT_ID":      "cublyverse",
-		"OIDC_CLIENT_SECRET":  "secret",
-		"OIDC_REDIRECT_URL":   "https://cublyverse.example.com/auth/callback",
-		"TELEGRAM_BOT_TOKEN":  "123:abc",
-		"MATRIX_HOMESERVER":   "https://matrix.example.com",
-		"MATRIX_USERNAME":     "cubly",
-		"MATRIX_PASSWORD":     "pass",
-		"MATRIX_PICKLE_KEY":   "pickle",
-		"MATRIX_CRYPTO_DB":    "/tmp/crypto.db",
-		"BOT_HANDLER_TIMEOUT": "45s",
+		"HTTP_ADDR":               "127.0.0.1:9000",
+		"PUBLIC_BASE_URL":         "https://cublyverse.example.com/",
+		"DATABASE_URL":            "postgresql://cublyverse@db:5432/cublyverse",
+		"LOG_FORMAT":              "json",
+		"OIDC_ISSUER":             "https://id.example.com",
+		"OIDC_CLIENT_ID":          "cublyverse",
+		"OIDC_CLIENT_SECRET":      "secret",
+		"OIDC_REDIRECT_URL":       "https://cublyverse.example.com/auth/callback",
+		"TELEGRAM_BOT_TOKEN":      "123:abc",
+		"MATRIX_HOMESERVER":       "https://matrix.example.com",
+		"MATRIX_USERNAME":         "cubly",
+		"MATRIX_PASSWORD":         "pass",
+		"MATRIX_PICKLE_KEY":       "pickle",
+		"MATRIX_CRYPTO_DB":        "/tmp/crypto.db",
+		"BOT_HANDLER_TIMEOUT":     "45s",
+		"REMINDERS_TICK_INTERVAL": "5s",
 	}))
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
@@ -85,6 +89,9 @@ func TestLoadFromValues(t *testing.T) {
 	}
 	if got, want := cfg.Bot.HandlerTimeout, 45*time.Second; got != want {
 		t.Errorf("Bot.HandlerTimeout = %v, want %v", got, want)
+	}
+	if got, want := cfg.Reminders.TickInterval, 5*time.Second; got != want {
+		t.Errorf("Reminders.TickInterval = %v, want %v", got, want)
 	}
 }
 
@@ -160,6 +167,14 @@ func TestLoadFromErrors(t *testing.T) {
 				"BOT_HANDLER_TIMEOUT": "soon",
 			},
 			wantErr: []string{"BOT_HANDLER_TIMEOUT must be a duration"},
+		},
+		{
+			name: "invalid reminders tick interval",
+			values: map[string]string{
+				"DATABASE_URL":            "postgres://localhost/cublyverse",
+				"REMINDERS_TICK_INTERVAL": "often",
+			},
+			wantErr: []string{"REMINDERS_TICK_INTERVAL must be a duration"},
 		},
 		{
 			name: "relative oidc redirect url",

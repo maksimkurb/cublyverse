@@ -35,8 +35,9 @@ func (s *Server) registerCore() {
 			"Use it to learn the default time zone before creating a reminder and " +
 			"to check what the token is allowed to do.",
 		Annotations: &mcp.ToolAnnotations{
-			Title:        "Who am I",
-			ReadOnlyHint: true,
+			Title:         "Who am I",
+			ReadOnlyHint:  true,
+			OpenWorldHint: boolPtr(false),
 		},
 	}, s.whoAmI)
 }
@@ -69,3 +70,5 @@ func stringOrEmpty(value *string) string {
 	}
 	return *value
 }
+
+func boolPtr(value bool) *bool { return &value }

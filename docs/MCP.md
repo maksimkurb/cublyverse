@@ -9,8 +9,10 @@ WebApp: MCP — третий тонкий адаптер над `internal/featur
 ## Эндпоинт
 
 ```text
-POST https://<PUBLIC_BASE_URL>/mcp
+POST https://<хост>/mcp
 ```
+
+В локальной разработке без TLS это `http://localhost:8080/mcp`.
 
 - Транспорт — **Streamable HTTP**, версия протокола — та, которую предложит
   клиент при `initialize`.
@@ -100,7 +102,7 @@ Complete a reminder occurrence
 
 Confirm the occurrence that is waiting for confirmation, exactly like the «✅ Выполнено» button in the chat. Repeats stop and the delivered chat message is updated. If the reminder has not fired, was already completed or was edited, the call is a tool error: there is nothing to confirm.
 
-**Доступ:** изменяет. Повторный вызов с теми же аргументами не меняет результат.
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
 
 **Входная схема**
 
@@ -823,7 +825,7 @@ Update a reminder
 
 Change a reminder. Omitted fields keep their current values: message, time, weekdays or month_days, time_zone, repeat_minutes and enabled are all optional apart from the id. A change cancels the pending occurrence and recomputes the next due time. Returns the updated reminder.
 
-**Доступ:** изменяет. Повторный вызов с теми же аргументами не меняет результат.
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
 
 **Входная схема**
 
@@ -1102,6 +1104,36 @@ go run ./cmd/cublyverse docs mcp --write
 
 ## Примеры вызовов
 
+Ниже — `tools/call` для каждого инструмента. Все запросы идут на
+`POST /mcp` с `Authorization: Bearer cv_pat_…`, `Content-Type:
+application/json` и `Accept: application/json, text/event-stream`. Ответ
+приходит как обычный JSON-RPC результат; полезная нагрузка лежит в
+`result.structuredContent` (в примерах показана только она).
+
+### Кто я (`whoami`)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {"name": "whoami", "arguments": {}}
+}
+```
+
+```json
+{
+  "principal_id": "6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c",
+  "email": "user@example.com",
+  "display_name": "Иван Петров",
+  "time_zone": "Europe/Moscow",
+  "scopes": ["profile:read", "reminders:read", "reminders:write"]
+}
+```
+
+Используйте `time_zone` как значение по умолчанию, если не хотите спрашивать
+часовой пояс у пользователя. `scopes` показывает, что разрешено этому токену.
+
 ### Список напоминаний
 
 Запрос:
@@ -1135,12 +1167,31 @@ go run ./cmd/cublyverse docs mcp --write
 }
 ```
 
-### Создание напоминания
+### Одно напоминание (`reminders_get`)
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "reminders_get",
+    "arguments": {"id": "6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c"}
+  }
+}
+```
+
+Ответ — один объект напоминания в той же форме, что элемент `reminders` из
+списка. Если напоминание чужое или удалено, инструмент возвращает
+`isError: true` с текстом `reminder not found: …`; существование чужого
+напоминания не раскрывается.
+
+### Создание напоминания (`reminders_create`)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
   "method": "tools/call",
   "params": {
     "name": "reminders_create",
@@ -1159,12 +1210,54 @@ go run ./cmd/cublyverse docs mcp --write
 `weekdays` передаётся `month_days` (1..31, несуществующий день = последний день
 месяца).
 
-### Подтверждение срабатывания
+### Изменение напоминания (`reminders_update`)
 
 ```json
 {
   "jsonrpc": "2.0",
-  "id": 3,
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "reminders_update",
+    "arguments": {
+      "id": "6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c",
+      "time": "21:00",
+      "repeat_minutes": 30
+    }
+  }
+}
+```
+
+Передавайте только то, что меняется: остальные поля адаптер берёт из текущего
+напоминания. Правка отменяет ожидающее срабатывание и пересчитывает
+`next_due_at` от текущего момента. Выключение — `"enabled": false`; включение
+обратно — `"enabled": true`. Нельзя одновременно передать `weekdays` и
+`month_days`.
+
+### Удаление напоминания (`reminders_delete`)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "name": "reminders_delete",
+    "arguments": {"id": "6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c"}
+  }
+}
+```
+
+Ответ: `{"id": "…", "deleted": true}`. Повторное удаление даёт
+`isError: true` и `reminder not found: …` — клиент должен считать это
+успешным результатом «уже удалено», а не сбоем транспорта.
+
+### Подтверждение срабатывания (`reminders_complete`)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 6,
   "method": "tools/call",
   "params": {"name": "reminders_complete", "arguments": {"id": "6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c"}}
 }

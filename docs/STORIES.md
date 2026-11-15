@@ -102,7 +102,7 @@
 - `deploy/Dockerfile`: multi-stage (node → go → debian-slim; `CGO_ENABLED=1`
   нужен для Matrix crypto/sqlite).
 - `deploy/docker-compose.yml`: `postgres:17` + приложение, healthcheck.
-- `.github/workflows/ci.yml`: Go 1.26.x, pnpm, `make check`.
+- `.github/workflows/ci.yml`: Go из `go.mod` (1.27.4), pnpm, `make check`.
 - Корневой `README.md`: что это, как запустить локально, ссылки на docs.
 
 КП:
@@ -322,7 +322,7 @@ policy, env через `deploy/.env`, приложение только на loo
 Документация — часть определения «готово» для каждого этапа; эта стори
 собирает и проверяет итог. Все документы на русском, примеры команд рабочие.
 
-### ⬜ M7-1 — Полная документация
+### ✅ M7-1 — Полная документация
 - `docs/ARCHITECTURE.md` (корневой): слои, поток данных бот/API/MCP, модель
   идентичности, планировщик; актуален после всех этапов.
 - `docs/API.md`: как устроен OpenAPI-конвейер, как добавить операцию, как
@@ -346,3 +346,22 @@ policy, env через `deploy/.env`, приложение только на loo
 
 КП: `make check` зелёный вместе с проверкой документации; по `docs/DEPLOY.md` с
 нуля поднимается рабочий стенд.
+
+Сделано: индекс `docs/README.md`; актуализированы `ARCHITECTURE.md`, `API.md`,
+`MCP.md`, `DATABASE.md`, `FEATURES.md`, `DEPLOY.md`, `WEBAPP.md`,
+`MIGRATION_FROM_N8N.md`; добавлены `DEVELOPMENT.md` (локальный запуск,
+PostgreSQL в Docker, тесты без Docker, pnpm, кодогенерация, отладка, все
+make-цели), `USER_GUIDE.md` (вход, привязка, напоминания, токены, FAQ) и
+`ADDING_A_FEATURE.md` (рецепт на примере напоминаний с настоящими путями и
+чек-листом). Корневой `README.md` ведёт на индекс. В `api/openapi.yaml`
+описаны все операции, схемы и поля (включая `Health` и элементы
+`schedule_days`); команда `cublyverse docs api --check` проверяет
+`operationId`/`summary`/`description`/теги и описания схем. `scripts/check-docs.sh`
+дополнительно проверяет относительные Markdown-ссылки, индекс документов,
+список миграций в `DATABASE.md`, make-цели в `DEVELOPMENT.md` и оставляет
+прежние проверки MCP-инструментов и переменных окружения. Быстрый старт из
+`DEVELOPMENT.md` проверен в чистом клоне с одноразовым `postgres:17`:
+`make build`, миграции, `/readyz`, `/api/v1/health`, `/app/` и `401` на `/mcp`
+без токена. Известные ограничения записаны в `PLAN.md` §7 и `DEPLOY.md`:
+WebApp не проверялся визуально в настоящем Telegram, лимит PAT — в памяти
+процесса, присвоение старых напоминаний — best effort.

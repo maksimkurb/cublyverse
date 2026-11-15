@@ -39,6 +39,33 @@
 - `api/openapi.yaml` — источник правды для HTTP; сгенерированный код руками не
   правится. Схема БД — только через новые миграции `goose` и `sqlc`.
 
+### Сборка в `internal/app`
+
+`internal/app/app.go` — единственное место, где компоненты соединяются.
+`app.New` делает следующее по порядку:
+
+1. `store.Migrate` (goose) и `store.Open` (pgxpool) — схема приводится к
+   текущей версии до открытия пула;
+2. `auth.New` — пользователи, привязки, pending-входы, сессии и PAT;
+3. `reminders.New` — сервис фичи с логгером и доставкой;
+4. `reminders.NewFeature(service, ...)` → `NewRegistry(...)`;
+5. `mcpserver.New(...)` → `registry.RegisterMCP(server)`;
+6. `httpapi.New(httpapi.Deps{...})` — `Deps` получает тот же сервис напоминаний,
+   `auth.Service` (и его `/auth/*`), WebApp, спецификацию и MCP-обработчик;
+7. `startBot` — `bot.NewRouter`, `registry.RegisterBot(router)`, транспорты,
+   `unibot.NewRuntimeWithConfig`, `delivery.attach(runtime)` и хуки
+   `auth.OnLinked` / `auth.OnLegacyImported`;
+8. `extraJobs` — `auth.cleanup` (сессии, `auth_pending`, отозванные PAT) и
+   очистка просроченных `interactions`;
+9. `App.Run` — `runtime.Start`, `jobs.Start(registry.Jobs() + extraJobs)`,
+   `http.Server.ListenAndServe`, затем graceful shutdown: HTTP-сервер (10 с),
+   отмена контекста, `runtime.Close`, ожидание задач, закрытие пула.
+
+Сервис создаётся один раз. Бот, HTTP API и MCP получают один и тот же
+`*reminders.Service`, поэтому поведение не может разойтись. Тестам доступны
+`App.Handler()`, `App.Store()`, `App.Auth()`, `App.MCP()` и `App.Router()` —
+поэтому сборку можно проверять без слушающего сокета.
+
 ## 2. Модель идентичности
 
 `PrincipalID` — это `users.id` (UUID). Пользователь появляется только после
@@ -290,9 +317,10 @@ Telegram Mini App        Браузер / Matrix-виджет
   55 секунд (`lock_until`), транзакция сразу закрывается, и только потом идёт
   сетевой вызов. Медленный мессенджер не держит блокировки базы.
 - **Несколько реплик.** `FOR UPDATE SKIP LOCKED` не даёт двум экземплярам взять
-  одну строку, а вторая транзакция проверяет `lock_until` и `updated_at` из
-  момента аренды. Опоздавший рабочий получает `ErrLeaseLost` и ничего не
-  перезаписывает.
+  одну строку, а вторая транзакция проверяет аренду из момента захвата:
+  первое срабатывание — `lock_until` и `updated_at` (чтобы не перезаписать
+  правило, изменённое пользователем), повтор — `lock_until`. Опоздавший
+  рабочий получает `ErrLeaseLost` и ничего не перезаписывает.
 - **Догон.** После простоя отправляется одно срабатывание, а `next_due_at`
   считается от текущего момента.
 - **Ошибки доставки** попадают в `reminders.last_error`, аренда снимается, и
@@ -317,3 +345,12 @@ reminders.Scheduler ──► reminders.Delivery ──► unibot.Runtime ──
 (`Delete`), а подтверждение — из бота или из WebApp — заменяет текущее (`Edit`).
 Без настроенных транспортов `Send` возвращает ошибку, и планировщик пишет её в
 `last_error`: сервис с одной базой остаётся работоспособным.
+
+## См. также
+
+- [`API.md`](API.md) — HTTP-конвейер, аутентификация и операции.
+- [`MCP.md`](MCP.md) — MCP-эндпоинт, инструменты и клиенты.
+- [`DATABASE.md`](DATABASE.md) — таблицы, миграции и sqlc.
+- [`FEATURES.md`](FEATURES.md) — как устроена фича напоминаний.
+- [`ADDING_A_FEATURE.md`](ADDING_A_FEATURE.md) — рецепт новой фичи.
+- [`DEVELOPMENT.md`](DEVELOPMENT.md) — локальный запуск и отладка.

@@ -419,6 +419,12 @@ export interface components {
             token: string;
             api_token: components["schemas"]["APIToken"];
         };
+        /**
+         * @description Answer of `GET /api/v1/health`: the process is serving requests and the
+         *     version identifies the running build. The probe endpoints `/healthz`
+         *     and `/readyz` are infrastructure facing and are not part of this
+         *     specification.
+         */
         Health: {
             /**
              * @description Always `ok` for a successful response.

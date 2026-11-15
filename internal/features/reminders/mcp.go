@@ -38,7 +38,11 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 			"next due time and, when a reminder has fired and waits for " +
 			"confirmation, its pending occurrence. Returns an empty array when the " +
 			"user has no reminders.",
-		Annotations: &mcp.ToolAnnotations{Title: "List reminders", ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{
+			Title:         "List reminders",
+			ReadOnlyHint:  true,
+			OpenWorldHint: boolPtr(false),
+		},
 	}, f.mcpList)
 
 	mcpserver.AddTool(server, &mcp.Tool{
@@ -46,7 +50,11 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Title: "Get a reminder",
 		Description: "Return one reminder by id together with its pending occurrence, " +
 			"if any. A reminder of another user is reported as not found.",
-		Annotations: &mcp.ToolAnnotations{Title: "Get a reminder", ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{
+			Title:         "Get a reminder",
+			ReadOnlyHint:  true,
+			OpenWorldHint: boolPtr(false),
+		},
 	}, f.mcpGet)
 
 	mcpserver.AddTool(server, &mcp.Tool{

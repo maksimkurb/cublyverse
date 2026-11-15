@@ -217,13 +217,15 @@ A WhatsApp adapter, for example, maps `ActionSubmit` to interactive reply button
 
 ## Requirements
 
-This starter targets **Go 1.26** because `mautrix-go v0.31.0` requires it.
+This starter is part of the Cublyverse module and targets the Go version in
+`go.mod` (**Go 1.27.4**); `mautrix-go` is pinned there as well.
 
 The Matrix bot account is a normal Matrix client/device, not an Application Service. Its crypto DB must be persisted.
 
 ## Demo configuration
 
-Copy `.env.example` into your deployment environment and set at least one transport.
+Copy the repository's `.env.example` into your deployment environment and set at
+least one transport.
 
 ```bash
 export PUBLIC_BASE_URL=https://bot.example.com
@@ -243,21 +245,16 @@ export MATRIX_PICKLE_KEY='replace-with-a-long-random-secret'
 export MATRIX_CRYPTO_DB=/data/matrix-crypto.db
 ```
 
-Then:
+Run the demo from the repository root:
 
 ```bash
-go mod tidy
-go run ./cmd/demo
+go run ./unibot/cmd/demo
 ```
 
-Or build the included container:
-
-```bash
-docker build -t unibot-demo .
-docker run --rm --env-file .env -p 8080:8080 -v "$PWD/data:/data" unibot-demo
-```
-
-A minimal GitHub Actions workflow runs `go test ./...` and `go vet ./...` on Go 1.26.x.
+The demo is a starter, not a deployable image: the production image of
+Cublyverse is built from `deploy/Dockerfile` and embeds `unibot` as a package.
+The repository CI (`.github/workflows/ci.yml`) runs `make check`, which includes
+`go test ./...`, `go vet ./...`, the WebApp checks and the documentation checks.
 
 An unlinked user receives a **Sign in** action. After OIDC callback, the framework stores:
 

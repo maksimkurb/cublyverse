@@ -40,6 +40,9 @@ commands:
   docs mcp [--write] [--names]
                    print the MCP tool reference, rewrite docs/MCP.md between
                    the generated markers, or list the registered tool names
+  docs api [--check]
+                   print the operation reference, or verify that every
+                   operation and schema of api/openapi.yaml is documented
 
 Run "cublyverse <command> -h" for the flags of a command.
 `
@@ -162,10 +165,13 @@ func runMigrate(ctx context.Context, args []string, stdout, stderr io.Writer) er
 func runDocs(_ context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
-		return errors.New("docs requires a topic: mcp")
+		return errors.New("docs requires a topic: mcp or api")
+	}
+	if args[0] == "api" {
+		return runAPIDocs(args[1:], stdout, stderr)
 	}
 	if args[0] != "mcp" {
-		return fmt.Errorf("unknown docs topic %q, want mcp", args[0])
+		return fmt.Errorf("unknown docs topic %q, want mcp or api", args[0])
 	}
 
 	flags := flag.NewFlagSet("docs mcp", flag.ContinueOnError)

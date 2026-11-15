@@ -18,9 +18,42 @@ cublyverse migrate up
 cublyverse migrate status
 ```
 
-`make check` не проверяет миграции на БД (для этого нужен Docker), но
-интеграционные тесты поднимают `postgres:17` через testcontainers и применяют
-их с нуля — это и есть проверка «миграции накатываются на чистую БД».
+Отдельной команды «проверить миграции» в `make check` нет, но интеграционные
+тесты поднимают `postgres:17` через testcontainers и применяют миграции с нуля
+— это и есть проверка «миграции накатываются на чистую БД». Без Docker эти
+тесты пропускаются, и такая проверка не выполняется.
+
+### Список миграций
+
+| Версия | Файл | Что создаёт |
+|---|---|---|
+| 00001 | `00001_init.sql` | `users` — SSO-пользователи и `PrincipalID`. |
+| 00002 | `00002_messenger_bindings.sql` | `messenger_bindings` — проверенные привязки Telegram/Matrix. |
+| 00003 | `00003_interactions.sql` | `interactions` — реестр действий и выборов бота. |
+| 00004 | `00004_sessions.sql` | `sessions` — Bearer- и cookie-сессии. |
+| 00005 | `00005_auth_pending.sql` | `auth_pending` — незавершённые входы и подтверждение привязки. |
+| 00006 | `00006_interaction_principal_payload.sql` | `principal_id` и `payload` у `interactions`. |
+| 00007 | `00007_reminders.sql` | `reminders` и `reminder_occurrences`, индексы и `CHECK`-и. |
+| 00008 | `00008_api_tokens.sql` | `api_tokens` — персональные токены. |
+| 00009 | `00009_legacy_reminders_import.sql` | `legacy_reminders_import` — комната ожидания импорта n8n. |
+
+Нумерация не переиспользуется: следующая миграция — `00010_<тема>.sql`.
+`make check` сверяет, что каждый файл из `internal/store/migrations/*.sql`
+упомянут в этом документе.
+
+### Как написать миграцию
+
+1. Создайте `internal/store/migrations/NNNNN_<тема>.sql` со следующим номером.
+2. Добавьте `-- +goose Up`, изменения и `-- +goose Down` с обратными
+   действиями; многострочные операторы оборачивайте
+   `-- +goose StatementBegin` / `-- +goose StatementEnd`.
+3. Примените локально: `make migrate` (или `bin/cublyverse migrate up`);
+   `serve` делает это сам при старте.
+4. Проверьте откат на одноразовой базе: `goose` умеет `down`, но в продакшене
+   откат схемы — это восстановление дампа, а не Down-миграция.
+5. Любая миграция должна безопасно применяться к непустой базе: новые таблицы,
+   nullable-колонки или `NOT NULL` с `DEFAULT`. Долгие индексы —
+   `CREATE INDEX CONCURRENTLY` с `-- +goose NO TRANSACTION`.
 
 ## Запросы
 
@@ -34,6 +67,27 @@ cublyverse migrate status
 - Несколько изменений в одной транзакции — `store.Store.InTx(func(q *db.Queries) error)`.
 - Каждый запрос данных ограничен владельцем (`user_id` / `PrincipalID`). Нет
   запроса «дай всё», который потом фильтруется в коде.
+
+### Как добавить запрос
+
+1. Допишите запрос в тематический файл `internal/store/queries/*.sql`:
+
+   ```sql
+   -- name: GetReminder :one
+   SELECT * FROM reminders
+   WHERE id = $1
+     AND user_id = $2;
+   ```
+
+   `:one` — ровно одна строка, `:many` — список, `:exec` — без результата,
+   `:execrows` — количество изменённых строк.
+
+2. `make gen-go` (или `make gen`) — sqlc перегенерирует
+   `internal/store/db/*.sql.go`.
+3. Вызовите метод из сервиса: `q.GetReminder(ctx, db.GetReminderParams{...})`.
+4. Если нужна транзакция, используйте `store.InTx(func(q *db.Queries) error)`.
+5. Сгенерированный пакет не правьте: изменение SQL — это изменение
+   `queries/*.sql`, а не Go-файла.
 
 ## Таблицы
 
@@ -187,6 +241,7 @@ WebApp. Реестр `api_tokens` чистится фоновой задачей
 | `confirm_token_hash` | `bytea` | sha256 одноразового токена подтверждения |
 | `init_data_verified_at` | `timestamptz` | когда `initData` Telegram совпал с привязкой |
 | `expires_at` | `timestamptz` | 10 минут от создания (или от перехода к подтверждению) |
+| `created_at`, `updated_at` | `timestamptz` | |
 
 Строка создаётся ботом или страницей входа и живёт до завершения либо
 истечения срока; просроченные удаляет фоновый job `auth.cleanup`.
@@ -348,6 +403,29 @@ RETURNING l.*;
 
 Индекс `legacy_reminders_import_telegram_idx` (`telegram_user_id`) обслуживает
 поиск строк одного аккаунта.
+
+## Связи
+
+```text
+users (PrincipalID)
+  ├── 1─* messenger_bindings      user_id, ON DELETE CASCADE
+  ├── 1─* sessions                user_id, ON DELETE CASCADE
+  ├── 1─* api_tokens              user_id, ON DELETE CASCADE
+  ├── 1─* auth_pending            user_id, ON DELETE CASCADE, NULL пока вход не дошёл до OIDC
+  ├── 1─* interactions            principal_id, ON DELETE CASCADE, NULL — действие без ограничения
+  ├── 1─* reminders               user_id, ON DELETE CASCADE
+  └── 1─* legacy_reminders_import claimed_by, ON DELETE SET NULL (строка снова ждёт привязки)
+
+reminders
+  └── 1─* reminder_occurrences    reminder_id, ON DELETE CASCADE
+                                  активное срабатывание — не больше одного (частичный UNIQUE)
+```
+
+`messenger_bindings (platform, remote_user_id)` и
+`legacy_reminders_import.source_reminder_id` — естественные уникальные ключи:
+аккаунт мессенджера принадлежит одному пользователю, а повторный импорт того же
+экспорта не создаёт дублей. `api_tokens.token_hash`, `sessions.token_hash` и
+`interactions.token_hash` уникальны, потому что это sha256 секрета.
 
 ## Правила обратной совместимости
 

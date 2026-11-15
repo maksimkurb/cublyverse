@@ -733,6 +733,11 @@ components:
     Health:
       type: object
       additionalProperties: false
+      description: |
+        Answer of `GET /api/v1/health`: the process is serving requests and the
+        version identifies the running build. The probe endpoints `/healthz`
+        and `/readyz` are infrastructure facing and are not part of this
+        specification.
       required:
         - status
         - version
@@ -987,6 +992,7 @@ components:
             type: integer
             minimum: 1
             maximum: 31
+            description: One ISO weekday (1..7) or one day of month (1..31).
           description: |
             Days of the schedule, sorted and without duplicates. Weekly days are
             1..7 (Monday..Sunday), monthly days are 1..31.
@@ -1141,6 +1147,7 @@ components:
             type: integer
             minimum: 1
             maximum: 31
+            description: One ISO weekday (1..7) or one day of month (1..31).
           description: |
             At least one day. Weekly days are 1..7, monthly days are 1..31.
           example: [1, 3, 5]
@@ -1199,6 +1206,7 @@ components:
             type: integer
             minimum: 1
             maximum: 31
+            description: One ISO weekday (1..7) or one day of month (1..31).
           description: |
             At least one day. Weekly days are 1..7, monthly days are 1..31.
           example: [2, 4]

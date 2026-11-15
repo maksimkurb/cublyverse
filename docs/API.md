@@ -6,15 +6,22 @@ truth: из неё генерируются Go-сервер и TypeScript-кли
 ## Конвейер
 
 ```text
-api/openapi.yaml ──┬─ oapi-codegen ─→ internal/httpapi/gen (strict server + типы)
+api/openapi.yaml ──┬─ oapi-codegen ───────→ internal/httpapi/gen (strict server + типы)
                    └─ openapi-typescript ─→ web/src/api/schema.d.ts
+зарегистрированные MCP-инструменты ───────→ docs/MCP.md (блок между маркерами)
 ```
 
-- `make gen` запускает оба генератора (и `sqlc`).
+- `make gen` запускает оба генератора, `sqlc` и переписывает сгенерированный
+  блок `docs/MCP.md`.
 - `make check` через `scripts/check-gen.sh` перегенерирует всё и падает, если
   содержимое изменилось: забыть `make gen` нельзя.
+- `make check` также запускает `cublyverse docs api --check`: каждая операция
+  обязана иметь `operationId`, `summary`, `description` и объявленный тег, а
+  каждая схема и её поле — `description`. Проверка работает офлайн, без
+  зависимостей и без базы.
 - Живая документация: `/api/docs` (Swagger UI), сама спецификация —
-  `/api/openapi.yaml`.
+  `/api/openapi.yaml`. Swagger UI грузится с CDN, поэтому странице нужен
+  интернет; сама спецификация доступна всегда.
 - Сгенерированный код (`internal/httpapi/gen`, `web/src/api/schema.d.ts`,
   `internal/store/db`) не правится руками.
 
@@ -22,12 +29,39 @@ api/openapi.yaml ──┬─ oapi-codegen ─→ internal/httpapi/gen (strict s
 
 1. Добавить путь в `api/openapi.yaml`: `operationId`, `summary`,
    `description`, тег, `security`, ответы со схемами, примеры у полей.
-2. `make gen`.
-3. Реализовать метод в `internal/httpapi/handlers.go` (тонкий адаптер:
-   разобрать запрос, вызвать сервис, отобразить ошибку).
-4. Добавить тест в `internal/httpapi` или в интеграционные тесты сервиса.
-5. Обновить `docs/API.md` и, если появились переменные окружения,
-   `.env.example` и `docs/DEPLOY.md`.
+2. `make gen` — обновляются strict-интерфейс, типы и TS-клиент.
+3. Реализовать метод в `internal/httpapi/<feature>.go` (тонкий адаптер:
+   разобрать запрос, вызвать сервис, отобразить ошибку). Не забыть добавить
+   зависимость в `httpapi.Deps` (`internal/httpapi/server.go`) и передать её в
+   `internal/app/app.go`.
+4. Для PAT осознанно решить, доступна ли операция токену: маппинг
+   `patPermission` в `internal/httpapi/session.go` по умолчанию оставляет новую
+   операцию только для сессии.
+5. Добавить тест в `internal/httpapi` или в интеграционные тесты сервиса.
+6. Обновить `docs/API.md` и, если появились переменные окружения,
+   `.env.example` и `docs/DEPLOY.md`. Полный рецепт фичи, включая миграцию,
+   сервис, бота и MCP, — в [`ADDING_A_FEATURE.md`](ADDING_A_FEATURE.md).
+
+### Группы операций
+
+| Тег | Операции | Назначение |
+|---|---|---|
+| `system` | `GET /health` | версия и живость HTTP-процесса; без аутентификации. |
+| `identity` | `GET /me`, `PATCH /me` | профиль, привязки и часовой пояс текущего пользователя. |
+| `auth` | `POST /auth/logout`, `POST /auth/telegram` | сессия браузера/Mini App; HTML-страницы входа живут вне спецификации. |
+| `reminders` | `GET/POST /reminders`, `GET/PUT/DELETE /reminders/{id}`, `POST /reminders/{id}/complete` | правила напоминаний и подтверждение активного срабатывания. |
+| `tokens` | `GET/POST /tokens`, `DELETE /tokens/{id}` | персональные токены для MCP и скриптов; только сессия. |
+
+Все операции, кроме `GET /health` и `POST /auth/telegram`, требуют
+`bearerAuth` или `cookieAuth`; `POST /auth/logout` тоже работает без сессии,
+потому что идемпотентен. `/auth/*`-страницы (OIDC, подтверждение привязки)
+описаны ниже, но не входят в `api/openapi.yaml`, потому что отдают HTML, а не
+JSON.
+
+Пробы инфраструктуры не входят в спецификацию: `GET /healthz` (процесс жив,
+текстовый `ok`) и `GET /readyz` (`200 {"status":"ok"}` или `503` при
+недоступной базе). Их использует Docker healthcheck и оркестратор, а не клиент
+API.
 
 ### Базовый URL и ошибки
 
@@ -50,6 +84,14 @@ api/openapi.yaml ──┬─ oapi-codegen ─→ internal/httpapi/gen (strict s
 | `unavailable` | функция не сконфигурирована (например, нет `TELEGRAM_BOT_TOKEN`) |
 | `not_found` | неизвестный путь |
 | `internal` | паника или непредвиденная ошибка |
+
+Страницы входа используют тот же формат JSON для `POST /auth/telegram/verify` и
+добавляют два кода:
+
+| `code` | Когда |
+|---|---|
+| `identity_mismatch` | `initData` принадлежит не тому Telegram-аккаунту, для которого создана ссылка входа (`403`). |
+| `link_expired` | ссылка входа/подтверждения истекла или уже использована (`410`). |
 
 ## Модель аутентификации
 
@@ -104,8 +146,8 @@ Authorization: Bearer cv_pat_…
 Правила:
 
 - неизвестный, просроченный и отозванный токен неотличимы: все дают `401`;
-- недостаточная область — `403 forbidden` с общим `Error` (текст объясняет,
-  какой scope нужен);
+- недостаточная область — `403 forbidden` с общим `Error`; какой scope нужен,
+  написано в документации операции, а не в тексте ошибки;
 - токен **не может** управлять токенами (`GET/POST /tokens`,
   `DELETE /tokens/{id}`) и менять профиль (`PATCH /me`): эти операции
   сессионные и отвечают токену `403`. Утёкший токен не может выдать себе новый
@@ -206,9 +248,11 @@ POST /auth/confirm (form: state, token)
 | `POST /auth/telegram/verify` | Проверка `initData` для ожидающей Telegram-привязки |
 | `POST /auth/confirm` | Подтверждение привязки (form: `state`, `token`) |
 
-Все они отдают HTML на русском, не кэшируются (`Cache-Control: no-store`) и
-запрещают отправку `Referer` (`Referrer-Policy: no-referrer`), чтобы state не
-утекал провайдеру.
+`GET /auth/login`, `GET /auth/callback` и результат `POST /auth/confirm`
+отдают HTML на русском, не кэшируются (`Cache-Control: no-store`) и запрещают
+отправку `Referer` (`Referrer-Policy: no-referrer`), чтобы state не утекал
+провайдеру. `POST /auth/telegram/verify` — исключение: это JSON-эндпоинт,
+который вызывает страница входа из Mini App.
 
 ### `return_to`
 

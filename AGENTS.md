@@ -26,6 +26,7 @@ with acceptance criteria) before changing anything.
 - Never commit secrets. Configuration comes from env; document new variables
   in `.env.example`.
 - `make check` must pass before a story is considered done.
+- Documentation is part of done: every story that adds a migration, API operation, MCP tool, env variable or feature updates the matching file in `docs/` in the same change (see M7-1 for the list). Every OpenAPI operation needs summary/description; every MCP tool needs a description and an entry in `docs/MCP.md`.
 
 ## Commands
 

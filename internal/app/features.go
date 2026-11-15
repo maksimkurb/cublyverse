@@ -5,39 +5,31 @@ import (
 	"log/slog"
 
 	"github.com/maksimkurb/cublyverse/internal/bot"
+	"github.com/maksimkurb/cublyverse/internal/feature"
 	"github.com/maksimkurb/cublyverse/internal/mcpserver"
 )
 
 // Job is a background task owned by a feature. Run blocks until ctx is
 // cancelled; returning nil after cancellation is the normal shutdown path.
-type Job interface {
-	// Name identifies the job in logs.
-	Name() string
-	// Run executes the job until ctx is cancelled.
-	Run(ctx context.Context) error
-}
+//
+// It is an alias of feature.Job: the contracts live in internal/feature so the
+// feature packages can implement them without importing internal/app.
+type Job = feature.Job
 
 // Feature is a self-contained product module. It exposes the very same service
 // to the messenger bot, the HTTP API and MCP, so behaviour never diverges
 // between the three entry points.
-type Feature interface {
-	// Name is the stable identifier of the feature, for example "reminders".
-	Name() string
-	// RegisterBot adds the feature commands and action prefixes to the router.
-	RegisterBot(r *bot.Router)
-	// RegisterMCP registers the feature tools on the MCP server.
-	RegisterMCP(s *mcpserver.Server)
-	// Jobs returns the background tasks the feature needs.
-	Jobs() []Job
-}
+//
+// It is an alias of feature.Feature.
+type Feature = feature.Feature
 
 // Registry holds every enabled feature.
 type Registry struct {
 	features []Feature
 }
 
-// NewRegistry returns a registry with the given features. M0 ships no features
-// yet; reminders arrive in M3.
+// NewRegistry returns a registry with the given features. M0 shipped no
+// features; reminders is the first one.
 func NewRegistry(features ...Feature) *Registry {
 	return &Registry{features: features}
 }

@@ -113,6 +113,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the reminders of the current user
+         * @description Returns every reminder of the signed-in user, ordered by the local time
+         *     of day and then by creation time. An empty array means the user has no
+         *     reminders.
+         *
+         *     Each item carries its pending occurrence, if the reminder has fired and
+         *     is still waiting for confirmation.
+         */
+        get: operations["listReminders"];
+        put?: never;
+        /**
+         * Create a reminder
+         * @description Stores a new reminder rule and computes its first firing from the current
+         *     time. If the time of day has already passed, the first firing is on the
+         *     next matching day, never in the past.
+         *
+         *     A disabled reminder is stored without a next due time and can be enabled
+         *     later with `PUT /reminders/{id}`.
+         *
+         *     The response is the stored reminder; `active_occurrence` is absent for a
+         *     new reminder.
+         */
+        post: operations["createReminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reminders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Reminder id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     reminder that does not exist.
+                 */
+                id: components["parameters"]["ReminderID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get one reminder
+         * @description Returns a single reminder of the signed-in user. A reminder of another
+         *     user is reported as `404`, exactly like a reminder that does not exist.
+         */
+        get: operations["getReminder"];
+        /**
+         * Replace a reminder
+         * @description Replaces the whole rule: every field is required, omitted ones are not
+         *     kept. The pending occurrence is cancelled because the old message no
+         *     longer matches what the user asked for, and the next due time is
+         *     computed again from the current time.
+         *
+         *     Disabling a reminder (`enabled: false`) cancels the pending occurrence
+         *     and clears the next due time; enabling it computes the nearest future
+         *     occurrence.
+         */
+        put: operations["updateReminder"];
+        post?: never;
+        /**
+         * Delete a reminder
+         * @description Removes the reminder and its occurrence history. The call is not
+         *     idempotent: deleting an already deleted reminder answers `404`.
+         *
+         *     A request authenticated with the browser cookie must declare
+         *     `Content-Type: application/json` even though there is no body, because
+         *     the CSRF rule covers every mutating request.
+         */
+        delete: operations["deleteReminder"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reminders/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Reminder id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     reminder that does not exist.
+                 */
+                id: components["parameters"]["ReminderID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm the pending occurrence
+         * @description Marks the pending occurrence of the reminder as completed and stops the
+         *     repeats. This is the API and MCP counterpart of the «✅ Выполнено»
+         *     button in the chat, so the same occurrence cannot be confirmed twice
+         *     through different entry points.
+         *
+         *     The response is the reminder after completion: `active_occurrence` is
+         *     absent because nothing is pending any more.
+         */
+        post: operations["completeReminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -266,6 +382,244 @@ export interface components {
              */
             message: string;
         };
+        /**
+         * @description Shape of the schedule.
+         *
+         *     * `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
+         *       Sunday.
+         *     * `monthly` — `schedule_days` are days of month 1..31. A day the month
+         *       does not have means the last day of that month: 31 is 28 or 29
+         *       February, 31 is 30 April.
+         * @example weekly
+         * @enum {string}
+         */
+        ScheduleKind: "weekly" | "monthly";
+        /**
+         * @description A reminder rule together with the occurrence that waits for
+         *     confirmation, if any.
+         *
+         *     The schedule is always interpreted in `timezone`: `time` is the local
+         *     wall clock time, while `next_due_at` is the same moment in UTC.
+         *
+         *     A wall clock time that does not exist because the clock jumped forward
+         *     (the spring gap) fires shifted forward by the length of the gap; a wall
+         *     clock time that occurs twice (the autumn overlap) fires once, at the
+         *     first occurrence.
+         */
+        Reminder: {
+            /**
+             * @description Reminder id (UUID).
+             * @example 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+             */
+            id: string;
+            /**
+             * @description Text the user receives, counted in characters (runes). Leading and
+             *     trailing whitespace is trimmed before it is stored.
+             * @example Выпить таблетку
+             */
+            message: string;
+            /**
+             * @description IANA time zone the schedule is interpreted in, for example
+             *     `Europe/Moscow`. `Local` and unknown names are rejected.
+             * @example Europe/Moscow
+             */
+            timezone: string;
+            schedule_kind: components["schemas"]["ScheduleKind"];
+            /**
+             * @description Days of the schedule, sorted and without duplicates. Weekly days are
+             *     1..7 (Monday..Sunday), monthly days are 1..31.
+             * @example [
+             *       1,
+             *       3,
+             *       5
+             *     ]
+             */
+            schedule_days: number[];
+            /**
+             * @description Local wall clock time as `HH:MM` (24 hours, zero padded).
+             * @example 09:30
+             */
+            time: string;
+            /**
+             * @description How often an unconfirmed occurrence is repeated, in minutes. Every
+             *     repeat replaces the previous message, so only one reminder message
+             *     stays in the chat.
+             * @example 10
+             */
+            repeat_minutes: number;
+            /**
+             * @description Whether the reminder is scheduled. A disabled reminder has no
+             *     `next_due_at`.
+             * @example true
+             */
+            enabled: boolean;
+            /**
+             * Format: date-time
+             * @description Next firing in UTC, or `null` while the reminder is disabled. The
+             *     scheduler advances it after every firing.
+             * @example 2026-01-12T06:30:00Z
+             */
+            next_due_at: string | null;
+            /**
+             * @description Last delivery error, or `null`. It is cleared after the next
+             *     successful delivery.
+             * @example null
+             */
+            last_error: string | null;
+            /**
+             * Format: date-time
+             * @description When the reminder was created.
+             * @example 2026-01-05T09:00:00Z
+             */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When the reminder was last changed.
+             * @example 2026-01-05T09:00:00Z
+             */
+            updated_at: string;
+            active_occurrence?: components["schemas"]["ReminderOccurrence"];
+        };
+        /**
+         * @description One firing of a reminder. A reminder has at most one active occurrence at
+         *     a time: the message that was sent and waits for confirmation. While it is
+         *     active the reminder repeats every `repeat_minutes`; completing it or
+         *     editing the rule ends it.
+         */
+        ReminderOccurrence: {
+            /**
+             * @description Occurrence id (UUID).
+             * @example 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+             */
+            id: string;
+            /**
+             * @description Reminder that fired.
+             * @example 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+             */
+            reminder_id: string;
+            /**
+             * Format: date-time
+             * @description When the occurrence was due, in UTC.
+             * @example 2026-01-12T06:30:00Z
+             */
+            scheduled_at: string;
+            /**
+             * Format: date-time
+             * @description When the first message went out, or `null` before delivery.
+             * @example 2026-01-12T06:30:01Z
+             */
+            first_sent_at: string | null;
+            /**
+             * @description How many reminder messages were sent for this occurrence, including
+             *     the first one.
+             * @example 0
+             */
+            repeat_count: number;
+            /**
+             * Format: date-time
+             * @description When the next repeat is due, in UTC; `null` when done.
+             * @example 2026-01-12T06:40:01Z
+             */
+            next_repeat_at: string | null;
+            /**
+             * @description `active` waits for confirmation, `completed` was confirmed by the
+             *     user, `cancelled` was dropped because the rule changed or was
+             *     disabled.
+             * @example active
+             * @enum {string}
+             */
+            status: "active" | "completed" | "cancelled";
+            /**
+             * Format: date-time
+             * @description When the user confirmed the occurrence.
+             * @example null
+             */
+            completed_at: string | null;
+        };
+        /**
+         * @description Fields of a new reminder. `repeat_minutes` defaults to 10 and `enabled`
+         *     to `true`, so the common case needs neither.
+         */
+        CreateReminderRequest: {
+            /**
+             * @description Reminder text, 1..1500 characters.
+             * @example Выпить таблетку
+             */
+            message: string;
+            /**
+             * @description IANA time zone of the schedule.
+             * @example Europe/Moscow
+             */
+            timezone: string;
+            schedule_kind: components["schemas"]["ScheduleKind"];
+            /**
+             * @description At least one day. Weekly days are 1..7, monthly days are 1..31.
+             * @example [
+             *       1,
+             *       3,
+             *       5
+             *     ]
+             */
+            schedule_days: number[];
+            /**
+             * @description Local wall clock time as `HH:MM`.
+             * @example 09:30
+             */
+            time: string;
+            /**
+             * @description Repeat interval of an unconfirmed occurrence.
+             * @default 10
+             * @example 10
+             */
+            repeat_minutes: number;
+            /**
+             * @description Create the reminder already scheduled. `false` stores it disabled,
+             *     without a next due time.
+             * @default true
+             * @example true
+             */
+            enabled: boolean;
+        };
+        /**
+         * @description The whole rule: `PUT` replaces every field, so all of them are required.
+         *     An omitted field is not kept from the previous version.
+         */
+        UpdateReminderRequest: {
+            /**
+             * @description Reminder text, 1..1500 characters.
+             * @example Выпить таблетку
+             */
+            message: string;
+            /**
+             * @description IANA time zone of the schedule.
+             * @example Europe/Moscow
+             */
+            timezone: string;
+            schedule_kind: components["schemas"]["ScheduleKind"];
+            /**
+             * @description At least one day. Weekly days are 1..7, monthly days are 1..31.
+             * @example [
+             *       2,
+             *       4
+             *     ]
+             */
+            schedule_days: number[];
+            /**
+             * @description Local wall clock time as `HH:MM`.
+             * @example 20:00
+             */
+            time: string;
+            /**
+             * @description Repeat interval of an unconfirmed occurrence.
+             * @example 15
+             */
+            repeat_minutes: number;
+            /**
+             * @description `false` cancels the pending occurrence and clears `next_due_at`.
+             * @example true
+             */
+            enabled: boolean;
+        };
     };
     responses: {
         /** @description Error response. */
@@ -301,8 +655,26 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /**
+         * @description The object does not exist or belongs to another user. Both cases answer
+         *     the same way, so the API cannot be used to discover other users' data.
+         */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
-    parameters: never;
+    parameters: {
+        /**
+         * @description Reminder id (UUID). A malformed id is reported as `404`, exactly like a
+         *     reminder that does not exist.
+         */
+        ReminderID: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -451,6 +823,205 @@ export interface operations {
             };
             /** @description Telegram sign-in is not configured on this server. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listReminders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All reminders of the user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reminder"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReminderRequest"];
+            };
+        };
+        responses: {
+            /** @description The reminder was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reminder"];
+                };
+            };
+            /**
+             * @description The rule is invalid: the message is empty or longer than 1500
+             *     characters, the time zone is unknown, the time is not `HH:MM`, no
+             *     days are given, a day is out of range for the schedule kind, or the
+             *     repeat interval is outside 1..1440 minutes.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Reminder id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     reminder that does not exist.
+                 */
+                id: components["parameters"]["ReminderID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The reminder. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reminder"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Reminder id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     reminder that does not exist.
+                 */
+                id: components["parameters"]["ReminderID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateReminderRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated reminder. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reminder"];
+                };
+            };
+            /** @description The replacement rule is invalid; see `POST /reminders`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Reminder id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     reminder that does not exist.
+                 */
+                id: components["parameters"]["ReminderID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The reminder was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    completeReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Reminder id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     reminder that does not exist.
+                 */
+                id: components["parameters"]["ReminderID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The reminder after the confirmation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reminder"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description The reminder exists but has no pending occurrence: it has never
+             *     fired, was already confirmed, or an edit cancelled it.
+             */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

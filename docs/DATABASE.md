@@ -151,6 +151,78 @@ ALTER TABLE interactions
 Строка создаётся ботом или страницей входа и живёт до завершения либо
 истечения срока; просроченные удаляет фоновый job `auth.cleanup`.
 
+### `reminders`
+
+Правило напоминания: что сказать, когда и как часто повторять. Владелец —
+`users.id`, а не аккаунт мессенджера, поэтому напоминание переживает
+перепривязку Telegram или Matrix. Семантика расписания и переходов состояния —
+в [FEATURES.md](FEATURES.md).
+
+| Колонка | Тип | Смысл |
+|---|---|---|
+| `id` | `uuid` | |
+| `user_id` | `uuid` → `users` | владелец, `ON DELETE CASCADE` |
+| `message` | `text` | текст напоминания, 1..1500 символов |
+| `timezone` | `text` | IANA-имя, в котором трактуется время |
+| `schedule_kind` | `text` | `weekly` или `monthly` |
+| `schedule_days` | `smallint[]` | 1..7 для `weekly`, 1..31 для `monthly` |
+| `time_hhmm` | `text` | локальное время `HH:MM`, 24 часа |
+| `repeat_minutes` | `integer` | интервал повтора, 1..1440 |
+| `enabled` | `boolean` | выключенное напоминание не планируется |
+| `next_due_at` | `timestamptz` | ближайшее срабатывание в UTC; `NULL` у выключенного |
+| `last_error` | `text` | последняя ошибка доставки, очищается после успешной отправки |
+| `lock_until` | `timestamptz` | аренда планировщика (M3-3) |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+Ограничения (`CHECK`) дублируют правила сервиса, чтобы некорректная строка не
+могла появиться в обход кода: длина сообщения считается в символах
+(`char_length`), `time_hhmm` соответствует регулярному выражению
+`^([01][0-9]|2[0-3]):[0-5][0-9]$`, `repeat_minutes` в диапазоне 1..1440,
+`schedule_kind` — одно из двух значений, `schedule_days` не пуст и является
+подмножеством 1..7 (для `weekly`) либо 1..31 (для `monthly`).
+
+Индексы:
+
+- `reminders_due_idx` — частичный по `next_due_at` (`WHERE enabled AND
+  next_due_at IS NOT NULL`): планировщик выбирает только должные включённые
+  напоминания;
+- `reminders_user_idx` — `(user_id, created_at)` для списка пользователя.
+
+### `reminder_occurrences`
+
+История срабатываний: одно сообщение, которое ждёт подтверждения, и все его
+повторы. Активное срабатывание у напоминания не больше одного, и это
+гарантирует база, а не только код:
+
+```sql
+-- 00007_reminders.sql
+CREATE UNIQUE INDEX reminder_occurrences_active_uidx
+    ON reminder_occurrences (reminder_id)
+    WHERE status = 'active';
+```
+
+| Колонка | Тип | Смысл |
+|---|---|---|
+| `id` | `uuid` | |
+| `reminder_id` | `uuid` → `reminders` | `ON DELETE CASCADE` вместе с правилом |
+| `scheduled_at` | `timestamptz` | когда срабатывание было должно, UTC |
+| `first_sent_at` | `timestamptz` | когда ушло первое сообщение |
+| `repeat_count` | `integer` | сколько сообщений отправлено, включая первое |
+| `next_repeat_at` | `timestamptz` | когда следующий повтор, UTC |
+| `status` | `text` | `active`, `completed` или `cancelled` |
+| `completed_at` | `timestamptz` | когда пользователь подтвердил |
+| `deliveries` | `jsonb` | результаты доставки по транспортам (по умолчанию `[]`) |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+Кроме частичного уникального индекса есть `reminder_occurrences_repeat_idx`
+(`next_repeat_at`, только `active`) для поиска должных повторов и
+`reminder_occurrences_reminder_idx` (`reminder_id, scheduled_at DESC`) для
+истории.
+
+Состояния: `active` → `completed` (подтверждение) или `active` → `cancelled`
+(правка либо выключение правила). Подтверждённое и отменённое срабатывание
+остаются в таблице как история; удаление напоминания удаляет их каскадом.
+
 ## Правила обратной совместимости
 
 1. Только добавляющие изменения в одном релизе: новая таблица, новая
@@ -189,7 +261,8 @@ cublyverse migrate status
 
 - Юнит-тесты не требуют базы.
 - Интеграционные тесты (`internal/store`, `internal/auth`,
-  `internal/interaction/postgres`) поднимают `postgres:17` через
-  testcontainers. Нужен Docker; без него тесты пропускаются с `t.Skip`.
+  `internal/interaction/postgres`, `internal/features/reminders`) поднимают
+  `postgres:17` через testcontainers. Нужен Docker; без него тесты пропускаются
+  с `t.Skip`.
 - `go test ./...` — полный прогон, `make check` — то же плюс линтеры и
   проверки генерации.

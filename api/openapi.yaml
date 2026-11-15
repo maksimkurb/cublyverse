@@ -41,6 +41,11 @@ tags:
     description: Profile of the signed-in user and their messenger bindings.
   - name: auth
     description: Sessions and Telegram Mini App sign-in.
+  - name: reminders
+    description: |
+      Reminder rules and their occurrences. A rule says what to send when; an
+      occurrence is one firing that waits for confirmation and repeats until the
+      user confirms it. Every operation is scoped by the session owner.
 
 paths:
   /health:
@@ -204,6 +209,212 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /reminders:
+    get:
+      operationId: listReminders
+      tags:
+        - reminders
+      summary: List the reminders of the current user
+      description: |
+        Returns every reminder of the signed-in user, ordered by the local time
+        of day and then by creation time. An empty array means the user has no
+        reminders.
+
+        Each item carries its pending occurrence, if the reminder has fired and
+        is still waiting for confirmation.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: All reminders of the user.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reminder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createReminder
+      tags:
+        - reminders
+      summary: Create a reminder
+      description: |
+        Stores a new reminder rule and computes its first firing from the current
+        time. If the time of day has already passed, the first firing is on the
+        next matching day, never in the past.
+
+        A disabled reminder is stored without a next due time and can be enabled
+        later with `PUT /reminders/{id}`.
+
+        The response is the stored reminder; `active_occurrence` is absent for a
+        new reminder.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReminderRequest"
+      responses:
+        "201":
+          description: The reminder was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reminder"
+        "400":
+          description: |
+            The rule is invalid: the message is empty or longer than 1500
+            characters, the time zone is unknown, the time is not `HH:MM`, no
+            days are given, a day is out of range for the schedule kind, or the
+            repeat interval is outside 1..1440 minutes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /reminders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ReminderID"
+    get:
+      operationId: getReminder
+      tags:
+        - reminders
+      summary: Get one reminder
+      description: |
+        Returns a single reminder of the signed-in user. A reminder of another
+        user is reported as `404`, exactly like a reminder that does not exist.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: The reminder.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reminder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateReminder
+      tags:
+        - reminders
+      summary: Replace a reminder
+      description: |
+        Replaces the whole rule: every field is required, omitted ones are not
+        kept. The pending occurrence is cancelled because the old message no
+        longer matches what the user asked for, and the next due time is
+        computed again from the current time.
+
+        Disabling a reminder (`enabled: false`) cancels the pending occurrence
+        and clears the next due time; enabling it computes the nearest future
+        occurrence.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReminderRequest"
+      responses:
+        "200":
+          description: The updated reminder.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reminder"
+        "400":
+          description: The replacement rule is invalid; see `POST /reminders`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteReminder
+      tags:
+        - reminders
+      summary: Delete a reminder
+      description: |
+        Removes the reminder and its occurrence history. The call is not
+        idempotent: deleting an already deleted reminder answers `404`.
+
+        A request authenticated with the browser cookie must declare
+        `Content-Type: application/json` even though there is no body, because
+        the CSRF rule covers every mutating request.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The reminder was deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /reminders/{id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/ReminderID"
+    post:
+      operationId: completeReminder
+      tags:
+        - reminders
+      summary: Confirm the pending occurrence
+      description: |
+        Marks the pending occurrence of the reminder as completed and stops the
+        repeats. This is the API and MCP counterpart of the «✅ Выполнено»
+        button in the chat, so the same occurrence cannot be confirmed twice
+        through different entry points.
+
+        The response is the reminder after completion: `active_occurrence` is
+        absent because nothing is pending any more.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: The reminder after the confirmation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reminder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            The reminder exists but has no pending occurrence: it has never
+            fired, was already confirmed, or an edit cancelled it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -219,6 +430,18 @@ components:
       description: |
         Browser session cookie created by `/auth/login`. It is `HttpOnly`,
         `SameSite=Lax` and `Secure` whenever the public URL is HTTPS.
+
+  parameters:
+    ReminderID:
+      name: id
+      in: path
+      required: true
+      description: |
+        Reminder id (UUID). A malformed id is reported as `404`, exactly like a
+        reminder that does not exist.
+      schema:
+        type: string
+        example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
 
   schemas:
     Health:
@@ -407,6 +630,309 @@ components:
           description: Human readable explanation in Russian.
           example: Страница не найдена
 
+    ScheduleKind:
+      type: string
+      description: |
+        Shape of the schedule.
+
+        * `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
+          Sunday.
+        * `monthly` — `schedule_days` are days of month 1..31. A day the month
+          does not have means the last day of that month: 31 is 28 or 29
+          February, 31 is 30 April.
+      enum:
+        - weekly
+        - monthly
+      example: weekly
+
+    Reminder:
+      type: object
+      additionalProperties: false
+      description: |
+        A reminder rule together with the occurrence that waits for
+        confirmation, if any.
+
+        The schedule is always interpreted in `timezone`: `time` is the local
+        wall clock time, while `next_due_at` is the same moment in UTC.
+
+        A wall clock time that does not exist because the clock jumped forward
+        (the spring gap) fires shifted forward by the length of the gap; a wall
+        clock time that occurs twice (the autumn overlap) fires once, at the
+        first occurrence.
+      required:
+        - id
+        - message
+        - timezone
+        - schedule_kind
+        - schedule_days
+        - time
+        - repeat_minutes
+        - enabled
+        - next_due_at
+        - last_error
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          description: Reminder id (UUID).
+          example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1500
+          description: |
+            Text the user receives, counted in characters (runes). Leading and
+            trailing whitespace is trimmed before it is stored.
+          example: Выпить таблетку
+        timezone:
+          type: string
+          description: |
+            IANA time zone the schedule is interpreted in, for example
+            `Europe/Moscow`. `Local` and unknown names are rejected.
+          example: Europe/Moscow
+        schedule_kind:
+          $ref: "#/components/schemas/ScheduleKind"
+        schedule_days:
+          type: array
+          minItems: 1
+          maxItems: 31
+          items:
+            type: integer
+            minimum: 1
+            maximum: 31
+          description: |
+            Days of the schedule, sorted and without duplicates. Weekly days are
+            1..7 (Monday..Sunday), monthly days are 1..31.
+          example: [1, 3, 5]
+        time:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          description: Local wall clock time as `HH:MM` (24 hours, zero padded).
+          example: "09:30"
+        repeat_minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          description: |
+            How often an unconfirmed occurrence is repeated, in minutes. Every
+            repeat replaces the previous message, so only one reminder message
+            stays in the chat.
+          example: 10
+        enabled:
+          type: boolean
+          description: |
+            Whether the reminder is scheduled. A disabled reminder has no
+            `next_due_at`.
+          example: true
+        next_due_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Next firing in UTC, or `null` while the reminder is disabled. The
+            scheduler advances it after every firing.
+          example: "2026-01-12T06:30:00Z"
+        last_error:
+          type: string
+          nullable: true
+          description: |
+            Last delivery error, or `null`. It is cleared after the next
+            successful delivery.
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: When the reminder was created.
+          example: "2026-01-05T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: When the reminder was last changed.
+          example: "2026-01-05T09:00:00Z"
+        active_occurrence:
+          $ref: "#/components/schemas/ReminderOccurrence"
+
+    ReminderOccurrence:
+      type: object
+      additionalProperties: false
+      description: |
+        One firing of a reminder. A reminder has at most one active occurrence at
+        a time: the message that was sent and waits for confirmation. While it is
+        active the reminder repeats every `repeat_minutes`; completing it or
+        editing the rule ends it.
+      required:
+        - id
+        - reminder_id
+        - scheduled_at
+        - first_sent_at
+        - repeat_count
+        - next_repeat_at
+        - status
+        - completed_at
+      properties:
+        id:
+          type: string
+          description: Occurrence id (UUID).
+          example: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+        reminder_id:
+          type: string
+          description: Reminder that fired.
+          example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+        scheduled_at:
+          type: string
+          format: date-time
+          description: When the occurrence was due, in UTC.
+          example: "2026-01-12T06:30:00Z"
+        first_sent_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When the first message went out, or `null` before delivery.
+          example: "2026-01-12T06:30:01Z"
+        repeat_count:
+          type: integer
+          minimum: 0
+          description: |
+            How many reminder messages were sent for this occurrence, including
+            the first one.
+          example: 0
+        next_repeat_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the next repeat is due, in UTC; `null` when done.
+          example: "2026-01-12T06:40:01Z"
+        status:
+          type: string
+          description: |
+            `active` waits for confirmation, `completed` was confirmed by the
+            user, `cancelled` was dropped because the rule changed or was
+            disabled.
+          enum:
+            - active
+            - completed
+            - cancelled
+          example: active
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the user confirmed the occurrence.
+          example: null
+
+    CreateReminderRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Fields of a new reminder. `repeat_minutes` defaults to 10 and `enabled`
+        to `true`, so the common case needs neither.
+      required:
+        - message
+        - timezone
+        - schedule_kind
+        - schedule_days
+        - time
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1500
+          description: Reminder text, 1..1500 characters.
+          example: Выпить таблетку
+        timezone:
+          type: string
+          description: IANA time zone of the schedule.
+          example: Europe/Moscow
+        schedule_kind:
+          $ref: "#/components/schemas/ScheduleKind"
+        schedule_days:
+          type: array
+          minItems: 1
+          maxItems: 31
+          items:
+            type: integer
+            minimum: 1
+            maximum: 31
+          description: |
+            At least one day. Weekly days are 1..7, monthly days are 1..31.
+          example: [1, 3, 5]
+        time:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          description: Local wall clock time as `HH:MM`.
+          example: "09:30"
+        repeat_minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          default: 10
+          description: Repeat interval of an unconfirmed occurrence.
+          example: 10
+        enabled:
+          type: boolean
+          default: true
+          description: |
+            Create the reminder already scheduled. `false` stores it disabled,
+            without a next due time.
+          example: true
+
+    UpdateReminderRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        The whole rule: `PUT` replaces every field, so all of them are required.
+        An omitted field is not kept from the previous version.
+      required:
+        - message
+        - timezone
+        - schedule_kind
+        - schedule_days
+        - time
+        - repeat_minutes
+        - enabled
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1500
+          description: Reminder text, 1..1500 characters.
+          example: Выпить таблетку
+        timezone:
+          type: string
+          description: IANA time zone of the schedule.
+          example: Europe/Moscow
+        schedule_kind:
+          $ref: "#/components/schemas/ScheduleKind"
+        schedule_days:
+          type: array
+          minItems: 1
+          maxItems: 31
+          items:
+            type: integer
+            minimum: 1
+            maximum: 31
+          description: |
+            At least one day. Weekly days are 1..7, monthly days are 1..31.
+          example: [2, 4]
+        time:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          description: Local wall clock time as `HH:MM`.
+          example: "20:00"
+        repeat_minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          description: Repeat interval of an unconfirmed occurrence.
+          example: 15
+        enabled:
+          type: boolean
+          description: |
+            `false` cancels the pending occurrence and clears `next_due_at`.
+          example: true
+
   responses:
     Error:
       description: Error response.
@@ -428,6 +954,15 @@ components:
       description: |
         The session is valid but the request is not allowed, for example a
         mutating request from a cookie session without a JSON body.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    NotFound:
+      description: |
+        The object does not exist or belongs to another user. Both cases answer
+        the same way, so the API cannot be used to discover other users' data.
       content:
         application/json:
           schema:

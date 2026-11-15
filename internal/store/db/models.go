@@ -58,6 +58,37 @@ type MessengerBinding struct {
 	UpdatedAt      time.Time   `json:"updated_at"`
 }
 
+type Reminder struct {
+	ID            pgtype.UUID        `json:"id"`
+	UserID        pgtype.UUID        `json:"user_id"`
+	Message       string             `json:"message"`
+	Timezone      string             `json:"timezone"`
+	ScheduleKind  string             `json:"schedule_kind"`
+	ScheduleDays  []int16            `json:"schedule_days"`
+	TimeHhmm      string             `json:"time_hhmm"`
+	RepeatMinutes int32              `json:"repeat_minutes"`
+	Enabled       bool               `json:"enabled"`
+	NextDueAt     pgtype.Timestamptz `json:"next_due_at"`
+	LastError     *string            `json:"last_error"`
+	LockUntil     pgtype.Timestamptz `json:"lock_until"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+type ReminderOccurrence struct {
+	ID           pgtype.UUID        `json:"id"`
+	ReminderID   pgtype.UUID        `json:"reminder_id"`
+	ScheduledAt  time.Time          `json:"scheduled_at"`
+	FirstSentAt  pgtype.Timestamptz `json:"first_sent_at"`
+	RepeatCount  int32              `json:"repeat_count"`
+	NextRepeatAt pgtype.Timestamptz `json:"next_repeat_at"`
+	Status       string             `json:"status"`
+	CompletedAt  pgtype.Timestamptz `json:"completed_at"`
+	Deliveries   []byte             `json:"deliveries"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+}
+
 type Session struct {
 	ID         pgtype.UUID        `json:"id"`
 	TokenHash  []byte             `json:"token_hash"`

@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	"github.com/maksimkurb/cublyverse/internal/auth"
+	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/httpapi/gen"
 )
 
@@ -30,6 +31,7 @@ const (
 	codeInternal        = "internal"
 	codeUnauthorized    = "unauthorized"
 	codeForbidden       = "forbidden"
+	codeConflict        = "conflict"
 	codeInvalidInitData = "invalid_init_data"
 	codeUnavailable     = "unavailable"
 )
@@ -72,6 +74,9 @@ type Deps struct {
 	// AuthPages serves /auth/*: the OIDC round trip, the confirmation page and
 	// the Mini App initData check.
 	AuthPages http.Handler
+	// Reminders serves the reminders feature. Without it the reminders
+	// operations answer 500: it is always wired by internal/app.
+	Reminders reminders.API
 }
 
 // New builds the root HTTP handler: API, probes, documentation and the WebApp.

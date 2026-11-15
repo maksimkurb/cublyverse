@@ -201,7 +201,7 @@ Telegram: игнор не-private чатов; разбор команд (`/start
 
 ## M3 — Напоминания (бэкенд)
 
-### ⬜ M3-1 — Схема и расчёт расписания
+### ✅ M3-1 — Схема и расчёт расписания
 - Таблицы `reminders` (`id`, `user_id`, `message` 1–1500, `timezone`,
   `schedule_kind` weekly|monthly, `schedule_days smallint[]`, `time_hhmm`,
   `repeat_minutes` 1–1440, `enabled`, `next_due_at`, `last_error`,
@@ -215,7 +215,7 @@ Telegram: игнор не-private чатов; разбор команд (`/start
 года, DST (несуществующее и повторяющееся локальное время), «сегодня, но время
 уже прошло».
 
-### ⬜ M3-2 — Сервис и API CRUD
+### ✅ M3-2 — Сервис и API CRUD
 Операции в `openapi.yaml` (тег `reminders`): list, create, get, update, delete,
 `POST /reminders/{id}/complete`. Сервис проверяет владельца; правка/выключение
 отменяет активное срабатывание и пересчитывает `next_due_at`.

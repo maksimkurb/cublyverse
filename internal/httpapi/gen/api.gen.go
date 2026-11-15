@@ -40,6 +40,45 @@ func (e BindingPlatform) Valid() bool {
 	}
 }
 
+// Defines values for ReminderOccurrenceStatus.
+const (
+	Active    ReminderOccurrenceStatus = "active"
+	Cancelled ReminderOccurrenceStatus = "cancelled"
+	Completed ReminderOccurrenceStatus = "completed"
+)
+
+// Valid indicates whether the value is a known member of the ReminderOccurrenceStatus enum.
+func (e ReminderOccurrenceStatus) Valid() bool {
+	switch e {
+	case Active:
+		return true
+	case Cancelled:
+		return true
+	case Completed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScheduleKind.
+const (
+	Monthly ScheduleKind = "monthly"
+	Weekly  ScheduleKind = "weekly"
+)
+
+// Valid indicates whether the value is a known member of the ScheduleKind enum.
+func (e ScheduleKind) Valid() bool {
+	switch e {
+	case Monthly:
+		return true
+	case Weekly:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TelegramAuthResponseStatus.
 const (
 	LinkRequired TelegramAuthResponseStatus = "link_required"
@@ -88,6 +127,55 @@ type Binding struct {
 //
 // Example: telegram
 type BindingPlatform string
+
+// CreateReminderRequest Fields of a new reminder. `repeat_minutes` defaults to 10 and `enabled`
+// to `true`, so the common case needs neither.
+type CreateReminderRequest struct {
+	// Enabled Create the reminder already scheduled. `false` stores it disabled,
+	// without a next due time.
+	//
+	//
+	// Example: true
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Message Reminder text, 1..1500 characters.
+	//
+	// Example: Выпить таблетку
+	Message string `json:"message"`
+
+	// RepeatMinutes Repeat interval of an unconfirmed occurrence.
+	//
+	// Example: 10
+	RepeatMinutes *int `json:"repeat_minutes,omitempty"`
+
+	// ScheduleDays At least one day. Weekly days are 1..7, monthly days are 1..31.
+	//
+	//
+	// Example: [1,3,5]
+	ScheduleDays []int `json:"schedule_days"`
+
+	// ScheduleKind Shape of the schedule.
+	//
+	// * `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
+	//   Sunday.
+	// * `monthly` — `schedule_days` are days of month 1..31. A day the month
+	//   does not have means the last day of that month: 31 is 28 or 29
+	//   February, 31 is 30 April.
+	//
+	//
+	// Example: weekly
+	ScheduleKind ScheduleKind `json:"schedule_kind"`
+
+	// Time Local wall clock time as `HH:MM`.
+	//
+	// Example: 09:30
+	Time string `json:"time"`
+
+	// Timezone IANA time zone of the schedule.
+	//
+	// Example: Europe/Moscow
+	Timezone string `json:"timezone"`
+}
 
 // Error Uniform error payload. `code` is a stable machine readable identifier,
 // `message` is a human readable explanation in Russian.
@@ -151,6 +239,171 @@ type Me struct {
 	// Example: Europe/Moscow
 	Timezone string `json:"timezone"`
 }
+
+// Reminder A reminder rule together with the occurrence that waits for
+// confirmation, if any.
+//
+// The schedule is always interpreted in `timezone`: `time` is the local
+// wall clock time, while `next_due_at` is the same moment in UTC.
+//
+// A wall clock time that does not exist because the clock jumped forward
+// (the spring gap) fires shifted forward by the length of the gap; a wall
+// clock time that occurs twice (the autumn overlap) fires once, at the
+// first occurrence.
+type Reminder struct {
+	// ActiveOccurrence One firing of a reminder. A reminder has at most one active occurrence at
+	// a time: the message that was sent and waits for confirmation. While it is
+	// active the reminder repeats every `repeat_minutes`; completing it or
+	// editing the rule ends it.
+	ActiveOccurrence *ReminderOccurrence `json:"active_occurrence,omitempty"`
+
+	// CreatedAt When the reminder was created.
+	//
+	// Example: 2026-01-05T09:00:00Z
+	CreatedAt time.Time `json:"created_at"`
+
+	// Enabled Whether the reminder is scheduled. A disabled reminder has no
+	// `next_due_at`.
+	//
+	//
+	// Example: true
+	Enabled bool `json:"enabled"`
+
+	// Id Reminder id (UUID).
+	//
+	// Example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+	Id string `json:"id"`
+
+	// LastError Last delivery error, or `null`. It is cleared after the next
+	// successful delivery.
+	LastError *string `json:"last_error"`
+
+	// Message Text the user receives, counted in characters (runes). Leading and
+	// trailing whitespace is trimmed before it is stored.
+	//
+	//
+	// Example: Выпить таблетку
+	Message string `json:"message"`
+
+	// NextDueAt Next firing in UTC, or `null` while the reminder is disabled. The
+	// scheduler advances it after every firing.
+	//
+	//
+	// Example: 2026-01-12T06:30:00Z
+	NextDueAt *time.Time `json:"next_due_at"`
+
+	// RepeatMinutes How often an unconfirmed occurrence is repeated, in minutes. Every
+	// repeat replaces the previous message, so only one reminder message
+	// stays in the chat.
+	//
+	//
+	// Example: 10
+	RepeatMinutes int `json:"repeat_minutes"`
+
+	// ScheduleDays Days of the schedule, sorted and without duplicates. Weekly days are
+	// 1..7 (Monday..Sunday), monthly days are 1..31.
+	//
+	//
+	// Example: [1,3,5]
+	ScheduleDays []int `json:"schedule_days"`
+
+	// ScheduleKind Shape of the schedule.
+	//
+	// * `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
+	//   Sunday.
+	// * `monthly` — `schedule_days` are days of month 1..31. A day the month
+	//   does not have means the last day of that month: 31 is 28 or 29
+	//   February, 31 is 30 April.
+	//
+	//
+	// Example: weekly
+	ScheduleKind ScheduleKind `json:"schedule_kind"`
+
+	// Time Local wall clock time as `HH:MM` (24 hours, zero padded).
+	//
+	// Example: 09:30
+	Time string `json:"time"`
+
+	// Timezone IANA time zone the schedule is interpreted in, for example
+	// `Europe/Moscow`. `Local` and unknown names are rejected.
+	//
+	//
+	// Example: Europe/Moscow
+	Timezone string `json:"timezone"`
+
+	// UpdatedAt When the reminder was last changed.
+	//
+	// Example: 2026-01-05T09:00:00Z
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// ReminderOccurrence One firing of a reminder. A reminder has at most one active occurrence at
+// a time: the message that was sent and waits for confirmation. While it is
+// active the reminder repeats every `repeat_minutes`; completing it or
+// editing the rule ends it.
+type ReminderOccurrence struct {
+	// CompletedAt When the user confirmed the occurrence.
+	CompletedAt *time.Time `json:"completed_at"`
+
+	// FirstSentAt When the first message went out, or `null` before delivery.
+	//
+	//
+	// Example: 2026-01-12T06:30:01Z
+	FirstSentAt *time.Time `json:"first_sent_at"`
+
+	// Id Occurrence id (UUID).
+	//
+	// Example: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+	Id string `json:"id"`
+
+	// NextRepeatAt When the next repeat is due, in UTC; `null` when done.
+	//
+	// Example: 2026-01-12T06:40:01Z
+	NextRepeatAt *time.Time `json:"next_repeat_at"`
+
+	// ReminderId Reminder that fired.
+	//
+	// Example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+	ReminderId string `json:"reminder_id"`
+
+	// RepeatCount How many reminder messages were sent for this occurrence, including
+	// the first one.
+	//
+	//
+	// Example: 0
+	RepeatCount int `json:"repeat_count"`
+
+	// ScheduledAt When the occurrence was due, in UTC.
+	//
+	// Example: 2026-01-12T06:30:00Z
+	ScheduledAt time.Time `json:"scheduled_at"`
+
+	// Status `active` waits for confirmation, `completed` was confirmed by the
+	// user, `cancelled` was dropped because the rule changed or was
+	// disabled.
+	//
+	//
+	// Example: active
+	Status ReminderOccurrenceStatus `json:"status"`
+}
+
+// ReminderOccurrenceStatus `active` waits for confirmation, `completed` was confirmed by the
+// user, `cancelled` was dropped because the rule changed or was
+// disabled.
+//
+// Example: active
+type ReminderOccurrenceStatus string
+
+// ScheduleKind Shape of the schedule.
+//
+//   - `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
+//     Sunday.
+//   - `monthly` — `schedule_days` are days of month 1..31. A day the month
+//     does not have means the last day of that month: 31 is 28 or 29
+//     February, 31 is 30 April.
+//
+// Example: weekly
+type ScheduleKind string
 
 // TelegramAuthResponse Result of the Mini App sign-in. `status` decides which fields are set:
 // `ok` carries a session and the profile, `link_required` carries the
@@ -219,9 +472,64 @@ type UpdateMeRequest struct {
 	Timezone string `json:"timezone"`
 }
 
+// UpdateReminderRequest The whole rule: `PUT` replaces every field, so all of them are required.
+// An omitted field is not kept from the previous version.
+type UpdateReminderRequest struct {
+	// Enabled `false` cancels the pending occurrence and clears `next_due_at`.
+	//
+	//
+	// Example: true
+	Enabled bool `json:"enabled"`
+
+	// Message Reminder text, 1..1500 characters.
+	//
+	// Example: Выпить таблетку
+	Message string `json:"message"`
+
+	// RepeatMinutes Repeat interval of an unconfirmed occurrence.
+	//
+	// Example: 15
+	RepeatMinutes int `json:"repeat_minutes"`
+
+	// ScheduleDays At least one day. Weekly days are 1..7, monthly days are 1..31.
+	//
+	//
+	// Example: [2,4]
+	ScheduleDays []int `json:"schedule_days"`
+
+	// ScheduleKind Shape of the schedule.
+	//
+	// * `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
+	//   Sunday.
+	// * `monthly` — `schedule_days` are days of month 1..31. A day the month
+	//   does not have means the last day of that month: 31 is 28 or 29
+	//   February, 31 is 30 April.
+	//
+	//
+	// Example: weekly
+	ScheduleKind ScheduleKind `json:"schedule_kind"`
+
+	// Time Local wall clock time as `HH:MM`.
+	//
+	// Example: 20:00
+	Time string `json:"time"`
+
+	// Timezone IANA time zone of the schedule.
+	//
+	// Example: Europe/Moscow
+	Timezone string `json:"timezone"`
+}
+
+// ReminderID Example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+type ReminderID = string
+
 // Forbidden Uniform error payload. `code` is a stable machine readable identifier,
 // `message` is a human readable explanation in Russian.
 type Forbidden = Error
+
+// NotFound Uniform error payload. `code` is a stable machine readable identifier,
+// `message` is a human readable explanation in Russian.
+type NotFound = Error
 
 // Unauthorized Uniform error payload. `code` is a stable machine readable identifier,
 // `message` is a human readable explanation in Russian.
@@ -232,6 +540,12 @@ type AuthTelegramJSONRequestBody = TelegramInitData
 
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
+
+// CreateReminderJSONRequestBody defines body for CreateReminder for application/json ContentType.
+type CreateReminderJSONRequestBody = CreateReminderRequest
+
+// UpdateReminderJSONRequestBody defines body for UpdateReminder for application/json ContentType.
+type UpdateReminderJSONRequestBody = UpdateReminderRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -250,6 +564,24 @@ type ServerInterface interface {
 	// UpdateMe Update the current user's settings
 	// (PATCH /me)
 	UpdateMe(w http.ResponseWriter, r *http.Request)
+	// ListReminders List the reminders of the current user
+	// (GET /reminders)
+	ListReminders(w http.ResponseWriter, r *http.Request)
+	// CreateReminder Create a reminder
+	// (POST /reminders)
+	CreateReminder(w http.ResponseWriter, r *http.Request)
+	// DeleteReminder Delete a reminder
+	// (DELETE /reminders/{id})
+	DeleteReminder(w http.ResponseWriter, r *http.Request, id ReminderID)
+	// GetReminder Get one reminder
+	// (GET /reminders/{id})
+	GetReminder(w http.ResponseWriter, r *http.Request, id ReminderID)
+	// UpdateReminder Replace a reminder
+	// (PUT /reminders/{id})
+	UpdateReminder(w http.ResponseWriter, r *http.Request, id ReminderID)
+	// CompleteReminder Confirm the pending occurrence
+	// (POST /reminders/{id}/complete)
+	CompleteReminder(w http.ResponseWriter, r *http.Request, id ReminderID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -322,6 +654,138 @@ func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListReminders operation middleware
+func (siw *ServerInterfaceWrapper) ListReminders(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListReminders(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateReminder operation middleware
+func (siw *ServerInterfaceWrapper) CreateReminder(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateReminder(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteReminder operation middleware
+func (siw *ServerInterfaceWrapper) DeleteReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ReminderID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteReminder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetReminder operation middleware
+func (siw *ServerInterfaceWrapper) GetReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ReminderID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetReminder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateReminder operation middleware
+func (siw *ServerInterfaceWrapper) UpdateReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ReminderID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateReminder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteReminder operation middleware
+func (siw *ServerInterfaceWrapper) CompleteReminder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ReminderID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteReminder(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -456,6 +920,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me", wrapper.UpdateMe)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/logout", wrapper.Logout)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/telegram", wrapper.AuthTelegram)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/reminders", wrapper.ListReminders)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/reminders", wrapper.CreateReminder)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/reminders/{id}", wrapper.DeleteReminder)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/reminders/{id}", wrapper.GetReminder)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/reminders/{id}", wrapper.UpdateReminder)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/reminders/{id}/complete", wrapper.CompleteReminder)
 
 	return m
 }
@@ -463,6 +933,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 type ErrorJSONResponse Error
 
 type ForbiddenJSONResponse Error
+
+type NotFoundJSONResponse Error
 
 type UnauthorizedJSONResponse Error
 
@@ -687,6 +1159,370 @@ func (response UpdateMe403JSONResponse) VisitUpdateMeResponse(w http.ResponseWri
 	return err
 }
 
+type ListRemindersRequestObject struct {
+}
+
+type ListRemindersResponseObject interface {
+	VisitListRemindersResponse(w http.ResponseWriter) error
+}
+
+type ListReminders200JSONResponse []Reminder
+
+func (response ListReminders200JSONResponse) VisitListRemindersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListReminders401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListReminders401JSONResponse) VisitListRemindersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateReminderRequestObject struct {
+	Body *CreateReminderJSONRequestBody
+}
+
+type CreateReminderResponseObject interface {
+	VisitCreateReminderResponse(w http.ResponseWriter) error
+}
+
+type CreateReminder201JSONResponse Reminder
+
+func (response CreateReminder201JSONResponse) VisitCreateReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateReminder400JSONResponse Error
+
+func (response CreateReminder400JSONResponse) VisitCreateReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateReminder401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateReminder401JSONResponse) VisitCreateReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateReminder403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateReminder403JSONResponse) VisitCreateReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteReminderRequestObject struct {
+	Id ReminderID `json:"id"`
+}
+
+type DeleteReminderResponseObject interface {
+	VisitDeleteReminderResponse(w http.ResponseWriter) error
+}
+
+type DeleteReminder204Response struct {
+}
+
+func (response DeleteReminder204Response) VisitDeleteReminderResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteReminder401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteReminder401JSONResponse) VisitDeleteReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteReminder403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteReminder403JSONResponse) VisitDeleteReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteReminder404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteReminder404JSONResponse) VisitDeleteReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetReminderRequestObject struct {
+	Id ReminderID `json:"id"`
+}
+
+type GetReminderResponseObject interface {
+	VisitGetReminderResponse(w http.ResponseWriter) error
+}
+
+type GetReminder200JSONResponse Reminder
+
+func (response GetReminder200JSONResponse) VisitGetReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetReminder401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetReminder401JSONResponse) VisitGetReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetReminder404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetReminder404JSONResponse) VisitGetReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateReminderRequestObject struct {
+	Id   ReminderID `json:"id"`
+	Body *UpdateReminderJSONRequestBody
+}
+
+type UpdateReminderResponseObject interface {
+	VisitUpdateReminderResponse(w http.ResponseWriter) error
+}
+
+type UpdateReminder200JSONResponse Reminder
+
+func (response UpdateReminder200JSONResponse) VisitUpdateReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateReminder400JSONResponse Error
+
+func (response UpdateReminder400JSONResponse) VisitUpdateReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateReminder401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateReminder401JSONResponse) VisitUpdateReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateReminder403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateReminder403JSONResponse) VisitUpdateReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateReminder404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateReminder404JSONResponse) VisitUpdateReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteReminderRequestObject struct {
+	Id ReminderID `json:"id"`
+}
+
+type CompleteReminderResponseObject interface {
+	VisitCompleteReminderResponse(w http.ResponseWriter) error
+}
+
+type CompleteReminder200JSONResponse Reminder
+
+func (response CompleteReminder200JSONResponse) VisitCompleteReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteReminder401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CompleteReminder401JSONResponse) VisitCompleteReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteReminder403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CompleteReminder403JSONResponse) VisitCompleteReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteReminder404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CompleteReminder404JSONResponse) VisitCompleteReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteReminder409JSONResponse Error
+
+func (response CompleteReminder409JSONResponse) VisitCompleteReminderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Logout Revoke the current session
@@ -704,6 +1540,24 @@ type StrictServerInterface interface {
 	// UpdateMe Update the current user's settings
 	// (PATCH /me)
 	UpdateMe(ctx context.Context, request UpdateMeRequestObject) (UpdateMeResponseObject, error)
+	// ListReminders List the reminders of the current user
+	// (GET /reminders)
+	ListReminders(ctx context.Context, request ListRemindersRequestObject) (ListRemindersResponseObject, error)
+	// CreateReminder Create a reminder
+	// (POST /reminders)
+	CreateReminder(ctx context.Context, request CreateReminderRequestObject) (CreateReminderResponseObject, error)
+	// DeleteReminder Delete a reminder
+	// (DELETE /reminders/{id})
+	DeleteReminder(ctx context.Context, request DeleteReminderRequestObject) (DeleteReminderResponseObject, error)
+	// GetReminder Get one reminder
+	// (GET /reminders/{id})
+	GetReminder(ctx context.Context, request GetReminderRequestObject) (GetReminderResponseObject, error)
+	// UpdateReminder Replace a reminder
+	// (PUT /reminders/{id})
+	UpdateReminder(ctx context.Context, request UpdateReminderRequestObject) (UpdateReminderResponseObject, error)
+	// CompleteReminder Confirm the pending occurrence
+	// (POST /reminders/{id}/complete)
+	CompleteReminder(ctx context.Context, request CompleteReminderRequestObject) (CompleteReminderResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -879,76 +1733,292 @@ func (sh *strictHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ListReminders operation middleware
+func (sh *strictHandler) ListReminders(w http.ResponseWriter, r *http.Request) {
+	var request ListRemindersRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListReminders(ctx, request.(ListRemindersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListReminders")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRemindersResponseObject); ok {
+		if err := validResponse.VisitListRemindersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateReminder operation middleware
+func (sh *strictHandler) CreateReminder(w http.ResponseWriter, r *http.Request) {
+	var request CreateReminderRequestObject
+
+	var body CreateReminderJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateReminder(ctx, request.(CreateReminderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateReminder")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateReminderResponseObject); ok {
+		if err := validResponse.VisitCreateReminderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteReminder operation middleware
+func (sh *strictHandler) DeleteReminder(w http.ResponseWriter, r *http.Request, id ReminderID) {
+	var request DeleteReminderRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteReminder(ctx, request.(DeleteReminderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteReminder")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteReminderResponseObject); ok {
+		if err := validResponse.VisitDeleteReminderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetReminder operation middleware
+func (sh *strictHandler) GetReminder(w http.ResponseWriter, r *http.Request, id ReminderID) {
+	var request GetReminderRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetReminder(ctx, request.(GetReminderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetReminder")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetReminderResponseObject); ok {
+		if err := validResponse.VisitGetReminderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateReminder operation middleware
+func (sh *strictHandler) UpdateReminder(w http.ResponseWriter, r *http.Request, id ReminderID) {
+	var request UpdateReminderRequestObject
+
+	request.Id = id
+
+	var body UpdateReminderJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateReminder(ctx, request.(UpdateReminderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateReminder")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateReminderResponseObject); ok {
+		if err := validResponse.VisitUpdateReminderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompleteReminder operation middleware
+func (sh *strictHandler) CompleteReminder(w http.ResponseWriter, r *http.Request, id ReminderID) {
+	var request CompleteReminderRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteReminder(ctx, request.(CompleteReminderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteReminder")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompleteReminderResponseObject); ok {
+		if err := validResponse.VisitCompleteReminderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

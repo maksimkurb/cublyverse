@@ -5,14 +5,16 @@ MCP-сервер поверх одной PostgreSQL. Бот всегда раб�
 пользователя: вход по SSO (OIDC), аккаунты мессенджеров — проверенные привязки к
 SSO-пользователю.
 
-Сейчас в репозитории каркас (M0) и идентичность (M1): собирается бинарник,
-работает OpenAPI конвейер, подключена PostgreSQL с миграциями, есть заготовка
-WebApp, Docker и CI, вход по SSO с безопасной привязкой мессенджеров и сессиями.
-Фича «Напоминания» появится на этапе M3.
+Сейчас в репозитории каркас (M0), идентичность (M1) и первая половина
+напоминаний (M3): собирается бинарник, работает OpenAPI конвейер, подключена
+PostgreSQL с миграциями, есть заготовка WebApp, Docker и CI, вход по SSO с
+безопасной привязкой мессенджеров и сессиями, сервис напоминаний с CRUD-API.
+Планировщик и подтверждение из чата — следующие стори M3.
 
 - Обзор архитектуры — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - План и принятые решения — [docs/PLAN.md](docs/PLAN.md)
 - Стори с критериями приёмки — [docs/STORIES.md](docs/STORIES.md)
+- Фичи и их устройство — [docs/FEATURES.md](docs/FEATURES.md)
 - API и вход — [docs/API.md](docs/API.md)
 - Схема базы и миграции — [docs/DATABASE.md](docs/DATABASE.md)
 - Развёртывание — [docs/DEPLOY.md](docs/DEPLOY.md)
@@ -93,6 +95,8 @@ internal/store/           pgxpool, миграции goose, sqlc-запросы
 internal/auth/            пользователи, привязки, вход OIDC, сессии
 internal/interaction/     реестр действий в PostgreSQL (для бота)
 internal/httpapi/         сгенерированный strict-сервер и его реализация
+internal/feature/         контракты фичи (Feature, Job)
+internal/features/        фичи: бизнес-логика, бот/MCP-адаптеры, фоновые задачи
 internal/app/             сборка приложения, реестр фич, фоновые задачи
 internal/bot/             обработчик бота (роутер — в M2)
 internal/mcpserver/       MCP-сервер (наполняется в M5)

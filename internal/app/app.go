@@ -16,6 +16,7 @@ import (
 	"github.com/maksimkurb/cublyverse/internal/auth"
 	"github.com/maksimkurb/cublyverse/internal/bot"
 	"github.com/maksimkurb/cublyverse/internal/config"
+	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/httpapi"
 	"github.com/maksimkurb/cublyverse/internal/interaction/postgres"
 	"github.com/maksimkurb/cublyverse/internal/store"
@@ -84,7 +85,11 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		return nil, fmt.Errorf("configure auth: %w", err)
 	}
 
-	registry := NewRegistry()
+	// The reminders service is shared by every entry point: the HTTP API now,
+	// the bot and MCP in the following stories.
+	reminderService := reminders.New(st, reminders.WithLogger(logger))
+
+	registry := NewRegistry(reminders.NewFeature(reminderService, logger))
 	logger.Info("features registered", slog.Any("features", registry.Names()))
 
 	interactions := postgres.New(st)
@@ -106,6 +111,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		Spec:      api.OpenAPISpec,
 		Auth:      authService,
 		AuthPages: authService.Handler(),
+		Reminders: reminderService,
 	})
 
 	application.server = &http.Server{

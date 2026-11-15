@@ -178,6 +178,8 @@ POST /auth/confirm (form: state, token)
 - Браузер ничего не знает о токене: cookie `HttpOnly` ставится на callback.
 - `GET /api/v1/me` возвращает профиль и привязки, `PATCH /api/v1/me` меняет
   часовой пояс (IANA-имя, проверяется через `time.LoadLocation`).
+- Как WebApp хранит токен, повторяет запрос после `401` и показывает экраны
+  входа — в [WEBAPP.md](WEBAPP.md).
 
 ## Напоминания
 

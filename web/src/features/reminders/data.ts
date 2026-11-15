@@ -1,0 +1,55 @@
+import { useQueryClient } from "@tanstack/react-query";
+
+import type { ApiError, CreateReminderRequest, Reminder, UpdateReminderRequest } from "../../api/client";
+import { $api } from "../../api/query";
+
+/** Query key of `GET /reminders`, as built by openapi-react-query. */
+export const remindersQueryKey = ["get", "/reminders"] as const;
+
+/** Loads every reminder of the signed-in user. */
+export function useRemindersQuery() {
+  return $api.useQuery("get", "/reminders");
+}
+
+/** Creates one reminder. */
+export function useCreateReminder() {
+  const queryClient = useQueryClient();
+  return $api.useMutation("post", "/reminders", {
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: remindersQueryKey }),
+  });
+}
+
+/** Replaces one reminder. */
+export function useUpdateReminder() {
+  const queryClient = useQueryClient();
+  return $api.useMutation("put", "/reminders/{id}", {
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: remindersQueryKey }),
+  });
+}
+
+/** Deletes one reminder. */
+export function useDeleteReminder() {
+  const queryClient = useQueryClient();
+  return $api.useMutation("delete", "/reminders/{id}", {
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: remindersQueryKey }),
+  });
+}
+
+/** Body sent by the toggle: the whole rule, because `PUT` replaces it. */
+export function toggleBody(reminder: Reminder, enabled: boolean): UpdateReminderRequest {
+  return {
+    message: reminder.message,
+    timezone: reminder.timezone,
+    schedule_kind: reminder.schedule_kind,
+    schedule_days: reminder.schedule_days,
+    time: reminder.time,
+    repeat_minutes: reminder.repeat_minutes,
+    enabled,
+  };
+}
+
+/** Error type of every generated operation. */
+export type ReminderApiError = ApiError;
+
+/** Request body of one create call. */
+export type ReminderCreateBody = CreateReminderRequest;

@@ -1,3 +1,9 @@
+/*
+ * Layout and the few pieces telegram-ui does not provide (alarm-clock rows,
+ * weekday chips, the editor header). Colours come from telegram-ui variables,
+ * so light, dark and Telegram themes all work through the same rules.
+ */
+
 :root {
   color-scheme: light dark;
   font-family:
@@ -6,60 +12,371 @@
     "Segoe UI",
     Roboto,
     sans-serif;
-  line-height: 1.5;
+  line-height: 1.45;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
 }
 
 body {
-  margin: 0;
+  background: var(--tgui--secondary_bg_color, #efeff4);
+  color: var(--tgui--text_color, #111827);
+}
+
+.cv-root {
   min-height: 100vh;
-  background: #f6f7f9;
-  color: #111827;
+  background: var(--tgui--secondary_bg_color);
 }
 
-.app {
-  max-width: 32rem;
+.screen {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 36rem;
+  min-height: 100vh;
   margin: 0 auto;
-  padding: 3rem 1.5rem;
+  padding: 1.25rem 1rem 2.5rem;
 }
 
-.app__title {
+.screen--center {
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--tgui--hint_color);
+}
+
+.screen__back {
+  align-self: flex-start;
+  padding: 0.25rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--tgui--link_color);
+  font: inherit;
+  cursor: pointer;
+}
+
+.screen__title {
   margin: 0;
-  font-size: 2rem;
-  letter-spacing: -0.02em;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
-.app__subtitle {
-  margin: 0.25rem 0 2rem;
-  color: #6b7280;
+.screen__state {
+  margin: 2rem 0;
+  color: var(--tgui--hint_color);
+  text-align: center;
 }
 
-.app__card {
-  padding: 1.25rem 1.5rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.75rem;
-  background: #ffffff;
+.screen__error {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 0.85rem;
+  background: #fdecec;
+  color: #991b1b;
 }
 
-.app__status {
+[data-theme="dark"] .screen__error {
+  background: #3b1416;
+  color: #fecaca;
+}
+
+.screen__error p {
   margin: 0 0 0.5rem;
 }
 
-.app__status--error {
-  color: #b91c1c;
-}
-
-.app__footer {
-  display: flex;
-  gap: 1.25rem;
-  margin-top: 2rem;
-  font-size: 0.875rem;
-}
-
-.app__footer a {
-  color: #2563eb;
+.cv-button {
+  display: block;
+  box-sizing: border-box;
+  padding: 0.85rem 1rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  text-align: center;
   text-decoration: none;
 }
 
-.app__footer a:hover {
-  text-decoration: underline;
+.cv-button--primary {
+  background: var(--tgui--button_color);
+  color: var(--tgui--button_text_color);
+}
+
+/* --- home ---------------------------------------------------------------- */
+
+.home__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-top: 0.5rem;
+}
+
+.home__eyebrow {
+  margin: 0;
+  color: var(--tgui--hint_color);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.home__subtitle {
+  margin: 0;
+  color: var(--tgui--hint_color);
+}
+
+.home__icon {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  font-size: 1.5rem;
+  border-radius: 0.75rem;
+  background: var(--tgui--tertiary_bg_color);
+}
+
+.home__chevron {
+  color: var(--tgui--hint_color);
+  font-size: 1.4rem;
+}
+
+/* --- reminders list ------------------------------------------------------ */
+
+.reminder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: transparent;
+  padding: 0;
+}
+
+.reminder-row {
+  border-radius: 0.9rem;
+  background: var(--tgui--section_bg_color);
+}
+
+.reminder-row__time {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 4.25rem;
+  color: var(--tgui--text_color);
+  font-size: 27px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.reminder-row__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.reminder-row__content--dim {
+  opacity: 0.5;
+}
+
+.reminder-row--disabled .reminder-row__time {
+  opacity: 0.5;
+}
+
+.reminder-row__message {
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.reminder-row__subtitle {
+  color: var(--tgui--hint_color);
+  font-size: 0.85rem;
+}
+
+.reminder-row__status {
+  color: var(--tgui--subtitle_text_color);
+  font-size: 0.85rem;
+}
+
+.reminder-row__switch {
+  display: flex;
+  align-items: center;
+  padding-left: 0.5rem;
+}
+
+/* --- editor -------------------------------------------------------------- */
+
+.reminder-editor__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.75rem 0.75rem 0.25rem;
+}
+
+.reminder-editor__title {
+  flex: 1;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.reminder-editor__spacer {
+  width: 2rem;
+}
+
+.reminder-editor__body {
+  padding: 0 1rem 1.5rem;
+}
+
+.reminder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.reminder-form__error {
+  margin: 0.25rem 0;
+}
+
+.reminder-form__times {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.reminder-form__time-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.reminder-form__time-row > *:first-child {
+  flex: 1;
+}
+
+.reminder-form__remove-time {
+  flex: none;
+  width: 2.25rem;
+  height: 2.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--tgui--destructive_text_color);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reminder-form__remove-time:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.reminder-form__note {
+  margin: 0;
+  color: var(--tgui--hint_color);
+  font-size: 0.8rem;
+}
+
+.reminder-form__weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.weekday-chip {
+  min-width: 2.75rem;
+  padding: 0.5rem 0.35rem;
+  border: 1px solid var(--tgui--divider);
+  border-radius: 0.75rem;
+  background: var(--tgui--section_bg_color);
+  color: var(--tgui--text_color);
+  font: inherit;
+  cursor: pointer;
+}
+
+.weekday-chip--selected {
+  border-color: transparent;
+  background: var(--tgui--button_color);
+  color: var(--tgui--button_text_color);
+  font-weight: 600;
+}
+
+.reminder-form__monthdays {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.reminder-form__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.85rem;
+  background: var(--tgui--section_bg_color);
+}
+
+.reminder-form__delete {
+  color: var(--tgui--destructive_text_color);
+}
+
+.reminder-form__delete--armed {
+  background: #e53935 !important;
+  color: #ffffff !important;
+}
+
+/* --- profile ------------------------------------------------------------- */
+
+.profile__card {
+  padding: 0.25rem 1rem;
+}
+
+.profile__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--tgui--divider);
+}
+
+.profile__row:last-child {
+  border-bottom: 0;
+}
+
+.profile__label {
+  color: var(--tgui--hint_color);
+}
+
+.profile__heading {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.profile__binding {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--tgui--divider);
+}
+
+.profile__binding:last-child {
+  border-bottom: 0;
+}
+
+.profile__muted {
+  color: var(--tgui--hint_color);
+  font-size: 0.85rem;
+}
+
+.profile__logout {
+  margin-top: 0.5rem;
 }

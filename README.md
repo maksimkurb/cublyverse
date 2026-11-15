@@ -5,17 +5,19 @@ MCP-сервер поверх одной PostgreSQL. Бот всегда раб�
 пользователя: вход по SSO (OIDC), аккаунты мессенджеров — проверенные привязки к
 SSO-пользователю.
 
-Сейчас в репозитории каркас (M0), идентичность (M1) и первая половина
-напоминаний (M3): собирается бинарник, работает OpenAPI конвейер, подключена
-PostgreSQL с миграциями, есть заготовка WebApp, Docker и CI, вход по SSO с
-безопасной привязкой мессенджеров и сессиями, сервис напоминаний с CRUD-API.
-Планировщик и подтверждение из чата — следующие стори M3.
+Сейчас готовы M0–M4: собирается один бинарник, работает OpenAPI-конвейер,
+подключена PostgreSQL с миграциями, есть Docker и CI. Вход — SSO с безопасной
+привязкой мессенджеров и сессиями (cookie для браузера, Bearer для Telegram Mini
+App). Напоминания работают целиком: CRUD-API, сервис и планировщик, подтверждение
+из чата. WebApp повторяет Mini App из n8n: список-будильник, переключатель,
+модальный редактор с несколькими временами и днями, профиль с часовым поясом.
 
 - Обзор архитектуры — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - План и принятые решения — [docs/PLAN.md](docs/PLAN.md)
 - Стори с критериями приёмки — [docs/STORIES.md](docs/STORIES.md)
 - Фичи и их устройство — [docs/FEATURES.md](docs/FEATURES.md)
 - API и вход — [docs/API.md](docs/API.md)
+- WebApp: устройство, вход, мост к хосту, добавление экрана — [docs/WEBAPP.md](docs/WEBAPP.md)
 - Схема базы и миграции — [docs/DATABASE.md](docs/DATABASE.md)
 - Развёртывание — [docs/DEPLOY.md](docs/DEPLOY.md)
 - Правила разработки — [AGENTS.md](AGENTS.md)
@@ -51,6 +53,17 @@ make dev                  # сервер на http://localhost:8080
 OIDC-провайдер (`OIDC_ISSUER`, `OIDC_CLIENT_ID`). Telegram Mini App входит через
 `POST /api/v1/auth/telegram` с `initData`. Как устроены сессии, подтверждение
 привязки и проверка `initData` — в [docs/API.md](docs/API.md).
+
+### Разработка WebApp
+
+```bash
+cd web
+pnpm install
+pnpm dev      # http://localhost:5173/app/, прокси /api и /auth на :8080
+```
+
+Сборка встраивается в бинарник (`make build`); подробности — в
+[docs/WEBAPP.md](docs/WEBAPP.md).
 
 ### PostgreSQL без Docker
 
@@ -101,7 +114,7 @@ internal/app/             сборка приложения, реестр фич
 internal/bot/             обработчик бота (роутер — в M2)
 internal/mcpserver/       MCP-сервер (наполняется в M5)
 unibot/                   наш фреймворк мессенджеров
-web/                      WebApp (Vite + React + TypeScript)
+web/                      WebApp (Vite + React + TypeScript + telegram-ui)
 deploy/                   Dockerfile, docker-compose
 docs/                     архитектура, план, стори, API, база, деплой
 ```

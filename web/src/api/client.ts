@@ -1,31 +1,31 @@
 import createClient from "openapi-fetch";
 
+import { createAuthMiddleware } from "./authMiddleware";
 import type { components, paths } from "./schema";
 
+/** Payload types generated from `api/openapi.yaml`. */
+export type Me = components["schemas"]["Me"];
+export type Reminder = components["schemas"]["Reminder"];
+export type ReminderOccurrence = components["schemas"]["ReminderOccurrence"];
+export type CreateReminderRequest = components["schemas"]["CreateReminderRequest"];
+export type UpdateReminderRequest = components["schemas"]["UpdateReminderRequest"];
+export type TelegramAuthResponse = components["schemas"]["TelegramAuthResponse"];
+export type ApiError = components["schemas"]["Error"];
+
+/** Fetch implementation accepted by the client factory (injectable in tests). */
+export type FetchLike = (request: Request) => Promise<Response>;
+
 /**
- * Typed client for the Cublyverse HTTP API.
+ * Builds a typed API client.
  *
- * URLs are relative to the page origin: the Go binary serves both the WebApp
- * and the API, and the Vite dev server proxies `/api` to the backend.
+ * URLs are relative to the page origin: the Go binary serves the WebApp and the
+ * API together, and the Vite dev server proxies `/api` to the backend.
  */
-export const api = createClient<paths>({ baseUrl: "/api/v1" });
-
-/** Payload of `GET /health`. */
-export type Health = components["schemas"]["Health"];
-
-/**
- * Loads the backend status and build version.
- *
- * @throws Error when the request fails or the backend answers with an error.
- */
-export async function fetchHealth(): Promise<Health> {
-  const { data, response } = await api.GET("/health");
-
-  if (!response.ok) {
-    throw new Error(`Бэкенд ответил ошибкой ${response.status}`);
-  }
-  if (!data) {
-    throw new Error("Бэкенд вернул пустой ответ");
-  }
-  return data;
+export function createApiClient(fetchImpl: FetchLike = (request) => globalThis.fetch(request), baseUrl = "/api/v1") {
+  const client = createClient<paths>({ baseUrl, fetch: fetchImpl });
+  client.use(createAuthMiddleware(fetchImpl));
+  return client;
 }
+
+/** Typed client for the Cublyverse HTTP API. */
+export const api = createApiClient();

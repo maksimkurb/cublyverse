@@ -1,0 +1,9 @@
+reminder_id,user_id,chat_id,message,timezone,days,time_hhmm,repeat_minutes,enabled,deleted,next_due_at,awaiting_confirmation,current_message_id,lock_token,lock_until,last_error,createdAt,updatedAt
+r-1,1001,1001,"Позвонить маме 👩‍👧",Europe/Moscow,"1,3,5",09:30,15,true,false,2020-01-01T06:30:00.000Z,true,777,lock-1,2020-01-01T06:31:00.000Z,telegram: forbidden,2020-01-01T06:00:00.000Z,2020-01-01T06:31:00.000Z
+r-2,1001,1001,"Оплатить коммуналку 💸
+и проверить счёт",Europe/Moscow,"m:19,31",20:05,10,true,false,,,,,,,,2020-01-02T08:00:00.000Z,2020-01-02T08:00:00.000Z
+r-3,1002,1002,"Старое напоминание",UTC,2,10:00,10,true,true,,,,,,,,2020-01-03T08:00:00.000Z,2020-01-03T08:00:00.000Z
+r-4,1002,1002,"Кривое время",Europe/Moscow,"1,2",9:5,10,true,false,,,,,,,,2020-01-03T09:00:00.000Z,2020-01-03T09:00:00.000Z
+r-5,1002,1002,"Марсианское время",Mars/Olympus,3,12:00,10,true,false,,,,,,,,2020-01-03T10:00:00.000Z,2020-01-03T10:00:00.000Z
+r-6,1003,1003,"Сказать ""привет"" 🏋️",Asia/Oral,7,07:00,1440,true,false,,,,,,,,2020-01-04T07:00:00.000Z,2020-01-04T07:00:00.000Z
+r-7,1003,1003,"Выключенное напоминание",Europe/Berlin,"2,4",18:00,5,false,false,,,,,,,,2020-01-04T09:00:00.000Z,2020-01-04T09:00:00.000Z

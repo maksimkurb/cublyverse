@@ -34,6 +34,9 @@ commands:
   migrate [up|status]
                    apply pending database migrations (default: up)
                    or print their state
+  import-n8n <file>
+                   import reminders of the old n8n workflow from a CSV or JSON
+                   export of its Data Table into the table of waiting rows
   docs mcp [--write] [--names]
                    print the MCP tool reference, rewrite docs/MCP.md between
                    the generated markers, or list the registered tool names
@@ -64,6 +67,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runServe(ctx, args[1:], stdout, stderr)
 	case "migrate":
 		return runMigrate(ctx, args[1:], stdout, stderr)
+	case "import-n8n":
+		return runImportN8N(ctx, args[1:], stdout, stderr)
 	case "docs":
 		return runDocs(ctx, args[1:], stdout, stderr)
 	case "help", "-h", "--help":

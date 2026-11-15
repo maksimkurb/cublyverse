@@ -21,6 +21,7 @@ App). Напоминания работают целиком: CRUD-API, серв
 - WebApp: устройство, вход, мост к хосту, добавление экрана — [docs/WEBAPP.md](docs/WEBAPP.md)
 - Схема базы и миграции — [docs/DATABASE.md](docs/DATABASE.md)
 - Развёртывание — [docs/DEPLOY.md](docs/DEPLOY.md)
+- Переключение со старого n8n-бота — [docs/MIGRATION_FROM_N8N.md](docs/MIGRATION_FROM_N8N.md)
 - Правила разработки — [AGENTS.md](AGENTS.md)
 
 ## Что нужно
@@ -79,10 +80,14 @@ export DATABASE_URL='postgres://localhost:5432/cublyverse?sslmode=disable'
 ### Через Docker Compose
 
 ```bash
-docker compose -f deploy/docker-compose.yml up --build
+cp deploy/.env.example deploy/.env    # пароль БД, PUBLIC_BASE_URL, OIDC, токен бота
+docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml ps
 ```
 
-Поднимаются PostgreSQL 17 и приложение; готовность проверяется через `/readyz`.
+Поднимаются PostgreSQL 17 и приложение с healthcheck и томами; готовность
+проверяется через `/readyz`. Пример боевой: наружу приложение отдаёт обратный
+прокси, переменные и порядок первого запуска — в [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Команды
 
@@ -103,7 +108,7 @@ make migrate    применить миграции (serve делает это �
 
 ```text
 api/openapi.yaml          спецификация API — источник правды
-cmd/cublyverse/           main: serve | migrate
+cmd/cublyverse/           main: serve | migrate | import-n8n | docs
 internal/config/          конфигурация из env
 internal/store/           pgxpool, миграции goose, sqlc-запросы
 internal/auth/            пользователи, привязки, вход OIDC, сессии

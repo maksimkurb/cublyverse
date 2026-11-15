@@ -137,18 +137,25 @@ func (s *Service) loginURL(state string) string {
 // ConfirmBinding creates the messenger binding after the user pressed the
 // confirmation button. The state and the confirmation token are single use: the
 // first POST wins, later ones get ErrPendingUnusable.
-func (s *Service) ConfirmBinding(ctx context.Context, state, token string) (unibot.Binding, error) {
+//
+// Imported reminders of the old n8n bot are attached right after the binding is
+// stored; LegacyReminders reports how many.
+func (s *Service) ConfirmBinding(ctx context.Context, state, token string) (BindingResult, error) {
 	row, err := s.loadPending(ctx, state)
 	if err != nil {
-		return unibot.Binding{}, err
+		return BindingResult{}, err
 	}
 	if row.Status != statusAwaitingConfirmation {
-		return unibot.Binding{}, ErrPendingUnusable
+		return BindingResult{}, ErrPendingUnusable
 	}
 	if len(row.ConfirmTokenHash) == 0 || !tokensMatch(row.ConfirmTokenHash, hashToken(token)) {
-		return unibot.Binding{}, ErrConfirmTokenInvalid
+		return BindingResult{}, ErrConfirmTokenInvalid
 	}
-	return s.completeBinding(ctx, row)
+	binding, err := s.completeBinding(ctx, row)
+	if err != nil {
+		return BindingResult{}, err
+	}
+	return BindingResult{Binding: binding, LegacyReminders: s.claimLegacy(ctx, binding)}, nil
 }
 
 // completeBinding claims the pending flow and writes the binding in one

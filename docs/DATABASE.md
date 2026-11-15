@@ -289,6 +289,66 @@ CREATE UNIQUE INDEX reminder_occurrences_active_uidx
 опоздавший рабочий не перезаписывает состояние и не двигает `next_due_at`,
 которое уже пересчитал более свежий тик или правка пользователя.
 
+### `legacy_reminders_import`
+
+Комната ожидания напоминаний старого n8n-бота «Cubly Reminder». Старая система
+хранила напоминание за Telegram user id, новая — за SSO-пользователем, поэтому
+импорт хранит правило вместе с аккаунтом, которому оно принадлежало, и
+превращает строку в настоящее напоминание в момент привязки Telegram
+(`docs/MIGRATION_FROM_N8N.md`).
+
+| Колонка | Тип | Смысл |
+|---|---|---|
+| `id` | `uuid` | |
+| `source_reminder_id` | `text` | `reminder_id` старой строки; `UNIQUE` — повторный импорт того же экспорта ничего не дублирует |
+| `telegram_user_id` | `text` | `user_id` старого бота; по нему строку забирает привязка |
+| `message` | `text` | текст напоминания |
+| `timezone` | `text` | IANA-имя |
+| `schedule_kind` | `text` | `weekly` или `monthly` |
+| `schedule_days` | `smallint[]` | 1..7 или 1..31 |
+| `time_hhmm` | `text` | `HH:MM` |
+| `repeat_minutes` | `integer` | 1..1440 |
+| `enabled` | `boolean` | выключенное правило остаётся выключенным и после импорта |
+| `claimed_by` | `uuid` → `users` | кому уже присвоено; `NULL` — ждёт привязки |
+| `claimed_at` | `timestamptz` | когда присвоено |
+| `created_at` | `timestamptz` | |
+
+Хранится только правило. Состояние в полёте старого воркфлоу
+(`awaiting_confirmation`, `occurrence_id`, `current_message_id`, `lock_token`,
+`lock_until`, счётчики) не переносится: присвоенное напоминание создаётся через
+сервис `reminders` и начинает жизнь заново — `next_due_at` считается от текущего
+момента, активных срабатываний нет.
+
+Присвоение (`ClaimLegacyReminders`) — одна транзакция на аккаунт:
+
+```sql
+-- 00009_legacy_reminders_import.sql + queries/legacy_reminders_import.sql
+WITH pending AS (
+    SELECT id FROM legacy_reminders_import
+    WHERE telegram_user_id = $2 AND claimed_by IS NULL
+    ORDER BY created_at, id
+    FOR UPDATE SKIP LOCKED
+)
+UPDATE legacy_reminders_import l
+SET claimed_by = $1, claimed_at = now()
+FROM pending
+WHERE l.id = pending.id
+RETURNING l.*;
+```
+
+`FOR UPDATE SKIP LOCKED` вместе с `claimed_by IS NULL` не даёт двум
+одновременным привязкам (или привязке и повторному импорту) создать одно и то
+же напоминание дважды: второй претендент не получает ни одной строки. Создание
+напоминаний идёт в той же транзакции, поэтому «присвоено, но не создано» не
+бывает. Само присвоение выполняется после коммита привязки: сбой импорта не
+должен отменять вход, строки просто остаются ждать.
+
+`claimed_by` объявлен как `ON DELETE SET NULL`: удаление пользователя не
+уничтожает историю импорта, а строки снова становятся доступны для привязки.
+
+Индекс `legacy_reminders_import_telegram_idx` (`telegram_user_id`) обслуживает
+поиск строк одного аккаунта.
+
 ## Правила обратной совместимости
 
 1. Только добавляющие изменения в одном релизе: новая таблица, новая

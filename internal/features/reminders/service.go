@@ -220,6 +220,14 @@ func (s *Service) now() time.Time { return s.clock().UTC() }
 // Create stores a new reminder and computes its next due time when it is
 // enabled.
 func (s *Service) Create(ctx context.Context, principalID string, input Input) (Reminder, error) {
+	return s.CreateTx(ctx, s.st.Queries(), principalID, input)
+}
+
+// CreateTx is Create over an existing query set, so a reminder can be created
+// inside a transaction another caller already opened. The legacy import claim
+// uses it: claiming the waiting rows and creating their reminders must happen
+// in one transaction, and it must not grow a second copy of the insert.
+func (s *Service) CreateTx(ctx context.Context, q *db.Queries, principalID string, input Input) (Reminder, error) {
 	userID, err := parsePrincipal(principalID)
 	if err != nil {
 		return Reminder{}, err
@@ -228,7 +236,7 @@ func (s *Service) Create(ctx context.Context, principalID string, input Input) (
 	if err != nil {
 		return Reminder{}, err
 	}
-	row, err := s.st.Queries().CreateReminder(ctx, db.CreateReminderParams{
+	row, err := q.CreateReminder(ctx, db.CreateReminderParams{
 		UserID:        userID,
 		Message:       rule.message,
 		Timezone:      rule.timezone,
@@ -589,6 +597,26 @@ type rule struct {
 // reaches the database is canonical: trimmed message, sorted days, fixed-width
 // time.
 func (s *Service) normalize(input Input) (rule, error) {
+	validated, err := canonicalize(input)
+	if err != nil {
+		return rule{}, err
+	}
+	if !validated.enabled {
+		return validated, nil
+	}
+	next, err := schedule.NextDue(s.now(), validated.kind, validated.days, validated.hhmm, validated.timezone)
+	if err != nil {
+		return rule{}, fmt.Errorf("compute next due time: %w", err)
+	}
+	validated.nextDueAt = &next
+	return validated, nil
+}
+
+// canonicalize validates the input and returns its canonical form without the
+// next due time, which depends on the current instant. It is the single copy of
+// the validation rules: the service, the bot form and the legacy import all go
+// through it.
+func canonicalize(input Input) (rule, error) {
 	message := strings.TrimSpace(input.Message)
 	if length := utf8.RuneCountInString(message); length < 1 || length > MaxMessageRunes {
 		return rule{}, validationErrorf("Сообщение должно быть от 1 до %d символов", MaxMessageRunes)
@@ -630,7 +658,7 @@ func (s *Service) normalize(input Input) (rule, error) {
 		)
 	}
 
-	validated := rule{
+	return rule{
 		message:       message,
 		timezone:      timezone,
 		kind:          input.Kind,
@@ -638,16 +666,7 @@ func (s *Service) normalize(input Input) (rule, error) {
 		hhmm:          hhmm,
 		repeatMinutes: input.RepeatMinutes,
 		enabled:       input.Enabled,
-	}
-	if !validated.enabled {
-		return validated, nil
-	}
-	next, err := schedule.NextDue(s.now(), validated.kind, validated.days, validated.hhmm, validated.timezone)
-	if err != nil {
-		return rule{}, fmt.Errorf("compute next due time: %w", err)
-	}
-	validated.nextDueAt = &next
-	return validated, nil
+	}, nil
 }
 
 // parsePrincipal turns the authenticated principal id into a UUID. The id comes

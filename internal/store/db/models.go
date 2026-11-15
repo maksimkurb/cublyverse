@@ -59,6 +59,22 @@ type Interaction struct {
 	Payload        string      `json:"payload"`
 }
 
+type LegacyRemindersImport struct {
+	ID               pgtype.UUID        `json:"id"`
+	SourceReminderID string             `json:"source_reminder_id"`
+	TelegramUserID   string             `json:"telegram_user_id"`
+	Message          string             `json:"message"`
+	Timezone         string             `json:"timezone"`
+	ScheduleKind     string             `json:"schedule_kind"`
+	ScheduleDays     []int16            `json:"schedule_days"`
+	TimeHhmm         string             `json:"time_hhmm"`
+	RepeatMinutes    int32              `json:"repeat_minutes"`
+	Enabled          bool               `json:"enabled"`
+	ClaimedBy        pgtype.UUID        `json:"claimed_by"`
+	ClaimedAt        pgtype.Timestamptz `json:"claimed_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+}
+
 type MessengerBinding struct {
 	ID             pgtype.UUID `json:"id"`
 	UserID         pgtype.UUID `json:"user_id"`

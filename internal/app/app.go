@@ -100,6 +100,12 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		reminders.WithDelivery(delivery),
 	)
 
+	// Reminders of the old n8n bot wait for a Telegram binding; the identity
+	// service hands over the waiting rows when that binding appears. The claim
+	// runs after the binding is committed and is best effort, so an import
+	// problem never blocks a sign-in.
+	authService.Legacy = reminderService
+
 	registry := NewRegistry(reminders.NewFeature(reminderService, logger,
 		reminders.WithTickInterval(cfg.RemindersTickIntervalOr()),
 		reminders.WithTimezoneLookup(func(ctx context.Context, principalID string) (string, error) {
@@ -240,6 +246,19 @@ func (a *App) startBot(ctx context.Context, interactions unibot.InteractionStore
 			ConversationID: binding.ConversationID,
 		}, message); err != nil {
 			a.logger.Warn("post-link message failed", "platform", string(binding.Platform), "error", err)
+		}
+	}
+
+	// Tell the user that the reminders of the old n8n bot are back. The
+	// reminders already exist; the message is best effort.
+	a.auth.OnLegacyImported = func(ctx context.Context, binding unibot.Binding, count int) {
+		message := unibot.Message{Text: fmt.Sprintf("Импортировано напоминаний из старого бота: %d", count)}
+		if _, err := runtime.SendToAddress(ctx, unibot.Address{
+			Platform:       binding.Platform,
+			RemoteUserID:   binding.RemoteUserID,
+			ConversationID: binding.ConversationID,
+		}, message); err != nil {
+			a.logger.Warn("post-import message failed", "platform", string(binding.Platform), "error", err)
 		}
 	}
 	return nil

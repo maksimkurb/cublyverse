@@ -18,6 +18,11 @@ FROM golang:1.27-bookworm AS build
 
 WORKDIR /src
 
+# The Matrix transport uses libolm through cgo, so its headers are needed here.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libolm-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -37,12 +42,18 @@ RUN go build -trimpath \
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tzdata wget \
+    && apt-get install -y --no-install-recommends ca-certificates tzdata wget libolm3 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --system --create-home --uid 10001 cublyverse
 
 COPY --from=build /out/cublyverse /usr/local/bin/cublyverse
+
+# State that must survive a container replacement lives here: the Matrix crypto
+# database (MATRIX_CRYPTO_DB) is pointed at /data by the Compose example and the
+# directory is owned by the runtime user, so a named volume mounted on it is
+# writable.
+RUN mkdir -p /data && chown cublyverse:cublyverse /data
 
 USER cublyverse
 WORKDIR /home/cublyverse

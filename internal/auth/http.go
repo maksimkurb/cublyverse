@@ -260,16 +260,17 @@ func (s *Service) handleConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.logger.InfoContext(ctx, "messenger account bound",
-		"platform", string(binding.Platform),
-		"user_id", string(binding.PrincipalID),
+		"platform", string(binding.Binding.Platform),
+		"user_id", string(binding.Binding.PrincipalID),
 	)
-	s.notifyLinked(ctx, binding)
+	s.notifyLinked(ctx, binding.Binding)
+	s.notifyLegacyImported(ctx, binding.Binding, binding.LegacyReminders)
 
 	s.renderPage(w, http.StatusOK, linkedPage, pageView{
 		Title:        "Аккаунт привязан",
-		Platform:     platformLabel(string(binding.Platform)),
-		RemoteUserID: binding.RemoteUserID,
-		SSOName:      s.ssoNameOfPrincipal(ctx, binding.PrincipalID),
+		Platform:     platformLabel(string(binding.Binding.Platform)),
+		RemoteUserID: binding.Binding.RemoteUserID,
+		SSOName:      s.ssoNameOfPrincipal(ctx, binding.Binding.PrincipalID),
 	})
 }
 

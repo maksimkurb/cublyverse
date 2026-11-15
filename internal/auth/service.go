@@ -131,6 +131,24 @@ func (c Config) withDefaults() Config {
 	return c
 }
 
+// LegacyReminderClaimer attaches reminders of the old n8n bot that wait for a
+// Telegram account. The reminders feature implements it; nil means the service
+// was built without the import, which is the normal case for a fresh install.
+type LegacyReminderClaimer interface {
+	// ClaimLegacyReminders turns the waiting rows of a Telegram account into
+	// reminders of the principal and returns how many were created.
+	ClaimLegacyReminders(ctx context.Context, principalID, telegramUserID string) (int, error)
+}
+
+// BindingResult is the outcome of a confirmed messenger binding.
+type BindingResult struct {
+	// Binding is the stored, verified account.
+	Binding unibot.Binding
+	// LegacyReminders is how many imported reminders of the old n8n bot were
+	// attached to the user by this confirmation.
+	LegacyReminders int
+}
+
 // Service is the identity, binding and session service.
 type Service struct {
 	st     *store.Store
@@ -141,9 +159,19 @@ type Service struct {
 	// patLimiter throttles failed personal access token lookups per remote IP.
 	patLimiter *patRateLimiter
 
+	// Legacy claims the reminders imported from the old n8n bot when a Telegram
+	// account is bound. It is set by the application after the reminders
+	// service exists; nil disables the import hand-over.
+	Legacy LegacyReminderClaimer
+
 	// OnLinked is called after a messenger binding was confirmed. The
 	// application uses it to thank the user in the chat.
 	OnLinked func(ctx context.Context, binding unibot.Binding)
+
+	// OnLegacyImported is called after a binding claimed imported reminders, so
+	// the user learns in the chat that the old reminders are back. count is
+	// always positive.
+	OnLegacyImported func(ctx context.Context, binding unibot.Binding, count int)
 }
 
 // Service is the PostgreSQL identity store of the messenger runtime.
@@ -318,7 +346,53 @@ func (s *Service) Bind(ctx context.Context, binding unibot.Binding) error {
 	}); err != nil {
 		return fmt.Errorf("bind messenger account: %w", err)
 	}
+	if count := s.claimLegacy(ctx, binding); count > 0 {
+		s.notifyLegacyImported(ctx, binding, count)
+	}
 	return nil
+}
+
+// claimLegacy attaches the reminders imported from the old n8n bot to a freshly
+// bound Telegram account.
+//
+// The claim runs after the binding is stored, in its own transaction. That is a
+// deliberate choice: the binding is identity and the import is data, so a
+// problem with the imported rows (a broken row, a full disk) must never undo a
+// successful sign-in. The rows stay waiting in `legacy_reminders_import`, and
+// the next claim for that account — another confirmation, or a re-run of
+// `cublyverse import-n8n` — attaches them. The claim itself is atomic and
+// idempotent, so a retry cannot duplicate a reminder.
+func (s *Service) claimLegacy(ctx context.Context, binding unibot.Binding) int {
+	if s.Legacy == nil || binding.Platform != unibot.PlatformTelegram {
+		return 0
+	}
+	count, err := s.Legacy.ClaimLegacyReminders(ctx, string(binding.PrincipalID), binding.RemoteUserID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "attach imported reminders failed",
+			"user_id", string(binding.PrincipalID),
+			"platform", string(binding.Platform),
+			"error", err,
+		)
+		return 0
+	}
+	if count > 0 {
+		s.logger.InfoContext(ctx, "imported reminders attached",
+			"user_id", string(binding.PrincipalID),
+			"reminders", count,
+		)
+	}
+	return count
+}
+
+// notifyLegacyImported tells the application that the old reminders are back.
+// Like OnLinked it is best effort: the reminders already exist.
+func (s *Service) notifyLegacyImported(ctx context.Context, binding unibot.Binding, count int) {
+	if s.OnLegacyImported == nil || count <= 0 {
+		return
+	}
+	notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	s.OnLegacyImported(notifyCtx, binding, count)
 }
 
 // Resolve implements unibot.IdentityStore.

@@ -49,6 +49,9 @@ const SessionCookieName = "cv_session"
 const (
 	SessionKindBearer = "bearer"
 	SessionKindCookie = "cookie"
+	// SessionKindToken marks a request authenticated with a personal access
+	// token. It is never stored in the sessions table: PATs live in api_tokens.
+	SessionKindToken = "api_token"
 )
 
 // Sign-in flow kinds stored in auth_pending.
@@ -135,6 +138,9 @@ type Service struct {
 	logger *slog.Logger
 	oidc   *oidcClient
 
+	// patLimiter throttles failed personal access token lookups per remote IP.
+	patLimiter *patRateLimiter
+
 	// OnLinked is called after a messenger binding was confirmed. The
 	// application uses it to thank the user in the chat.
 	OnLinked func(ctx context.Context, binding unibot.Binding)
@@ -155,7 +161,7 @@ func New(ctx context.Context, st *store.Store, cfg Config, logger *slog.Logger) 
 	}
 	cfg = cfg.withDefaults()
 
-	s := &Service{st: st, cfg: cfg, logger: logger}
+	s := &Service{st: st, cfg: cfg, logger: logger, patLimiter: newPATRateLimiter()}
 
 	if cfg.OIDC.Issuer != "" {
 		if cfg.OIDC.ClientID == "" {

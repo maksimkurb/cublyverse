@@ -55,6 +55,16 @@ func (fakeAuth) AuthenticateTelegram(context.Context, string) (auth.TelegramAuth
 
 func (fakeAuth) ClearedSessionCookie() string { return "" }
 
+func (fakeAuth) ListAPITokens(context.Context, string) ([]auth.APIToken, error) {
+	return nil, errNotUsed
+}
+
+func (fakeAuth) CreateAPIToken(context.Context, string, string, []string, *int) (auth.APIToken, string, error) {
+	return auth.APIToken{}, "", errNotUsed
+}
+
+func (fakeAuth) RevokeAPIToken(context.Context, string, string) error { return errNotUsed }
+
 // apiRequest performs one JSON request and returns the status and the body.
 func apiRequest(t *testing.T, method, url, token, body string) (int, []byte) {
 	t.Helper()

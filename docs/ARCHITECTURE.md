@@ -187,8 +187,42 @@ TTL попадает в `interactions.expires_at`; просроченная кн
 ## 6. HTTP API и MCP
 
 HTTP-слой генерируется из `api/openapi.yaml` (strict server): обработчики —
-тонкие адаптеры над сервисами фич, ошибки отдаются единым JSON. MCP-сервер
-(этап M5) вызывает те же сервисы. Подробности HTTP — `docs/API.md`.
+тонкие адаптеры над сервисами фич, ошибки отдаются единым JSON. Подробности
+HTTP — `docs/API.md`.
+
+MCP живёт на `/mcp` (`internal/mcpserver`) и использует официальный
+`github.com/modelcontextprotocol/go-sdk`:
+
+```text
+MCP-клиент ──POST /mcp (Streamable HTTP)──► mcpserver.Handler
+                                                │  Authorization: Bearer cv_pat_…
+                                                ▼
+                                        auth.ResolveAPIToken → Principal{id, scopes}
+                                                │  context
+                                                ▼
+                                        feature.RegisterMCP → tool handler
+                                                │
+                                                ▼
+                                        reminders.Service (тот же, что у бота и API)
+```
+
+- **Stateless.** Каждый JSON-RPC запрос — отдельный HTTP-запрос; сервер не
+  хранит сессии, не поддерживает standalone SSE (`GET /mcp` → `405`) и не
+  требует sticky sessions. Рестарт или другая реплика не рвут клиента, а
+  инструментам состояния между вызовами не нужно.
+- **Только PAT.** Cookie-сессия на `/mcp` не принимается: MCP-клиент — не
+  браузер, а PAT явный, отзываемый и ограниченный областями доступа. Так на
+  машинном эндпоинте нет ambient credential.
+- **Principal в контексте.** Middleware резолвит токен и кладёт `Principal{ID,
+  Scopes}` в `context`; каждый инструмент проверяет свой scope и вызывает
+  сервис фичи. Токен не может управлять токенами или менять профиль — эти
+  операции сессионные.
+- **Регистрация.** `feature.Feature.RegisterMCP(*mcpserver.Server)` — та же
+  схема, что `RegisterBot`: фича приносит свои инструменты, ядро регистрирует
+  `whoami`. Схемы инструментов выводятся из Go-структур с `jsonschema`-тегами,
+  а `docs/MCP.md` генерируется из живого сервера и проверяется в `make check`.
+
+Подробности, все инструменты, схемы и подключение клиентов — `docs/MCP.md`.
 
 ## 7. WebApp
 

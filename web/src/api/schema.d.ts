@@ -37,6 +37,9 @@ export interface paths {
          * @description Returns the SSO profile of the session owner together with every
          *     verified messenger account. The `id` field is the principal id used by
          *     the bot, the API and MCP alike.
+         *
+         *     A personal access token may read the profile too: every granted scope
+         *     implies `profile:read`.
          */
         get: operations["getMe"];
         put?: never;
@@ -235,10 +238,187 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List personal access tokens
+         * @description Returns every personal access token of the signed-in user, newest first.
+         *     Revoked and expired tokens stay in the list so their state is visible;
+         *     the plaintext secret is never returned.
+         *
+         *     Only an interactive session may list tokens: a personal access token
+         *     answers `403` here.
+         */
+        get: operations["listTokens"];
+        put?: never;
+        /**
+         * Create a personal access token
+         * @description Issues a new token and returns its plaintext **once**. The server keeps
+         *     only the sha256, so the value cannot be recovered later; a lost token is
+         *     revoked and replaced.
+         *
+         *     Scopes are validated against the server registry. `expires_in_days`
+         *     limits the lifetime; omit it (or send `null`) for a token without an
+         *     expiry. Revoking is immediate and works on every replica.
+         *
+         *     Only an interactive session may create tokens: a personal access token
+         *     answers `403`, so a leaked token cannot mint another one.
+         */
+        post: operations["createToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Personal access token id (UUID). A malformed id is reported as `404`,
+                 *     exactly like a token that does not exist or belongs to another user.
+                 */
+                id: components["parameters"]["TokenID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a personal access token
+         * @description Revokes the token immediately: every following request with it answers
+         *     `401`. Revoking an already revoked token is a no-op, so a retry after a
+         *     lost response is safe.
+         *
+         *     A request authenticated with the browser cookie must declare
+         *     `Content-Type: application/json` even though there is no body.
+         */
+        delete: operations["revokeToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description One permission of a personal access token.
+         *
+         *     * `profile:read` — read the user's own profile (`GET /me`); it is
+         *       implied by any other granted scope.
+         *     * `reminders:read` — read reminders.
+         *     * `reminders:write` — create, replace, complete and delete reminders.
+         *
+         *     The registry is extensible: new operations document the scope they
+         *     require.
+         * @example reminders:write
+         * @enum {string}
+         */
+        APITokenScope: "profile:read" | "reminders:read" | "reminders:write";
+        /**
+         * @description A personal access token as stored by the server. The plaintext secret is
+         *     never part of it: only the visible prefix is returned, which is enough
+         *     to recognise the token the user is holding.
+         */
+        APIToken: {
+            /**
+             * @description Token id (UUID), used to revoke it.
+             * @example 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+             */
+            id: string;
+            /**
+             * @description User-facing label chosen at creation.
+             * @example Claude Code
+             */
+            name: string;
+            /**
+             * @description First characters of the token after the `cv_pat_` marker. Shown as
+             *     `cv_pat_<prefix>…` so a user can match a row to a value they hold.
+             * @example 9xQ2mB7k
+             */
+            prefix: string;
+            /**
+             * @description Granted permissions, in registry order.
+             * @example [
+             *       "profile:read",
+             *       "reminders:read"
+             *     ]
+             */
+            scopes: components["schemas"]["APITokenScope"][];
+            /**
+             * Format: date-time
+             * @description Expiry, or `null` when the token never expires.
+             * @example 2026-04-15T09:30:00Z
+             */
+            expires_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the token last authenticated a request; `null` if it was never
+             *     used. Updated at most once per minute to keep authentication a read.
+             * @example 2026-01-16T08:00:00Z
+             */
+            last_used_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the user revoked the token, or `null` while it works.
+             * @example null
+             */
+            revoked_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the token was issued.
+             * @example 2026-01-15T09:30:00Z
+             */
+            created_at: string;
+        };
+        /** @description Fields of a new personal access token. */
+        CreateTokenRequest: {
+            /**
+             * @description Label shown in the WebApp, for example the client it is meant for.
+             *     Leading and trailing whitespace is trimmed.
+             * @example Claude Code
+             */
+            name: string;
+            /**
+             * @description Granted permissions. Duplicates are removed and the order becomes
+             *     the registry order. An unknown scope is rejected with `400`.
+             * @example [
+             *       "profile:read",
+             *       "reminders:read",
+             *       "reminders:write"
+             *     ]
+             */
+            scopes: components["schemas"]["APITokenScope"][];
+            /**
+             * @description Lifetime in days. Omit it or send `null` for a token without an
+             *     expiry; such a token works until it is revoked.
+             * @example null
+             */
+            expires_in_days?: number | null;
+        };
+        /**
+         * @description A freshly created token. `token` is the only time the plaintext is
+         *     returned: it is not stored anywhere and cannot be shown again.
+         */
+        CreatedToken: {
+            /**
+             * @description The secret to paste into the client. It starts with `cv_pat_` and
+             *     must be sent as `Authorization: Bearer <token>`.
+             * @example cv_pat_9xQ2mB7kZ1cR4tY6uI8oP0aS3dF5gH7jK9lM2nB4vC6
+             */
+            token: string;
+            api_token: components["schemas"]["APIToken"];
+        };
         Health: {
             /**
              * @description Always `ok` for a successful response.
@@ -680,6 +860,11 @@ export interface components {
          *     reminder that does not exist.
          */
         ReminderID: string;
+        /**
+         * @description Personal access token id (UUID). A malformed id is reported as `404`,
+         *     exactly like a token that does not exist or belongs to another user.
+         */
+        TokenID: string;
     };
     requestBodies: never;
     headers: never;
@@ -1035,6 +1220,94 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All tokens of the user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIToken"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description The token was created; `token` is shown only in this response. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedToken"];
+                };
+            };
+            /**
+             * @description The name, the scopes or the lifetime are invalid: the name must be
+             *     1..80 characters, at least one known scope is required and the
+             *     lifetime is 1..365 days.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    revokeToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Personal access token id (UUID). A malformed id is reported as `404`,
+                 *     exactly like a token that does not exist or belongs to another user.
+                 */
+                id: components["parameters"]["TokenID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The token is revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

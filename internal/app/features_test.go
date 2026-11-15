@@ -60,7 +60,7 @@ func TestRegistryWiresFeatures(t *testing.T) {
 	}
 
 	router := bot.NewRouter()
-	server := mcpserver.New()
+	server := mcpserver.New(mcpserver.Deps{Version: "test"})
 	registry.RegisterBot(router)
 	registry.RegisterMCP(server)
 

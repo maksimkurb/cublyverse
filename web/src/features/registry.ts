@@ -1,5 +1,6 @@
 import type { FeatureScreen } from "./types";
 import { remindersFeature } from "./reminders";
+import { tokensFeature } from "./tokens";
 
 /**
  * Feature registry.
@@ -8,4 +9,4 @@ import { remindersFeature } from "./reminders";
  * exports a `FeatureScreen`, then add it to this array. The home screen lists it
  * and the router renders its `component` on its `route`; no other file changes.
  */
-export const features: FeatureScreen[] = [remindersFeature];
+export const features: FeatureScreen[] = [remindersFeature, tokensFeature];

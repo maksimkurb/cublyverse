@@ -208,10 +208,15 @@ func (s *Service) Cleanup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("delete stale sessions: %w", err)
 	}
-	if pending > 0 || sessions > 0 {
+	tokens, err := s.st.Queries().DeleteRevokedAPITokens(ctx)
+	if err != nil {
+		return fmt.Errorf("delete revoked api tokens: %w", err)
+	}
+	if pending > 0 || sessions > 0 || tokens > 0 {
 		s.logger.Info("auth cleanup finished",
 			"pending_deleted", pending,
 			"sessions_deleted", sessions,
+			"api_tokens_deleted", tokens,
 		)
 	}
 	return nil

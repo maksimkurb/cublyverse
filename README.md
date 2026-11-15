@@ -17,6 +17,7 @@ App). Напоминания работают целиком: CRUD-API, серв
 - Стори с критериями приёмки — [docs/STORIES.md](docs/STORIES.md)
 - Фичи и их устройство — [docs/FEATURES.md](docs/FEATURES.md)
 - API и вход — [docs/API.md](docs/API.md)
+- MCP: инструменты, авторизация токенами, подключение клиентов — [docs/MCP.md](docs/MCP.md)
 - WebApp: устройство, вход, мост к хосту, добавление экрана — [docs/WEBAPP.md](docs/WEBAPP.md)
 - Схема базы и миграции — [docs/DATABASE.md](docs/DATABASE.md)
 - Развёртывание — [docs/DEPLOY.md](docs/DEPLOY.md)

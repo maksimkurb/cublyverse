@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 GENERATED_DIRS=(internal/httpapi/gen internal/store/db)
-GENERATED_FILES=(web/src/api/schema.d.ts)
+GENERATED_FILES=(web/src/api/schema.d.ts docs/MCP.md)
 
 fingerprint() {
   local paths=() dir file

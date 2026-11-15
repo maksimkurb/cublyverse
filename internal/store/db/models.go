@@ -10,6 +10,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiToken struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	Name        string             `json:"name"`
+	TokenPrefix string             `json:"token_prefix"`
+	TokenHash   []byte             `json:"token_hash"`
+	Scopes      []string           `json:"scopes"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
+	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt   time.Time          `json:"created_at"`
+}
+
 type AuthPending struct {
 	ID                 pgtype.UUID        `json:"id"`
 	StateHash          []byte             `json:"state_hash"`

@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: Cublyverse API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     HTTP API of the Cublyverse personal assistant.
 
@@ -27,6 +27,22 @@ info:
     the cookie must send `Content-Type: application/json` (CSRF defence on top
     of `SameSite=Lax`).
 
+    ## Personal access tokens
+
+    `Authorization: Bearer cv_pat_…` authenticates a personal access token
+    created in the WebApp. A token is limited to its scopes:
+
+    * `profile:read` — `GET /me` (any granted scope also allows it);
+    * `reminders:read` — `GET /reminders` and `GET /reminders/{id}`;
+    * `reminders:write` — creating, replacing, completing and deleting
+      reminders.
+
+    A token may never manage tokens or change the profile: `POST /tokens`,
+    `GET /tokens`, `DELETE /tokens/{id}` and `PATCH /me` require a session and
+    answer `403` for a token. Unknown, expired and revoked tokens answer `401`,
+    exactly like a dead session, and insufficient scopes answer `403` with the
+    shared `Error` payload.
+
     The HTML pages that start a sign-in live under `/auth/*` outside this
     specification; they are documented in `docs/API.md`.
 
@@ -46,6 +62,12 @@ tags:
       Reminder rules and their occurrences. A rule says what to send when; an
       occurrence is one firing that waits for confirmation and repeats until the
       user confirms it. Every operation is scoped by the session owner.
+  - name: tokens
+    description: |
+      Personal access tokens (PAT). A token authenticates non-browser clients —
+      an MCP server, a script, CI — against the same API and the same user data.
+      Tokens are managed only from an interactive session: a token can never
+      create, list or revoke tokens.
 
 paths:
   /health:
@@ -75,6 +97,9 @@ paths:
         Returns the SSO profile of the session owner together with every
         verified messenger account. The `id` field is the principal id used by
         the bot, the API and MCP alike.
+
+        A personal access token may read the profile too: every granted scope
+        implies `profile:read`.
       security:
         - bearerAuth: []
         - cookieAuth: []
@@ -421,14 +446,120 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /tokens:
+    get:
+      operationId: listTokens
+      tags:
+        - tokens
+      summary: List personal access tokens
+      description: |
+        Returns every personal access token of the signed-in user, newest first.
+        Revoked and expired tokens stay in the list so their state is visible;
+        the plaintext secret is never returned.
+
+        Only an interactive session may list tokens: a personal access token
+        answers `403` here.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: All tokens of the user.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/APIToken"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      operationId: createToken
+      tags:
+        - tokens
+      summary: Create a personal access token
+      description: |
+        Issues a new token and returns its plaintext **once**. The server keeps
+        only the sha256, so the value cannot be recovered later; a lost token is
+        revoked and replaced.
+
+        Scopes are validated against the server registry. `expires_in_days`
+        limits the lifetime; omit it (or send `null`) for a token without an
+        expiry. Revoking is immediate and works on every replica.
+
+        Only an interactive session may create tokens: a personal access token
+        answers `403`, so a leaked token cannot mint another one.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTokenRequest"
+      responses:
+        "201":
+          description: The token was created; `token` is shown only in this response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedToken"
+        "400":
+          description: |
+            The name, the scopes or the lifetime are invalid: the name must be
+            1..80 characters, at least one known scope is required and the
+            lifetime is 1..365 days.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /tokens/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TokenID"
+    delete:
+      operationId: revokeToken
+      tags:
+        - tokens
+      summary: Revoke a personal access token
+      description: |
+        Revokes the token immediately: every following request with it answers
+        `401`. Revoking an already revoked token is a no-op, so a retry after a
+        lost response is safe.
+
+        A request authenticated with the browser cookie must declare
+        `Content-Type: application/json` even though there is no body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The token is revoked.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       description: |
-        Opaque session token issued by `POST /auth/telegram` and sent as
-        `Authorization: Bearer <token>`. Only its sha256 is stored on the server.
+        Either an opaque session token issued by `POST /auth/telegram`, or a
+        personal access token created with `POST /tokens` (`cv_pat_…`). Only the
+        sha256 of either value is stored on the server. A personal access token
+        is limited to its scopes.
     cookieAuth:
       type: apiKey
       in: cookie
@@ -449,7 +580,156 @@ components:
         type: string
         example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
 
+    TokenID:
+      name: id
+      in: path
+      required: true
+      description: |
+        Personal access token id (UUID). A malformed id is reported as `404`,
+        exactly like a token that does not exist or belongs to another user.
+      schema:
+        type: string
+        example: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+
   schemas:
+    APITokenScope:
+      type: string
+      description: |
+        One permission of a personal access token.
+
+        * `profile:read` — read the user's own profile (`GET /me`); it is
+          implied by any other granted scope.
+        * `reminders:read` — read reminders.
+        * `reminders:write` — create, replace, complete and delete reminders.
+
+        The registry is extensible: new operations document the scope they
+        require.
+      enum:
+        - profile:read
+        - reminders:read
+        - reminders:write
+      example: reminders:write
+
+    APIToken:
+      type: object
+      additionalProperties: false
+      description: |
+        A personal access token as stored by the server. The plaintext secret is
+        never part of it: only the visible prefix is returned, which is enough
+        to recognise the token the user is holding.
+      required:
+        - id
+        - name
+        - prefix
+        - scopes
+        - expires_at
+        - last_used_at
+        - revoked_at
+        - created_at
+      properties:
+        id:
+          type: string
+          description: Token id (UUID), used to revoke it.
+          example: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: User-facing label chosen at creation.
+          example: Claude Code
+        prefix:
+          type: string
+          description: |
+            First characters of the token after the `cv_pat_` marker. Shown as
+            `cv_pat_<prefix>…` so a user can match a row to a value they hold.
+          example: 9xQ2mB7k
+        scopes:
+          type: array
+          minItems: 1
+          description: Granted permissions, in registry order.
+          items:
+            $ref: "#/components/schemas/APITokenScope"
+          example: [profile:read, reminders:read]
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Expiry, or `null` when the token never expires.
+          example: "2026-04-15T09:30:00Z"
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When the token last authenticated a request; `null` if it was never
+            used. Updated at most once per minute to keep authentication a read.
+          example: "2026-01-16T08:00:00Z"
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the user revoked the token, or `null` while it works.
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: When the token was issued.
+          example: "2026-01-15T09:30:00Z"
+
+    CreateTokenRequest:
+      type: object
+      additionalProperties: false
+      description: Fields of a new personal access token.
+      required:
+        - name
+        - scopes
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: |
+            Label shown in the WebApp, for example the client it is meant for.
+            Leading and trailing whitespace is trimmed.
+          example: Claude Code
+        scopes:
+          type: array
+          minItems: 1
+          description: |
+            Granted permissions. Duplicates are removed and the order becomes
+            the registry order. An unknown scope is rejected with `400`.
+          items:
+            $ref: "#/components/schemas/APITokenScope"
+          example: [profile:read, reminders:read, reminders:write]
+        expires_in_days:
+          type: integer
+          minimum: 1
+          maximum: 365
+          nullable: true
+          description: |
+            Lifetime in days. Omit it or send `null` for a token without an
+            expiry; such a token works until it is revoked.
+          example: null
+
+    CreatedToken:
+      type: object
+      additionalProperties: false
+      description: |
+        A freshly created token. `token` is the only time the plaintext is
+        returned: it is not stored anywhere and cannot be shown again.
+      required:
+        - token
+        - api_token
+      properties:
+        token:
+          type: string
+          description: |
+            The secret to paste into the client. It starts with `cv_pat_` and
+            must be sent as `Authorization: Bearer <token>`.
+          example: cv_pat_9xQ2mB7kZ1cR4tY6uI8oP0aS3dF5gH7jK9lM2nB4vC6
+        api_token:
+          $ref: "#/components/schemas/APIToken"
+
     Health:
       type: object
       additionalProperties: false

@@ -30,6 +30,37 @@ type Session struct {
 	// than the Authorization header. Mutating cookie requests need a JSON body
 	// (CSRF protection on top of SameSite=Lax).
 	FromCookie bool
+	// Scopes are the permissions of a personal access token. A session is empty
+	// here: it carries the full rights of its user.
+	Scopes []string
+	// APITokenID is the api_tokens.id when the request was authenticated with a
+	// personal access token.
+	APITokenID string
+}
+
+// IsAPIToken reports whether the caller is a personal access token rather than
+// an interactive session.
+func (s Session) IsAPIToken() bool { return s.APITokenID != "" }
+
+// HasScope reports whether the caller may perform an operation guarded by
+// scope. A session always may: scopes only restrict personal access tokens.
+//
+// Any token that carries at least one scope may read its own profile, so
+// profile:read is implied by any other grant; a token created without scopes
+// does not exist.
+func (s Session) HasScope(scope string) bool {
+	if !s.IsAPIToken() {
+		return true
+	}
+	if scope == ScopeProfileRead && len(s.Scopes) > 0 {
+		return true
+	}
+	for _, granted := range s.Scopes {
+		if granted == scope {
+			return true
+		}
+	}
+	return false
 }
 
 // CreateSession issues a session for a principal. kind selects the transport:
@@ -71,11 +102,15 @@ func (s *Service) CreateSession(ctx context.Context, principalID, kind string) (
 	}, nil
 }
 
-// ResolveSession authenticates an HTTP request. A Bearer token (Mini App) wins
-// over the cookie; each session kind is only accepted through its own
-// transport, so a cookie value is never usable as a Bearer token.
+// ResolveSession authenticates an HTTP request. A Bearer token (Mini App or
+// personal access token) wins over the cookie; each session kind is only
+// accepted through its own transport, so a cookie value is never usable as a
+// Bearer token.
 func (s *Service) ResolveSession(ctx context.Context, r *http.Request) (Session, bool) {
 	if token := bearerToken(r); token != "" {
+		if IsAPIToken(token) {
+			return s.ResolveAPIToken(ctx, token, r)
+		}
 		return s.sessionFromToken(ctx, token, false)
 	}
 	if cookie, err := r.Cookie(SessionCookieName); err == nil && cookie.Value != "" {
@@ -168,3 +203,8 @@ func bearerToken(r *http.Request) string {
 	}
 	return strings.TrimSpace(token)
 }
+
+// BearerToken exposes the Authorization bearer value to other adapters. The
+// MCP endpoint resolves a personal access token without the session logic, so
+// it needs the same header parsing as the HTTP API.
+func BearerToken(r *http.Request) string { return bearerToken(r) }

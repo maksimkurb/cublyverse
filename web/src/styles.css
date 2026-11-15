@@ -380,3 +380,167 @@ body {
 .profile__logout {
   margin-top: 0.5rem;
 }
+
+/* --- tokens -------------------------------------------------------------- */
+
+.screen__subtitle {
+  margin: -0.5rem 0 0;
+  color: var(--tgui--hint_color);
+  font-size: 0.9rem;
+}
+
+.token-row {
+  border-radius: 0.9rem;
+  background: var(--tgui--section_bg_color);
+}
+
+.token-row--inactive {
+  opacity: 0.65;
+}
+
+.token-row__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.token-row__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.token-row__name {
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.token-badge {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--tgui--link_color);
+  color: var(--tgui--button_text_color, #fff);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.token-badge--inactive {
+  background: var(--tgui--secondary_bg_color);
+  color: var(--tgui--hint_color);
+}
+
+.token-row__prefix {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--tgui--subtitle_text_color);
+  overflow-wrap: anywhere;
+}
+
+.token-row__scopes {
+  color: var(--tgui--text_color);
+  font-size: 0.85rem;
+}
+
+.token-row__meta {
+  color: var(--tgui--hint_color);
+  font-size: 0.8rem;
+}
+
+.token-row__revoke {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  color: var(--tgui--destructive_text_color, #d92d20);
+}
+
+.token-row__revoke--armed {
+  font-weight: 600;
+}
+
+.token-editor__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.token-editor__title {
+  flex: 1;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.token-editor__spacer {
+  width: 2rem;
+}
+
+.token-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.5rem 1rem 1.5rem;
+}
+
+.token-form__scopes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.token-form__scopes legend {
+  padding: 0;
+  color: var(--tgui--hint_color);
+  font-size: 0.85rem;
+}
+
+.token-form__scope {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.token-form__scope-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.token-form__scope-label {
+  font-weight: 500;
+}
+
+.token-form__scope-description,
+.token-form__note {
+  margin: 0;
+  color: var(--tgui--hint_color);
+  font-size: 0.8rem;
+}
+
+.token-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.5rem 1rem 1.5rem;
+}
+
+.token-reveal__value {
+  display: block;
+  padding: 0.75rem;
+  border-radius: 0.6rem;
+  background: var(--tgui--secondary_bg_color);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.token-reveal__hint {
+  margin: 0;
+  color: var(--tgui--hint_color);
+  font-size: 0.8rem;
+}

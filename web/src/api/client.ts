@@ -10,6 +10,10 @@ export type ReminderOccurrence = components["schemas"]["ReminderOccurrence"];
 export type CreateReminderRequest = components["schemas"]["CreateReminderRequest"];
 export type UpdateReminderRequest = components["schemas"]["UpdateReminderRequest"];
 export type TelegramAuthResponse = components["schemas"]["TelegramAuthResponse"];
+export type APIToken = components["schemas"]["APIToken"];
+export type APITokenScope = components["schemas"]["APITokenScope"];
+export type CreateTokenRequest = components["schemas"]["CreateTokenRequest"];
+export type CreatedToken = components["schemas"]["CreatedToken"];
 export type ApiError = components["schemas"]["Error"];
 
 /** Fetch implementation accepted by the client factory (injectable in tests). */

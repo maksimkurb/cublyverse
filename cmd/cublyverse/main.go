@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,7 +21,10 @@ import (
 
 	"github.com/maksimkurb/cublyverse/internal/app"
 	"github.com/maksimkurb/cublyverse/internal/config"
+	"github.com/maksimkurb/cublyverse/internal/features/reminders"
+	"github.com/maksimkurb/cublyverse/internal/mcpserver"
 	"github.com/maksimkurb/cublyverse/internal/store"
+	"github.com/maksimkurb/cublyverse/internal/version"
 )
 
 const usage = `usage: cublyverse <command> [arguments]
@@ -30,6 +34,9 @@ commands:
   migrate [up|status]
                    apply pending database migrations (default: up)
                    or print their state
+  docs mcp [--write] [--names]
+                   print the MCP tool reference, rewrite docs/MCP.md between
+                   the generated markers, or list the registered tool names
 
 Run "cublyverse <command> -h" for the flags of a command.
 `
@@ -57,6 +64,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runServe(ctx, args[1:], stdout, stderr)
 	case "migrate":
 		return runMigrate(ctx, args[1:], stdout, stderr)
+	case "docs":
+		return runDocs(ctx, args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return nil
@@ -139,5 +148,54 @@ func runMigrate(ctx context.Context, args []string, stdout, stderr io.Writer) er
 		return writer.Flush()
 	default:
 		return fmt.Errorf("unknown migrate command %q, want up or status", command)
+	}
+}
+
+// runDocs renders documentation that is derived from code. `docs mcp` exists so
+// docs/MCP.md cannot drift from the registered tools: make gen rewrites the
+// generated block, and make check fails when it differs.
+func runDocs(_ context.Context, args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 {
+		fmt.Fprint(stderr, usage)
+		return errors.New("docs requires a topic: mcp")
+	}
+	if args[0] != "mcp" {
+		return fmt.Errorf("unknown docs topic %q, want mcp", args[0])
+	}
+
+	flags := flag.NewFlagSet("docs mcp", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	write := flags.Bool("write", false, "rewrite the generated block of the documentation file")
+	names := flags.Bool("names", false, "print the registered tool names, one per line")
+	file := flags.String("file", "docs/MCP.md", "documentation file updated by --write")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		return fmt.Errorf("docs mcp takes no arguments, got %q", flags.Arg(0))
+	}
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// The documentation server has no service dependencies: listing tools only
+	// needs the registrations, never a database or a messenger.
+	server := mcpserver.New(mcpserver.Deps{Version: version.String(), Logger: logger})
+	reminders.NewFeature(nil, logger).RegisterMCP(server)
+
+	ctx := context.Background()
+	docs, err := server.ToolDocs(ctx)
+	if err != nil {
+		return err
+	}
+	switch {
+	case *names:
+		for _, name := range mcpserver.ToolNames(docs) {
+			fmt.Fprintln(stdout, name)
+		}
+		return nil
+	case *write:
+		return mcpserver.UpdateToolsBlock(*file, docs)
+	default:
+		fmt.Fprint(stdout, mcpserver.RenderToolsMarkdown(docs))
+		return nil
 	}
 }

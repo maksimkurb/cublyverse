@@ -23,15 +23,15 @@ SQLC         := $(GO) tool sqlc
 
 .DEFAULT_GOAL := check
 
-.PHONY: all gen gen-go gen-web gen-check build build-web build-go \
-        test test-go test-web lint lint-go lint-web typecheck check vet \
-        dev migrate clean
+.PHONY: all gen gen-go gen-web gen-docs gen-check build build-web build-go \
+        test test-go test-web lint lint-go lint-web typecheck check check-docs \
+        vet dev migrate clean
 
 all: check
 
 # --- code generation -------------------------------------------------------
 
-gen: gen-go gen-web
+gen: gen-go gen-web gen-docs
 
 gen-go:
 	$(OAPI_CODEGEN) -config api/oapi-codegen.yaml api/openapi.yaml
@@ -39,6 +39,10 @@ gen-go:
 
 gen-web: $(WEB_STAMP)
 	cd $(WEB_DIR) && $(PNPM) run gen
+
+# Rewrites the generated block of docs/MCP.md from the registered tools.
+gen-docs:
+	$(GO) run ./cmd/cublyverse docs mcp --write
 
 # Installs the WebApp dependencies once per lockfile change.
 $(WEB_STAMP): $(WEB_DIR)/package.json $(WEB_DIR)/pnpm-lock.yaml $(WEB_DIR)/pnpm-workspace.yaml
@@ -84,7 +88,12 @@ lint-web: $(WEB_STAMP)
 typecheck: $(WEB_STAMP)
 	cd $(WEB_DIR) && $(PNPM) run typecheck
 
-check: gen-check lint test
+check: gen-check check-docs lint test
+
+# Fails when a registered MCP tool or a configuration variable is undocumented.
+check-docs:
+	@./scripts/check-docs.sh
+
 
 # --- run -------------------------------------------------------------------
 

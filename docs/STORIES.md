@@ -259,14 +259,27 @@ Job с тикером 15 с: выбрать должные (`next_due_at <= now`
 
 ## M5 — MCP
 
-### ⬜ M5-1 — Персональные токены
+### ✅ M5-1 — Персональные токены
 Таблица `api_tokens`; API create/list/revoke; экран в WebApp; токен
 показывается один раз; Bearer-PAT принимается API и MCP.
 
-### ⬜ M5-2 — MCP-сервер и инструменты
+Сделано: миграция `00008_api_tokens`; `internal/auth` (формат `cv_pat_`, sha256,
+реестр областей `profile:read`/`reminders:read`/`reminders:write`, отзыв,
+`last_used_at` раз в минуту, корзина неудачных попыток на IP); тег `tokens` в
+OpenAPI; middleware проверяет scope и запрещает PAT управление токенами и
+`PATCH /me`; экран `web/src/features/tokens` с одноразовым показом секрета.
+
+### ✅ M5-2 — MCP-сервер и инструменты
 `/mcp` (Streamable HTTP), авторизация PAT. Инструменты: `whoami`,
 `reminders_list`, `reminders_create`, `reminders_update`, `reminders_delete`,
 `reminders_complete` — все через сервис фичи. КП: тест через клиент SDK.
+
+Сделано: `github.com/modelcontextprotocol/go-sdk` v1.8.0, stateless `/mcp`,
+PAT-only авторизация, `Principal` в контексте, `Feature.RegisterMCP` для
+инструментов фич, `reminders_get` дополнительно к списку; тесты через
+in-memory транспорт и реальный Streamable HTTP; `docs/MCP.md` генерируется
+командой `cublyverse docs mcp` и проверяется в `make check` вместе с
+`scripts/check-docs.sh`.
 
 ---
 

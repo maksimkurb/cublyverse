@@ -52,6 +52,12 @@ type AuthService interface {
 	AuthenticateTelegram(ctx context.Context, initData string) (auth.TelegramAuthResult, error)
 	// ClearedSessionCookie serialises an expired session cookie.
 	ClearedSessionCookie() string
+	// ListAPITokens returns every personal access token of a user.
+	ListAPITokens(ctx context.Context, principalID string) ([]auth.APIToken, error)
+	// CreateAPIToken issues a token and returns its only plaintext copy.
+	CreateAPIToken(ctx context.Context, principalID, name string, scopes []string, expiresInDays *int) (auth.APIToken, string, error)
+	// RevokeAPIToken invalidates a token of the user.
+	RevokeAPIToken(ctx context.Context, principalID, id string) error
 }
 
 // Deps are the collaborators the HTTP layer needs.
@@ -77,6 +83,10 @@ type Deps struct {
 	// Reminders serves the reminders feature. Without it the reminders
 	// operations answer 500: it is always wired by internal/app.
 	Reminders reminders.API
+	// MCP serves the Model Context Protocol endpoint at /mcp. It performs its
+	// own personal access token authentication, so it is mounted outside the
+	// session middleware.
+	MCP http.Handler
 }
 
 // New builds the root HTTP handler: API, probes, documentation and the WebApp.
@@ -127,6 +137,13 @@ func New(deps Deps) http.Handler {
 
 	if deps.AuthPages != nil {
 		mux.Handle("/auth/", deps.AuthPages)
+	}
+
+	// The MCP endpoint authenticates personal access tokens itself and therefore
+	// sits outside the API prefix and its session middleware.
+	if deps.MCP != nil {
+		mux.Handle("/mcp", deps.MCP)
+		mux.Handle("/mcp/", deps.MCP)
 	}
 
 	mux.HandleFunc("GET /healthz", h.healthz)

@@ -19,6 +19,7 @@ import (
 	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/httpapi"
 	"github.com/maksimkurb/cublyverse/internal/interaction/postgres"
+	"github.com/maksimkurb/cublyverse/internal/mcpserver"
 	"github.com/maksimkurb/cublyverse/internal/store"
 	"github.com/maksimkurb/cublyverse/internal/version"
 	unibot "github.com/maksimkurb/cublyverse/unibot"
@@ -48,6 +49,7 @@ type App struct {
 	auth    *auth.Service
 	runtime *unibot.Runtime
 	router  *bot.Router
+	mcp     *mcpserver.Server
 
 	// delivery is the reminders messenger adapter; it is attached to the
 	// runtime in startBot.
@@ -100,8 +102,28 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 
 	registry := NewRegistry(reminders.NewFeature(reminderService, logger,
 		reminders.WithTickInterval(cfg.RemindersTickIntervalOr()),
+		reminders.WithTimezoneLookup(func(ctx context.Context, principalID string) (string, error) {
+			profile, err := authService.Profile(ctx, principalID)
+			if err != nil {
+				return "", err
+			}
+			return profile.User.Timezone, nil
+		}),
 	))
 	logger.Info("features registered", slog.Any("features", registry.Names()))
+
+	// The MCP endpoint is PAT only: the token resolves to the same principal the
+	// HTTP API and the bot use, and the features register their tools through
+	// the registry.
+	mcpServer := mcpserver.New(mcpserver.Deps{
+		Version: version.String(),
+		Logger:  logger,
+		Profile: authService.Profile,
+		Authenticate: func(ctx context.Context, r *http.Request) (auth.Session, bool) {
+			return authService.ResolveAPIToken(ctx, auth.BearerToken(r), r)
+		},
+	})
+	registry.RegisterMCP(mcpServer)
 
 	interactions := postgres.New(st)
 
@@ -112,6 +134,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		registry: registry,
 		jobs:     NewRunner(logger),
 		auth:     authService,
+		mcp:      mcpServer,
 		delivery: delivery,
 	}
 
@@ -124,6 +147,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		Auth:      authService,
 		AuthPages: authService.Handler(),
 		Reminders: reminderService,
+		MCP:       mcpServer.Handler(),
 	})
 
 	application.server = &http.Server{
@@ -301,6 +325,9 @@ func (a *App) Store() *store.Store { return a.store }
 
 // Auth returns the identity service.
 func (a *App) Auth() *auth.Service { return a.auth }
+
+// MCP returns the MCP server. Tests use it with the in-memory transport.
+func (a *App) MCP() *mcpserver.Server { return a.mcp }
 
 // Router returns the bot router, or nil when no messenger transport is
 // configured.

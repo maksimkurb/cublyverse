@@ -101,3 +101,24 @@ func TestHandlerWithoutIndexServesStub(t *testing.T) {
 		t.Errorf("handler without index.html must serve the stub page, got:\n%s", body)
 	}
 }
+
+func TestHandlerServesFonts(t *testing.T) {
+	handler := newHandler(fstest.MapFS{
+		"index.html":          {Data: []byte("<html></html>")},
+		"fonts/onest.woff2":   {Data: []byte("wOF2")},
+		"assets/index-abc.js": {Data: []byte("x")},
+	})
+
+	response, _ := get(t, handler, "/fonts/onest.woff2")
+	if got, want := response.Header.Get("Content-Type"), "font/woff2"; got != want {
+		t.Errorf("Content-Type = %q, want %q", got, want)
+	}
+	if got := response.Header.Get("Cache-Control"); strings.Contains(got, "immutable") {
+		t.Errorf("fonts are not fingerprinted, Cache-Control = %q", got)
+	}
+
+	response, _ = get(t, handler, "/assets/index-abc.js")
+	if got := response.Header.Get("Cache-Control"); !strings.Contains(got, "immutable") {
+		t.Errorf("fingerprinted asset Cache-Control = %q, want immutable", got)
+	}
+}

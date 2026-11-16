@@ -21,7 +21,26 @@ type pageView struct {
 }
 
 // pageStyle is shared by every page so the sign-in surface stays one design.
+// The brand fonts are the WebApp's own files, served from /app/fonts/.
 const pageStyle = `
+    @font-face { font-family: "Unbounded"; font-weight: 100 900; font-display: swap;
+      src: url("/app/fonts/unbounded-cyrillic-wght-normal.woff2") format("woff2");
+      unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+    @font-face { font-family: "Unbounded"; font-weight: 100 900; font-display: swap;
+      src: url("/app/fonts/unbounded-latin-wght-normal.woff2") format("woff2");
+      unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+    @font-face { font-family: "Onest"; font-weight: 100 900; font-display: swap;
+      src: url("/app/fonts/onest-cyrillic-wght-normal.woff2") format("woff2");
+      unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+    @font-face { font-family: "Onest"; font-weight: 100 900; font-display: swap;
+      src: url("/app/fonts/onest-latin-wght-normal.woff2") format("woff2");
+      unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+    @font-face { font-family: "JetBrains Mono"; font-weight: 100 900; font-display: swap;
+      src: url("/app/fonts/jetbrains-mono-cyrillic-wght-normal.woff2") format("woff2");
+      unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+    @font-face { font-family: "JetBrains Mono"; font-weight: 100 900; font-display: swap;
+      src: url("/app/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+      unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
     :root { color-scheme: dark; }
     * { box-sizing: border-box; }
     body {
@@ -87,9 +106,6 @@ func pageTemplate(body string) *template.Template {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} — Cublyverse</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700&family=Onest:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
   <style>` + pageStyle + `</style>
 </head>
 <body>` + pageBrand + `

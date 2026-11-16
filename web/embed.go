@@ -10,6 +10,7 @@ import (
 	"embed"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
@@ -21,6 +22,12 @@ import (
 //
 //go:embed all:dist
 var distFS embed.FS
+
+func init() {
+	// A minimal container has no mime.types, and Go's built-in table lacks
+	// woff2; without it the font would be sniffed as octet-stream.
+	_ = mime.AddExtensionType(".woff2", "font/woff2")
+}
 
 // indexFile is the entry point of the single page application.
 const indexFile = "index.html"
@@ -69,11 +76,15 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if name != "" {
 		if info, err := fs.Stat(h.fsys, name); err == nil && !info.IsDir() {
-			if name != indexFile {
+			switch {
+			case name == indexFile:
+				w.Header().Set("Cache-Control", "no-cache")
+			case strings.HasPrefix(name, "fonts/"):
+				// Copied from public/ as is, so the names are not fingerprinted.
+				w.Header().Set("Cache-Control", "public, max-age=604800")
+			default:
 				// Vite fingerprints asset names, so they never change.
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-			} else {
-				w.Header().Set("Cache-Control", "no-cache")
 			}
 			h.files.ServeHTTP(w, r)
 			return

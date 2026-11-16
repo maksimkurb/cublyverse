@@ -71,6 +71,7 @@
   --text: #15171c;
   --muted: #5a5f6b;
   --line: #15171c;
+  --line-strong: #15171c;
   --line-soft: #c9ccc2;
   --track: #e4e6dd;
   --solid-bg: #15171c;
@@ -99,8 +100,12 @@
   --surface: #1b1e25;
   --text: #f3f4ef;
   --muted: #a4a9b4;
-  --line: #f3f4ef;
-  --line-soft: #3a3f4a;
+  --line: #3d424d;
+  --line-strong: #f3f4ef;
+  --line-soft: #2e323b;
+  --logo-line: #f3f4ef;
+  --border: 1px solid var(--line);
+  --lift: 3px 3px 0 #000;
   --track: #262a33;
   --solid-bg: #f3f4ef;
   --solid-text: #15171c;
@@ -381,7 +386,7 @@ ul {
 }
 
 .cv-switch[data-checked] {
-  border-color: var(--line);
+  border-color: var(--line-strong);
   background: var(--lime);
 }
 
@@ -438,7 +443,7 @@ ul {
 }
 
 .cv-segmented__item[aria-pressed="true"] {
-  border-color: var(--line);
+  border-color: var(--line-strong);
   background: var(--surface);
   color: var(--text);
   font-weight: 600;
@@ -627,7 +632,7 @@ ul {
 }
 
 .cv-nav__item[aria-current="page"] .cv-nav__icon {
-  border-color: var(--line);
+  border-color: var(--line-strong);
   background: var(--lime);
   color: var(--ink);
 }

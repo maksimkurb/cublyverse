@@ -44,8 +44,8 @@ export function browserTheme(win: HostWindow): HostTheme {
 /**
  * Copies Telegram theme parameters to CSS custom properties on `<html>`.
  *
- * telegram-ui reads the same `--tg-theme-*` variables, so its components follow
- * the Telegram client theme without any extra wiring.
+ * `styles.css` switches its palette on `data-theme`; the `--tg-theme-*`
+ * variables stay available for one-off tweaks.
  */
 export function applyTelegramTheme(win: HostWindow, webApp: TelegramWebApp): HostTheme {
   const theme: HostTheme = webApp.colorScheme === "dark" ? "dark" : "light";

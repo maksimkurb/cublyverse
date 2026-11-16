@@ -35,6 +35,14 @@ export function useDeleteReminder() {
   });
 }
 
+/** Confirms the pending occurrence, like «Выполнено» in the chat. */
+export function useCompleteReminder() {
+  const queryClient = useQueryClient();
+  return $api.useMutation("post", "/reminders/{id}/complete", {
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: remindersQueryKey }),
+  });
+}
+
 /** Body sent by the toggle: the whole rule, because `PUT` replaces it. */
 export function toggleBody(reminder: Reminder, enabled: boolean): UpdateReminderRequest {
   return {

@@ -22,34 +22,61 @@ type pageView struct {
 
 // pageStyle is shared by every page so the sign-in surface stays one design.
 const pageStyle = `
-    :root { color-scheme: light dark; }
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
     body {
-      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-      margin: 0; padding: 2rem 1rem; background: #f5f5f7; color: #111827;
+      font: 16px/1.5 Onest, system-ui, -apple-system, "Segoe UI", sans-serif;
+      margin: 0; min-height: 100vh; min-height: 100dvh; padding: 28px 20px 24px;
+      display: flex; flex-direction: column; gap: 24px;
+      background: #15171c; color: #fff;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand span {
+      font: 700 16px Unbounded, Onest, system-ui, sans-serif; letter-spacing: -0.01em;
     }
     main {
-      max-width: 30rem; margin: 0 auto; background: #fff; border-radius: 1rem;
-      padding: 1.5rem; box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+      flex: 1; display: flex; flex-direction: column; justify-content: center;
+      width: 100%; max-width: 27.5rem; margin: 0 auto;
     }
-    h1 { font-size: 1.35rem; margin: 0 0 1rem; }
-    p { margin: 0 0 1rem; }
-    .muted { color: #6b7280; font-size: .9rem; }
+    h1 {
+      font: 700 1.75rem/1.12 Unbounded, Onest, system-ui, sans-serif;
+      letter-spacing: -0.03em; margin: 0 0 1.25rem;
+    }
+    p { margin: 0 0 1rem; color: #c5c8d0; }
+    p strong { color: #fff; }
+    a { color: #c9f23d; }
+    .muted { font-size: .9rem; }
+    form { margin: .5rem 0 0; }
     button, .button {
-      display: inline-block; width: 100%; box-sizing: border-box; padding: .85rem 1rem;
-      border: 0; border-radius: .75rem; background: #2563eb; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; min-height: 52px; padding: 0 1rem;
+      border: 1.5px solid #fff; border-radius: 10px; background: #c9f23d; color: #15171c;
+      box-shadow: 3px 3px 0 #fff;
       font: inherit; font-weight: 600; text-align: center; text-decoration: none;
       cursor: pointer;
     }
-    .secondary { background: #e5e7eb; color: #111827; margin-top: .5rem; }
-    code { background: #f3f4f6; border-radius: .35rem; padding: .1rem .35rem; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #0b0f19; color: #f9fafb; }
-      main { background: #111827; box-shadow: none; }
-      .muted { color: #9ca3af; }
-      code { background: #1f2937; }
-      .secondary { background: #374151; color: #f9fafb; }
+    button:active, .button:active { transform: translate(3px, 3px); box-shadow: none; }
+    .secondary {
+      background: transparent; color: #fff; border-color: #5a5f6b; box-shadow: none;
+      margin-top: .75rem;
+    }
+    :focus-visible { outline: 3px solid #5546e8; outline-offset: 2px; }
+    code {
+      font: 500 .9em "JetBrains Mono", ui-monospace, monospace;
+      background: #262a33; color: #fff; border-radius: 6px; padding: .1rem .4rem;
     }
 `
+
+// pageBrand is the cube mark and the wordmark, the same as in the WebApp.
+const pageBrand = `
+  <div class="brand">
+    <svg aria-hidden="true" width="30" height="30" viewBox="0 0 28 28" stroke="#fff" stroke-width="1.5" stroke-linejoin="round">
+      <path d="M14 2 25 8 14 14 3 8Z" fill="#c9f23d"/>
+      <path d="M3 8 14 14V26L3 20Z" fill="#15171c"/>
+      <path d="M25 8 14 14V26L25 20Z" fill="#5546e8"/>
+    </svg>
+    <span>cublyverse</span>
+  </div>`
 
 // pageTemplate wraps body in the shared document shell. Body is trusted
 // template source written in this package, not user input.
@@ -60,9 +87,12 @@ func pageTemplate(body string) *template.Template {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} — Cublyverse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700&family=Onest:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
   <style>` + pageStyle + `</style>
 </head>
-<body>
+<body>` + pageBrand + `
   <main>
 ` + body + `
   </main>
@@ -134,7 +164,7 @@ var (
     <a class="button secondary" href="` + appPath + `">Отмена</a>`)
 
 	linkedPage = pageTemplate(`
-    <h1>✅ Аккаунт привязан</h1>
+    <h1>Аккаунт привязан</h1>
     <p>Аккаунт <strong>{{.Platform}}</strong> <code>{{.RemoteUserID}}</code>
        привязан к SSO-аккаунту <strong>{{.SSOName}}</strong>.</p>
     <p class="muted">Мы отправили подтверждение в чат. Дальше можно пользоваться

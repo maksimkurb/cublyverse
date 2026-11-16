@@ -155,7 +155,7 @@ internal/bot/             роутер команд и действий, общ�
 internal/mcpserver/       MCP-сервер и генерация справочника инструментов
 internal/app/             сборка приложения, реестр фич, фоновые задачи
 unibot/                   наш фреймворк мессенджеров
-web/                      WebApp (Vite + React + TypeScript + telegram-ui)
+web/                      WebApp (Vite + React + TypeScript + Base UI)
 deploy/                   Dockerfile, docker-compose, backup.sh
 docs/                     документация (оглавление — docs/README.md)
 scripts/                  проверки генерации и документации

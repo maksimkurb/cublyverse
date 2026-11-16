@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { Banner, Button, Checkbox, IconButton, Input, Modal, Select } from "@telegram-apps/telegram-ui";
 
 import type { APITokenScope, CreatedToken } from "../../api/client";
 import { describeApiError } from "../../api/errors";
 import { useHost, useHostBackButton } from "../../host/HostContext";
+import { Button, Checkbox, Notice, SelectField, Sheet, TextField } from "../../ui/controls";
 import { useCreateToken } from "./data";
 import { EXPIRY_OPTIONS, SCOPE_OPTIONS, buildCreateTokenRequest, emptyTokenForm } from "./tokens";
 
@@ -60,60 +60,41 @@ export function TokenCreateDialog({ onClose, onCreated }: TokenCreateDialogProps
   }
 
   return (
-    <Modal
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-      header={
-        <div className="token-editor__header">
-          <Modal.Close>
-            <IconButton aria-label="Закрыть" size="s" mode="plain">
-              ×
-            </IconButton>
-          </Modal.Close>
-          <h2 className="token-editor__title">Новый токен</h2>
-          <span className="token-editor__spacer" aria-hidden="true" />
-        </div>
-      }
-    >
-      <form className="token-form" onSubmit={handleSubmit} noValidate>
+    <Sheet title="Новый токен" onClose={onClose}>
+      <form className="cv-form" onSubmit={handleSubmit} noValidate>
         {error && (
-          <div role="alert" className="token-form__error">
-            <Banner type="inline" header="Проверьте данные" description={error} />
-          </div>
+          <Notice tone="error" title="Проверьте данные">
+            {error}
+          </Notice>
         )}
 
-        <Input
-          header="Название"
-          aria-label="Название"
+        <TextField
+          label="Название"
           placeholder="Например: Claude Code"
           maxLength={80}
           value={values.name}
           onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))}
         />
 
-        <fieldset className="token-form__scopes">
+        <fieldset className="scopes">
           <legend>Области доступа</legend>
           {SCOPE_OPTIONS.map((option) => (
-            <label key={option.value} className="token-form__scope">
+            <label key={option.value} className="scopes__item">
               <Checkbox
                 checked={values.scopes.includes(option.value)}
-                onChange={(event) => toggleScope(option.value, event.target.checked)}
+                onCheckedChange={(checked) => toggleScope(option.value, checked)}
               />
-              <span className="token-form__scope-text">
-                <span className="token-form__scope-label">{option.label}</span>
-                <span className="token-form__scope-description">{option.description}</span>
+              <span className="scopes__text">
+                <span className="scopes__label">{option.label}</span>
+                <span className="scopes__description">{option.description}</span>
               </span>
             </label>
           ))}
         </fieldset>
 
-        <Select
-          header="Срок действия"
-          aria-label="Срок действия"
+        <SelectField
+          label="Срок действия"
+          hint="Токен показывается один раз. Храните его как пароль и отзывайте, если он попал не туда."
           value={values.expiry}
           onChange={(event) => setValues((current) => ({ ...current, expiry: event.target.value }))}
         >
@@ -122,16 +103,12 @@ export function TokenCreateDialog({ onClose, onCreated }: TokenCreateDialogProps
               {option.label}
             </option>
           ))}
-        </Select>
+        </SelectField>
 
-        <p className="token-form__note">
-          Токен показывается один раз. Храните его как пароль и отзывайте, если он попал не туда.
-        </p>
-
-        <Button type="submit" size="l" stretched loading={busy} disabled={busy}>
+        <Button type="submit" variant="primary" block loading={busy}>
           Создать токен
         </Button>
       </form>
-    </Modal>
+    </Sheet>
   );
 }

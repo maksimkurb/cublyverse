@@ -86,7 +86,7 @@ describe("ReminderForm", () => {
   it("switches to monthly days and validates them", async () => {
     const { onSave } = renderForm();
     fireEvent.change(screen.getByLabelText("Что напомнить"), { target: { value: "Отчёт" } });
-    fireEvent.change(screen.getByLabelText("Расписание"), { target: { value: "monthly" } });
+    fireEvent.click(screen.getByRole("button", { name: "Числа месяца" }));
     fireEvent.change(screen.getByLabelText("Дни месяца"), { target: { value: "1, 15, 40" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 

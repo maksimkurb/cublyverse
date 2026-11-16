@@ -1,17 +1,15 @@
 import { useState } from "react";
-import { Button, List, Select, Text } from "@telegram-apps/telegram-ui";
 
 import { api, type Me } from "../api/client";
 import { useAuth } from "../auth/AuthProvider";
-import { useHostBackButton } from "../host/HostContext";
-import { navigate, usePageTitle } from "../router/router";
+import { usePageTitle } from "../router/router";
+import { Button, Notice, SelectField } from "../ui/controls";
 import { timezoneOptions } from "./timezones";
 
 /** Profile screen: user info, time zone selector and browser logout. */
 export default function ProfileScreen() {
   const { user, host, updateUser, signOut } = useAuth();
   usePageTitle("Профиль");
-  useHostBackButton(() => navigate("/"));
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,30 +47,25 @@ export default function ProfileScreen() {
   }
 
   return (
-    <main className="screen">
-      <button type="button" className="screen__back" onClick={() => navigate("/")}>
-        ← Главная
-      </button>
-      <h1 className="screen__title">Профиль</h1>
+    <div className="page">
+      <header className="page__head">
+        <h1 className="page__title">Профиль</h1>
+      </header>
 
-      <List className="profile__card">
-        <div className="profile__row">
-          <span className="profile__label">Имя</span>
-          <span>{user.display_name?.trim() || "не указано"}</span>
+      <dl className="card facts">
+        <div className="facts__row">
+          <dt>Имя</dt>
+          <dd>{user.display_name?.trim() || "не указано"}</dd>
         </div>
-        <div className="profile__row">
-          <span className="profile__label">E-mail</span>
-          <span>{user.email?.trim() || "не указан"}</span>
+        <div className="facts__row">
+          <dt>E-mail</dt>
+          <dd>{user.email?.trim() || "не указан"}</dd>
         </div>
-        <div className="profile__row">
-          <span className="profile__label">Часовой пояс</span>
-          <span>{user.timezone}</span>
-        </div>
-      </List>
+      </dl>
 
-      <Select
-        header="Часовой пояс"
-        aria-label="Часовой пояс"
+      <SelectField
+        label="Часовой пояс"
+        hint="В этом поясе считаются новые напоминания."
         value={user.timezone}
         disabled={busy}
         onChange={(event) => void changeTimezone(event.target.value)}
@@ -82,40 +75,30 @@ export default function ProfileScreen() {
             {zone}
           </option>
         ))}
-      </Select>
+      </SelectField>
 
-      {error && (
-        <p className="screen__error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <Notice tone="error">{error}</Notice>}
 
-      <section className="profile__bindings">
-        <h2 className="profile__heading">Привязанные аккаунты</h2>
-        {user.bindings.length === 0 && <Text>Мессенджеры не привязаны.</Text>}
-        {user.bindings.map((binding) => (
-          <div className="profile__binding" key={`${binding.platform}:${binding.remote_user_id}`}>
-            <strong>{platformLabel(binding.platform)}</strong>
-            <span>{binding.remote_user_id}</span>
-            <span className="profile__muted">с {formatDate(binding.verified_at)}</span>
-          </div>
-        ))}
+      <section className="page__section">
+        <h2 className="page__heading">Привязанные аккаунты</h2>
+        {user.bindings.length === 0 && <p className="page__state">Мессенджеры не привязаны.</p>}
+        <ul className="card-list">
+          {user.bindings.map((binding) => (
+            <li className="card binding" key={`${binding.platform}:${binding.remote_user_id}`}>
+              <span className="binding__platform">{platformLabel(binding.platform)}</span>
+              <span className="cv-mono">{binding.remote_user_id}</span>
+              <span className="binding__since">с {formatDate(binding.verified_at)}</span>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {!host.isTelegram && (
-        <Button
-          className="profile__logout"
-          size="l"
-          stretched
-          mode="gray"
-          loading={busy}
-          disabled={busy}
-          onClick={() => void logout()}
-        >
+        <Button block loading={busy} onClick={() => void logout()}>
           Выйти
         </Button>
       )}
-    </main>
+    </div>
   );
 }
 

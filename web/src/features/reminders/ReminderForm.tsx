@@ -1,11 +1,17 @@
 import { useState, type FormEvent } from "react";
-import { Banner, Button, Input, Select, Switch, Textarea } from "@telegram-apps/telegram-ui";
 
 import { describeApiError } from "../../api/errors";
 import { useHost } from "../../host/HostContext";
+import { Button, Notice, Segmented, Switch, TextAreaField, TextField } from "../../ui/controls";
+import { IconClose } from "../../ui/icons";
 import { type ReminderFormValues, type SavePlan, buildSavePlan, weekdayOptions } from "./form";
 
-/** Props of the reminder form. The Modal around it is rendered by the editor. */
+const SCHEDULE_KINDS = [
+  { value: "weekly", label: "Дни недели" },
+  { value: "monthly", label: "Числа месяца" },
+] as const;
+
+/** Props of the reminder form. The sheet around it is rendered by the editor. */
 export interface ReminderFormProps {
   mode: "create" | "edit";
   initial: ReminderFormValues;
@@ -20,7 +26,7 @@ export interface ReminderFormProps {
 /**
  * The editor body: text, one or more times, schedule days, repeat interval and
  * the enabled switch. Pure client state; saving is delegated to the editor so
- * the modal can close after success.
+ * the sheet can close after success.
  */
 export function ReminderForm({ mode, initial, timezone, onSave, onDelete }: ReminderFormProps) {
   const host = useHost();
@@ -108,16 +114,15 @@ export function ReminderForm({ mode, initial, timezone, onSave, onDelete }: Remi
   }
 
   return (
-    <form className="reminder-form" onSubmit={handleSubmit} noValidate>
+    <form className="cv-form" onSubmit={handleSubmit} noValidate>
       {error && (
-        <div className="reminder-form__error" role="alert">
-          <Banner type="inline" header="Проверьте данные" description={error} />
-        </div>
+        <Notice tone="error" title="Проверьте данные">
+          {error}
+        </Notice>
       )}
 
-      <Textarea
-        header="Что напомнить"
-        aria-label="Что напомнить"
+      <TextAreaField
+        label="Что напомнить"
         placeholder="Например: 💊 Выпить таблетку"
         rows={3}
         maxLength={1500}
@@ -128,49 +133,46 @@ export function ReminderForm({ mode, initial, timezone, onSave, onDelete }: Remi
       <section className="reminder-form__times" aria-label="Время напоминания">
         {values.times.map((time, index) => (
           <div className="reminder-form__time-row" key={index}>
-            <Input
+            <TextField
               type="time"
-              header={index === 0 ? "Время" : "Ещё время"}
-              aria-label={index === 0 ? "Время" : "Ещё время"}
+              mono
+              label={index === 0 ? "Время" : "Ещё время"}
               value={time}
               onChange={(event) => changeTime(index, event.target.value)}
             />
             <button
               type="button"
-              className="reminder-form__remove-time"
+              className="cv-iconbtn"
               aria-label={`Удалить время ${index + 1}`}
               disabled={values.times.length <= 1}
               onClick={() => removeTime(index)}
             >
-              ×
+              <IconClose />
             </button>
           </div>
         ))}
-        <Button type="button" size="s" mode="plain" onClick={addTime}>
+        <Button size="s" variant="ghost" onClick={addTime}>
           + Добавить время
         </Button>
-        <p className="reminder-form__note">Каждое время сохраняется как отдельное напоминание</p>
+        <p className="cv-field__hint">Каждое время сохраняется как отдельное напоминание</p>
       </section>
 
-      <Select
-        header="Расписание"
-        aria-label="Расписание"
+      <Segmented
+        label="Расписание"
         value={values.scheduleKind}
-        onChange={(event) => update("scheduleKind", event.target.value === "monthly" ? "monthly" : "weekly")}
-      >
-        <option value="weekly">По дням недели</option>
-        <option value="monthly">По дням месяца</option>
-      </Select>
+        options={SCHEDULE_KINDS}
+        onChange={(kind) => update("scheduleKind", kind)}
+      />
 
       {values.scheduleKind === "weekly" ? (
-        <div className="reminder-form__weekdays" role="group" aria-label="Дни недели">
+        <div className="weekdays" role="group" aria-label="Дни недели">
           {weekdayOptions.map(({ day, label }) => {
             const selected = values.weekdays.includes(day);
             return (
               <button
                 type="button"
                 key={day}
-                className={selected ? "weekday-chip weekday-chip--selected" : "weekday-chip"}
+                className="weekdays__day"
                 aria-pressed={selected}
                 onClick={() => toggleWeekday(day)}
               >
@@ -180,54 +182,39 @@ export function ReminderForm({ mode, initial, timezone, onSave, onDelete }: Remi
           })}
         </div>
       ) : (
-        <div className="reminder-form__monthdays">
-          <Input
-            header="Дни месяца"
-            aria-label="Дни месяца"
-            inputMode="numeric"
-            placeholder="Например: 19 или 1, 15, 30"
-            value={values.monthDays}
-            onChange={(event) => update("monthDays", event.target.value)}
-          />
-          <p className="reminder-form__note">
-            Если в месяце нет такого дня, напоминание сработает в последний день месяца.
-          </p>
-        </div>
+        <TextField
+          label="Дни месяца"
+          hint="Если в месяце нет такого дня, напоминание сработает в последний день месяца."
+          mono
+          inputMode="numeric"
+          placeholder="Например: 19 или 1, 15, 30"
+          value={values.monthDays}
+          onChange={(event) => update("monthDays", event.target.value)}
+        />
       )}
 
-      <Input
+      <TextField
         type="number"
+        mono
         min={1}
         max={1440}
-        header="Повторять, минут"
-        aria-label="Повторять, минут"
+        label="Повторять, минут"
+        hint="Бот повторяет сообщение с этим интервалом, пока не нажмёшь «Выполнено»."
         value={values.repeatMinutes}
         onChange={(event) => update("repeatMinutes", event.target.value)}
       />
 
-      <label className="reminder-form__switch">
-        <span>Включено</span>
-        <Switch
-          aria-label="Включено"
-          checked={values.enabled}
-          onChange={(event) => update("enabled", event.target.checked)}
-        />
-      </label>
+      <div className="switch-row">
+        <span aria-hidden="true">Включено</span>
+        <Switch aria-label="Включено" checked={values.enabled} onCheckedChange={(checked) => update("enabled", checked)} />
+      </div>
 
-      <Button type="submit" size="l" stretched loading={busy} disabled={busy}>
+      <Button type="submit" variant="primary" block loading={busy}>
         Сохранить
       </Button>
 
       {mode === "edit" && onDelete && (
-        <Button
-          type="button"
-          size="l"
-          stretched
-          mode="plain"
-          className={deleteArmed ? "reminder-form__delete reminder-form__delete--armed" : "reminder-form__delete"}
-          disabled={busy}
-          onClick={handleDelete}
-        >
+        <Button variant={deleteArmed ? "danger" : "ghost"} block disabled={busy} onClick={handleDelete}>
           {deleteArmed ? "Подтвердить удаление" : "Удалить напоминание"}
         </Button>
       )}

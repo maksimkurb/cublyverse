@@ -1,7 +1,6 @@
-import { IconButton, Modal } from "@telegram-apps/telegram-ui";
-
 import type { Reminder } from "../../api/client";
 import { useHostBackButton } from "../../host/HostContext";
+import { Sheet } from "../../ui/controls";
 import { ReminderForm } from "./ReminderForm";
 import { useCreateReminder, useDeleteReminder, useUpdateReminder } from "./data";
 import { emptyFormValues, formValuesFromReminder, type SavePlan } from "./form";
@@ -19,7 +18,7 @@ export interface ReminderEditorProps {
 }
 
 /**
- * Modal editor. It owns the network side of a save: `PUT` for the reminder
+ * Sheet editor. It owns the network side of a save: `PUT` for the reminder
  * being edited and one `POST` per extra time; a create is `POST`s all the way.
  */
 export function ReminderEditor({ mode, reminder, defaultTimezone, onClose, onFinished }: ReminderEditorProps) {
@@ -55,34 +54,14 @@ export function ReminderEditor({ mode, reminder, defaultTimezone, onClose, onFin
   }
 
   return (
-    <Modal
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-      header={
-        <div className="reminder-editor__header">
-          <Modal.Close>
-            <IconButton aria-label="Закрыть" size="s" mode="plain">
-              ×
-            </IconButton>
-          </Modal.Close>
-          <h2 className="reminder-editor__title">{title}</h2>
-          <span className="reminder-editor__spacer" aria-hidden="true" />
-        </div>
-      }
-    >
-      <div className="reminder-editor__body">
-        <ReminderForm
-          mode={mode}
-          initial={initial}
-          timezone={timezone}
-          onSave={save}
-          onDelete={mode === "edit" ? deleteReminder : undefined}
-        />
-      </div>
-    </Modal>
+    <Sheet title={title} onClose={onClose}>
+      <ReminderForm
+        mode={mode}
+        initial={initial}
+        timezone={timezone}
+        onSave={save}
+        onDelete={mode === "edit" ? deleteReminder : undefined}
+      />
+    </Sheet>
   );
 }

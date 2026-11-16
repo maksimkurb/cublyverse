@@ -1,12 +1,31 @@
-import { Button, Placeholder, Spinner, Text } from "@telegram-apps/telegram-ui";
+import type { ReactNode } from "react";
+
+import { Button } from "../ui/controls";
+import { Logo } from "../ui/icons";
+
+/** The dark full-screen frame of every page shown before the app opens. */
+function Gate({ title, children, action }: { title?: string; children: ReactNode; action?: ReactNode }) {
+  return (
+    <main className="cv-gate">
+      <div className="cv-gate__brand">
+        <Logo />
+        <span className="cv-wordmark">cublyverse</span>
+      </div>
+      <div className="cv-gate__body">
+        {title && <h1 className="cv-gate__title">{title}</h1>}
+        <div className="cv-gate__text">{children}</div>
+      </div>
+      {action && <div className="cv-gate__actions">{action}</div>}
+    </main>
+  );
+}
 
 /** Shown while the session is being established. */
 export function SignInProgress() {
   return (
-    <main className="screen screen--center">
-      <Spinner size="m" />
-      <Text>Загрузка…</Text>
-    </main>
+    <Gate>
+      <p role="status">Загрузка…</p>
+    </Gate>
   );
 }
 
@@ -16,50 +35,49 @@ export function SignInProgress() {
  */
 export function LoginRequiredScreen() {
   return (
-    <main className="screen">
-      <Placeholder
-        header="Нужно войти"
-        description="Войдите через SSO, чтобы открыть приложение."
-        action={
-          <a className="cv-button cv-button--primary" href="/auth/login?return_to=/app/">
-            Войти
-          </a>
-        }
-      />
-    </main>
+    <Gate
+      title="Нужно войти"
+      action={
+        <a className="cv-btn cv-btn--primary cv-btn--block" href="/auth/login?return_to=/app/">
+          Войти
+        </a>
+      }
+    >
+      <p>Войдите через SSO, чтобы открыть приложение.</p>
+    </Gate>
   );
 }
 
 /** The Telegram account has no binding yet. */
 export function LinkRequiredScreen({ linkUrl, onOpen }: { linkUrl: string; onOpen: (url: string) => void }) {
   return (
-    <main className="screen">
-      <Placeholder
-        header="Нужно привязать аккаунт"
-        description="Этот Telegram-аккаунт ещё не привязан к SSO. Привяжите его, чтобы напоминания приходили в этот чат."
-        action={
-          <Button stretched onClick={() => onOpen(linkUrl)}>
-            Привязать аккаунт
-          </Button>
-        }
-      />
-    </main>
+    <Gate
+      title="Нужно привязать аккаунт"
+      action={
+        <Button variant="primary" block onClick={() => onOpen(linkUrl)}>
+          Привязать аккаунт
+        </Button>
+      }
+    >
+      <p>
+        Этот Telegram-аккаунт ещё не привязан к SSO. Привяжите его, чтобы напоминания приходили в этот чат.
+      </p>
+    </Gate>
   );
 }
 
 /** The session could not be established or refreshed. */
 export function SessionErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <main className="screen">
-      <Placeholder
-        header="Не удалось открыть приложение"
-        description={<span role="alert">{message}</span>}
-        action={
-          <Button stretched onClick={onRetry}>
-            Повторить
-          </Button>
-        }
-      />
-    </main>
+    <Gate
+      title="Не удалось открыть приложение"
+      action={
+        <Button variant="primary" block onClick={onRetry}>
+          Повторить
+        </Button>
+      }
+    >
+      <p role="alert">{message}</p>
+    </Gate>
   );
 }

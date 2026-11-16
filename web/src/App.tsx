@@ -1,15 +1,14 @@
 import { useMemo } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { AppRoot } from "@telegram-apps/telegram-ui";
 
 import { AuthProvider, type AuthDeps } from "./auth/AuthProvider";
 import { features } from "./features/registry";
-import HomeScreen from "./HomeScreen";
-import { HostContext, useHostTheme } from "./host/HostContext";
+import { HostContext } from "./host/HostContext";
 import { host as defaultHost } from "./host/index";
 import type { HostBridge } from "./host/types";
 import ProfileScreen from "./profile/ProfileScreen";
 import { useRoute } from "./router/router";
+import { AppShell, homeRoute } from "./ui/AppShell";
 
 /** Query client shared by every screen. */
 export function createQueryClient(): QueryClient {
@@ -33,31 +32,21 @@ export interface AppProps {
 
 function RoutedScreen() {
   const route = useRoute();
-  const feature = features.find((item) => item.route === route);
-  if (feature) {
-    const Screen = feature.component;
-    return <Screen />;
-  }
-  if (route === "/profile") {
-    return <ProfileScreen />;
-  }
-  return <HomeScreen />;
-}
+  const current = route === "/" ? homeRoute : route;
+  const feature = features.find((item) => item.route === current) ?? features[0];
+  const Screen = current === "/profile" ? ProfileScreen : feature.component;
 
-function ThemedShell({ authDeps }: { authDeps?: AuthDeps }) {
-  const theme = useHostTheme();
   return (
-    <AppRoot appearance={theme} className="cv-root">
-      <AuthProvider deps={authDeps}>
-        <RoutedScreen />
-      </AuthProvider>
-    </AppRoot>
+    <AppShell route={route}>
+      <Screen />
+    </AppShell>
   );
 }
 
 /**
- * WebApp root: query cache, host bridge, telegram-ui root (theme + portals),
- * auth gate and router.
+ * WebApp root: query cache, host bridge, auth gate and the routed shell. The
+ * colour scheme is the `data-theme` attribute the host bridge keeps on
+ * `<html>`.
  */
 export default function App({ host = defaultHost, queryClient, authDeps }: AppProps) {
   const client = useMemo(() => queryClient ?? createQueryClient(), [queryClient]);
@@ -65,7 +54,11 @@ export default function App({ host = defaultHost, queryClient, authDeps }: AppPr
   return (
     <QueryClientProvider client={client}>
       <HostContext.Provider value={host}>
-        <ThemedShell authDeps={authDeps} />
+        <div className="cv-root">
+          <AuthProvider deps={authDeps}>
+            <RoutedScreen />
+          </AuthProvider>
+        </div>
       </HostContext.Provider>
     </QueryClientProvider>
   );

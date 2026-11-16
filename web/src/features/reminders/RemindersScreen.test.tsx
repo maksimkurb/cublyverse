@@ -6,7 +6,7 @@ import { makeFakeHost } from "../../test/fakeHost";
 import { makeReminder } from "../../test/fixtures";
 import { renderWithHost } from "../../test/render";
 import RemindersScreen from "./RemindersScreen";
-import { useRemindersQuery, useUpdateReminder } from "./data";
+import { useCompleteReminder, useRemindersQuery, useUpdateReminder } from "./data";
 
 vi.mock("./data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./data")>();
@@ -14,6 +14,7 @@ vi.mock("./data", async (importOriginal) => {
     ...actual,
     useRemindersQuery: vi.fn(),
     useUpdateReminder: vi.fn(),
+    useCompleteReminder: vi.fn(),
   };
 });
 
@@ -41,6 +42,7 @@ vi.mock("../../auth/AuthProvider", async (importOriginal) => {
 
 const queryMock = vi.mocked(useRemindersQuery);
 const updateMock = vi.mocked(useUpdateReminder);
+const completeMock = vi.mocked(useCompleteReminder);
 
 function queryResult(overrides: Record<string, unknown>) {
   return {
@@ -62,6 +64,10 @@ function renderScreen(host = makeFakeHost()) {
 beforeEach(() => {
   queryMock.mockReset();
   updateMock.mockReset();
+  completeMock.mockReset();
+  completeMock.mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+  } as unknown as ReturnType<typeof useCompleteReminder>);
   updateMock.mockReturnValue({
     mutateAsync: vi.fn().mockResolvedValue(undefined),
   } as unknown as ReturnType<typeof useUpdateReminder>);
@@ -77,7 +83,62 @@ describe("RemindersScreen", () => {
     expect(screen.getByText("Пн, Ср, Пт · повтор каждые 10 мин")).toBeInTheDocument();
     expect(screen.getByText("Следующее: 12.01 09:30")).toBeInTheDocument();
     expect(screen.getByRole("switch")).toBeChecked();
-    expect(screen.getByRole("button", { name: "＋ Добавить напоминание" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Новое напоминание" })).toBeInTheDocument();
+  });
+
+  it("confirms a pending occurrence with the Выполнено button", async () => {
+    queryMock.mockReturnValue(
+      queryResult({
+        data: [
+          makeReminder({
+            active_occurrence: {
+              id: "33333333-3333-4333-8333-333333333333",
+              reminder_id: "11111111-1111-4111-8111-111111111111",
+              scheduled_at: "2026-01-12T06:30:00Z",
+              first_sent_at: "2026-01-12T06:30:00Z",
+              repeat_count: 1,
+              next_repeat_at: null,
+              status: "active",
+              completed_at: null,
+            },
+          }),
+        ],
+      }),
+    );
+    const mutateAsync = vi.fn().mockResolvedValue(undefined);
+    completeMock.mockReturnValue({ mutateAsync } as unknown as ReturnType<typeof useCompleteReminder>);
+    renderScreen();
+
+    expect(screen.getByText("Ждёт отметки")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Выполнено" }));
+
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({
+        params: { path: { id: "11111111-1111-4111-8111-111111111111" } },
+      }),
+    );
+  });
+
+  it("filters the list by schedule kind", () => {
+    queryMock.mockReturnValue(
+      queryResult({
+        data: [
+          makeReminder(),
+          makeReminder({
+            id: "44444444-4444-4444-8444-444444444444",
+            message: "Показания счётчиков",
+            schedule_kind: "monthly",
+            schedule_days: [20],
+          }),
+        ],
+      }),
+    );
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "По числам" }));
+
+    expect(screen.queryByText("Выпить таблетку")).not.toBeInTheDocument();
+    expect(screen.getByText("Показания счётчиков")).toBeInTheDocument();
   });
 
   it("shows the empty state", () => {

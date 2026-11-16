@@ -58,7 +58,8 @@ describe("TokensScreen", () => {
 
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
     expect(screen.getByText("cv_pat_9xQ2mB7k…")).toBeInTheDocument();
-    expect(screen.getByText("Профиль, Чтение напоминаний")).toBeInTheDocument();
+    expect(screen.getByText("profile:read")).toBeInTheDocument();
+    expect(screen.getByText("reminders:read")).toBeInTheDocument();
     expect(screen.getByText("Активен")).toBeInTheDocument();
     expect(screen.getByText(/Создан: 15\.01\.2026/)).toBeInTheDocument();
     expect(screen.getByText(/до 15\.04\.2027/)).toBeInTheDocument();
@@ -127,7 +128,7 @@ describe("TokensScreen", () => {
 
     renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "＋ Создать токен" }));
+    fireEvent.click(screen.getByRole("button", { name: "Новый токен" }));
     fireEvent.change(screen.getByLabelText("Название"), { target: { value: "Новый токен" } });
     fireEvent.click(screen.getByRole("button", { name: "Создать токен" }));
 

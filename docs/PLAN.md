@@ -28,7 +28,7 @@ PostgreSQL, входом SSO с безопасной привязкой месс
 | API | spec-first: `api/openapi.yaml` (OpenAPI 3.0.3) — единственный источник правды | требование «OpenAPI + кодогенерация» |
 | Кодген сервера | `oapi-codegen` → strict server на `net/http` + типы | стандарт для Go, без фреймворка |
 | Кодген клиента | `openapi-typescript` + `openapi-fetch` + `openapi-react-query` | типы и клиент для WebApp |
-| WebApp | React 18 + Vite + TypeScript + `@telegram-apps/telegram-ui`, сборка встраивается в бинарник (`embed`) | тот же UI-кит, что в n8n-версии |
+| WebApp | React 18 + Vite + TypeScript + `@base-ui/react` и своя дизайн-система (`docs/WEBAPP.md`), сборка встраивается в бинарник (`embed`) | свой стиль и лёгкий бандл; сначала был `@telegram-apps/telegram-ui` |
 | MCP | официальный `github.com/modelcontextprotocol/go-sdk`, Streamable HTTP на `/mcp` | требование |
 | Идентичность | `users` в PG; `PrincipalID` = `users.id` (UUID); ключ пользователя — `(oidc_issuer, oidc_subject)` | SSO — источник истины |
 | Сессии WebApp | непрозрачный токен, в БД хранится sha256; Bearer для Mini App, HttpOnly-cookie для браузера | без JWT, мгновенный отзыв |

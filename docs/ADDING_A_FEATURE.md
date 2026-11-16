@@ -232,7 +232,7 @@ web/src/features/reminders/format.ts       чистые помощники
 web/src/features/registry.ts               одна строка на фичу
 ```
 
-- `FeatureScreen` описывает экран; главный экран и роутер собираются из
+- `FeatureScreen` описывает экран; навигация и роутер собираются из
   реестра `features`, отдельный маршрут регистрировать не нужно.
 - Данные — через `web/src/api/query.ts` (`openapi-react-query`) и типы из
   `web/src/api/schema.d.ts`; после изменения API — `make gen`.

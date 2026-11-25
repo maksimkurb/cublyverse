@@ -74,6 +74,20 @@ tags:
       Applications connected through OAuth (MCP clients such as Claude). Each
       connection is one authorization the user approved on the consent page. The
       list and revocation are available only from an interactive session.
+  - name: workspaces
+    description: |
+      Shared workspaces and their members. A workspace is a named space whose
+      members have equal access to its data; one user may belong to several.
+      Invitations are direct: a member is added by picking a user who has signed
+      in at least once. A workspace is invisible to non-members: an unknown id
+      and a foreign one both answer `404`.
+  - name: craft
+    description: |
+      Craft supplies ("Бусинки"): the shared material catalogue, the private
+      items of a workspace and its stock. Reference data (categories and
+      manufacturers) is global; items created from the WebApp belong to one
+      workspace, while items of the shared catalogue are read-only. Every
+      operation is scoped by membership in the workspace.
 
 paths:
   /health:
@@ -619,6 +633,824 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /workspaces:
+    get:
+      operationId: listWorkspaces
+      tags:
+        - workspaces
+      summary: List the workspaces of the user
+      description: |
+        Returns every workspace the signed-in user is a member of, ordered by
+        name. A user who has not created or joined one gets an empty list.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Workspaces of the user.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workspace"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      operationId: createWorkspace
+      tags:
+        - workspaces
+      summary: Create a workspace
+      description: |
+        Creates a workspace and makes the signed-in user its first member. A
+        user may belong to any number of workspaces.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceRequest"
+      responses:
+        "201":
+          description: The workspace was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "400":
+          description: The name is empty or longer than 80 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /workspaces/{id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    patch:
+      operationId: renameWorkspace
+      tags:
+        - workspaces
+      summary: Rename a workspace
+      description: |
+        Changes the name every member sees. Any member may rename a workspace:
+        membership is full access.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenameWorkspaceRequest"
+      responses:
+        "200":
+          description: The renamed workspace.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "400":
+          description: The name is empty or longer than 80 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteWorkspace
+      tags:
+        - workspaces
+      summary: Delete a workspace
+      description: |
+        Deletes the workspace together with its catalogue items, stock and
+        projects. Any member may do it. A request authenticated with the browser
+        cookie must declare `Content-Type: application/json` even though there is
+        no body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The workspace is deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/members:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    get:
+      operationId: listWorkspaceMembers
+      tags:
+        - workspaces
+      summary: List the members of a workspace
+      description: |
+        Returns everyone who belongs to the workspace, oldest member first.
+        Each member carries the Gravatar URL of their e-mail, so the WebApp can
+        show an avatar without a separate request.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Members of the workspace.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkspaceMember"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: addWorkspaceMember
+      tags:
+        - workspaces
+      summary: Add a member to a workspace
+      description: |
+        Adds an existing user to the workspace. The caller must be a member. The
+        operation is idempotent: adding someone who is already a member succeeds
+        without changing anything.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddWorkspaceMemberRequest"
+      responses:
+        "204":
+          description: The user is a member of the workspace.
+        "400":
+          description: The request body is missing or has no `user_id`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: |
+            The workspace does not exist or the user is not a member of it, or
+            the user to add does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /workspaces/{id}/members/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/WorkspaceUserID"
+    delete:
+      operationId: removeWorkspaceMember
+      tags:
+        - workspaces
+      summary: Remove a member from a workspace
+      description: |
+        Removes a member; a user may remove themselves (leave). The last member
+        cannot be removed, because a workspace without members could never be
+        managed again: delete the workspace instead. A request authenticated with
+        the browser cookie must declare `Content-Type: application/json` even
+        though there is no body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The user is no longer a member.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: |
+            The workspace or the member does not exist, or the caller is not a
+            member of the workspace.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The workspace has only one member left; delete it instead.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /workspaces/{id}/member-candidates:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    get:
+      operationId: listWorkspaceMemberCandidates
+      tags:
+        - workspaces
+      summary: List users who can be added to a workspace
+      description: |
+        Returns users who have signed in at least once and are not members of the
+        workspace yet. `query` filters by display name or e-mail. The list is
+        capped at 50 rows; a shorter search narrows it.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: query
+          in: query
+          required: false
+          description: Case-insensitive substring of the display name or e-mail.
+          schema:
+            type: string
+            example: Иван
+      responses:
+        "200":
+          description: Users who can be added.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkspaceCandidate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /craft/categories:
+    get:
+      operationId: listCraftCategories
+      tags:
+        - craft
+      summary: List material categories
+      description: |
+        Returns the reference categories of the craft catalogue with their slug,
+        Russian name and default unit. They are the same for every workspace.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Material categories.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CraftCategory"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /craft/manufacturers:
+    get:
+      operationId: listCraftManufacturers
+      tags:
+        - craft
+      summary: List manufacturers
+      description: |
+        Returns the known manufacturers of craft materials. A workspace may also
+        create a manufacturer implicitly by naming it in a private item.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Known manufacturers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CraftManufacturer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /workspaces/{id}/catalog:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    get:
+      operationId: searchCraftCatalog
+      tags:
+        - craft
+      summary: Search the catalogue
+      description: |
+        Searches the shared catalogue and the private items of the workspace.
+        Filters combine with AND; an empty filter means "any". `q` matches an
+        article prefix or a part of the item or colour name. Every result carries
+        the quantity this workspace holds.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: category
+          in: query
+          required: false
+          description: Category slug, for example `pearls`.
+          schema:
+            type: string
+            example: pearls
+        - name: manufacturer
+          in: query
+          required: false
+          description: Manufacturer name, case-insensitive exact match.
+          schema:
+            type: string
+            example: PRECIOSA
+        - name: q
+          in: query
+          required: false
+          description: Article prefix, or part of the item or colour name.
+          schema:
+            type: string
+            example: 11
+        - name: only_in_stock
+          in: query
+          required: false
+          description: Keep only items the workspace holds.
+          schema:
+            type: boolean
+            default: false
+            example: true
+        - name: limit
+          in: query
+          required: false
+          description: Page size, 1..200; the default is 50.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          description: Number of matching items to skip.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Matching catalogue items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CraftItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createCraftItem
+      tags:
+        - craft
+      summary: Create a private catalogue item
+      description: |
+        Adds a catalogue item visible only in this workspace, for material that is
+        in no manufacturer catalogue. The unit defaults to the category default
+        unit, and the name defaults to manufacturer plus article. An unknown
+        manufacturer name is created.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CraftItemInput"
+      responses:
+        "201":
+          description: The item was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftItem"
+        "400":
+          description: |
+            A field is invalid: unknown category or unit, empty name, bad colour
+            or a duplicate article of the same manufacturer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/catalog/{item_id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/CraftItemID"
+    get:
+      operationId: getCraftItem
+      tags:
+        - craft
+      summary: Get a catalogue item
+      description: |
+        Returns one item visible to the workspace: a global catalogue item or a
+        private one. An item of another workspace looks unknown.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: The catalogue item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateCraftItem
+      tags:
+        - craft
+      summary: Replace a private catalogue item
+      description: |
+        Replaces every field of a private item; omitted fields are not kept.
+        Global catalogue items are read-only and answer `403`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CraftItemInput"
+      responses:
+        "200":
+          description: The updated item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftItem"
+        "400":
+          description: A field is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The item belongs to the shared catalogue and is read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteCraftItem
+      tags:
+        - craft
+      summary: Delete a private catalogue item
+      description: |
+        Deletes a private item together with its stock. Global catalogue items
+        answer `403`. A request authenticated with the browser cookie must declare
+        `Content-Type: application/json` even though there is no body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The item is deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The item belongs to the shared catalogue and is read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/catalog/{item_id}/link:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/CraftItemID"
+    post:
+      operationId: linkCraftItem
+      tags:
+        - craft
+      summary: Link a private item to a catalogue item
+      description: |
+        Moves the stock of a private item to another catalogue item, usually the
+        official one found later, and deletes the private item. Quantities are
+        summed when the target is already in stock. Units must match.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkCraftItemRequest"
+      responses:
+        "200":
+          description: The stock row of the target item after the merge.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftStockEntry"
+        "400":
+          description: The units differ or the item is linked to itself.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The source item belongs to the shared catalogue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: The private item or the target item is unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /workspaces/{id}/inventory:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    get:
+      operationId: listCraftInventory
+      tags:
+        - craft
+      summary: List the stock of a workspace
+      description: |
+        Returns the stock rows of the workspace with their catalogue item,
+        quantity, location and notes. Filters combine with AND. `max_qty` keeps
+        rows at or below a threshold, which is how the WebApp finds low stock.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: category
+          in: query
+          required: false
+          description: Category slug, for example `floss`.
+          schema:
+            type: string
+            example: floss
+        - name: manufacturer
+          in: query
+          required: false
+          description: Manufacturer name, case-insensitive exact match.
+          schema:
+            type: string
+            example: DMC
+        - name: q
+          in: query
+          required: false
+          description: Article prefix, or part of the item or colour name.
+          schema:
+            type: string
+            example: 310
+        - name: max_qty
+          in: query
+          required: false
+          description: Keep rows whose quantity is at most this value.
+          schema:
+            type: number
+            format: double
+            minimum: 0
+            example: 5
+        - name: limit
+          in: query
+          required: false
+          description: Page size, 1..200; the default is 50.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          description: Number of matching rows to skip.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Stock rows of the workspace.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CraftStockEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/inventory/{item_id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/CraftItemID"
+    put:
+      operationId: setCraftInventoryQty
+      tags:
+        - craft
+      summary: Set the stock of an item
+      description: |
+        Sets the quantity of an item to an absolute value, as a stocktake does.
+        The stock row is created when it does not exist yet. The change is logged
+        with the optional reason.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetCraftStockRequest"
+      responses:
+        "200":
+          description: The stock row after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftStockEntry"
+        "400":
+          description: The quantity is negative or not a finite number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateCraftInventoryMeta
+      tags:
+        - craft
+      summary: Change where an item is stored
+      description: |
+        Replaces the location and notes of a stock row. Both fields are sent in
+        full; an omitted field is stored as empty.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCraftStockMetaRequest"
+      responses:
+        "204":
+          description: The stock row is updated.
+        "400":
+          description: The request body is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The item has no stock row in this workspace.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: removeCraftInventory
+      tags:
+        - craft
+      summary: Remove an item from stock
+      description: |
+        Deletes the stock row of an item; the catalogue item itself stays. A
+        request authenticated with the browser cookie must declare
+        `Content-Type: application/json` even though there is no body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The item is no longer in stock.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The item has no stock row in this workspace.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /workspaces/{id}/inventory/{item_id}/adjust:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/CraftItemID"
+    post:
+      operationId: adjustCraftInventoryQty
+      tags:
+        - craft
+      summary: Add to or use up stock
+      description: |
+        Changes the stock of an item by `delta`: positive adds material, negative
+        uses it up. The stock row is created on first use. A withdrawal larger
+        than the stock is a conflict. The change is logged with the optional
+        reason.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustCraftStockRequest"
+      responses:
+        "200":
+          description: The stock row after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftStockEntry"
+        "400":
+          description: The delta is zero or not a finite number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The withdrawal exceeds the quantity in stock.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -659,6 +1491,39 @@ components:
       schema:
         type: string
         example: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+
+    WorkspaceID:
+      name: id
+      in: path
+      required: true
+      description: |
+        Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+        workspace that does not exist or that the caller does not belong to.
+      schema:
+        type: string
+        example: 44444444-4444-4444-8444-444444444444
+
+    WorkspaceUserID:
+      name: user_id
+      in: path
+      required: true
+      description: |
+        Id of the user to remove from the workspace. A malformed id is reported
+        as `404`, exactly like a user who is not a member.
+      schema:
+        type: string
+        example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+
+    CraftItemID:
+      name: item_id
+      in: path
+      required: true
+      description: |
+        Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+        like an item that does not exist or is not visible to the workspace.
+      schema:
+        type: string
+        example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
 
   schemas:
     APITokenScope:
@@ -1352,6 +2217,509 @@ components:
           description: |
             `false` cancels the pending occurrence and clears `next_due_at`.
           example: true
+
+    Workspace:
+      type: object
+      additionalProperties: false
+      description: |
+        A shared workspace. Every member has the same rights; data of a
+        workspace is visible to its members only.
+      required:
+        - id
+        - name
+        - created_at
+      properties:
+        id:
+          type: string
+          description: Workspace id (UUID), used in every workspace-scoped path.
+          example: 44444444-4444-4444-8444-444444444444
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Name every member sees.
+          example: Дом
+        created_at:
+          type: string
+          format: date-time
+          description: When the workspace was created.
+          example: "2026-01-15T09:30:00Z"
+
+    WorkspaceMember:
+      type: object
+      additionalProperties: false
+      description: |
+        A member of a workspace together with the information the member list
+        shows.
+      required:
+        - user_id
+        - display_name
+        - email
+        - avatar_url
+        - joined_at
+      properties:
+        user_id:
+          type: string
+          description: Principal id of the member, the same value as `Me.id`.
+          example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+        display_name:
+          type: string
+          description: Display name from the SSO provider; empty when unknown.
+          example: Иван Петров
+        email:
+          type: string
+          description: E-mail from the SSO provider; empty when unknown.
+          example: user@example.com
+        avatar_url:
+          type: string
+          description: |
+            Gravatar image of the e-mail; addresses without a Gravatar fall back
+            to a generated identicon.
+          example: https://www.gravatar.com/avatar/abc?s=96&d=identicon
+        joined_at:
+          type: string
+          format: date-time
+          description: When the user joined the workspace.
+          example: "2026-01-15T09:30:00Z"
+
+    WorkspaceCandidate:
+      type: object
+      additionalProperties: false
+      description: |
+        A user who has signed in at least once and is not a member of the
+        workspace yet.
+      required:
+        - user_id
+        - display_name
+        - email
+        - avatar_url
+      properties:
+        user_id:
+          type: string
+          description: Principal id of the user to add.
+          example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+        display_name:
+          type: string
+          description: Display name from the SSO provider; empty when unknown.
+          example: Иван Петров
+        email:
+          type: string
+          description: E-mail from the SSO provider; empty when unknown.
+          example: user@example.com
+        avatar_url:
+          type: string
+          description: Gravatar image of the e-mail, with an identicon fallback.
+          example: https://www.gravatar.com/avatar/abc?s=96&d=identicon
+
+    CreateWorkspaceRequest:
+      type: object
+      additionalProperties: false
+      description: Name of a new workspace.
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: |
+            Name of the workspace, 1..80 characters. Leading and trailing
+            whitespace is trimmed.
+          example: Дом
+
+    RenameWorkspaceRequest:
+      type: object
+      additionalProperties: false
+      description: New name of a workspace.
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: |
+            New name, 1..80 characters. Leading and trailing whitespace is
+            trimmed.
+          example: Мастерская
+
+    AddWorkspaceMemberRequest:
+      type: object
+      additionalProperties: false
+      description: User to add to a workspace.
+      required:
+        - user_id
+      properties:
+        user_id:
+          type: string
+          description: |
+            Principal id of a user who has signed in at least once. Adding a
+            current member again succeeds without a change.
+          example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+
+    CraftCategory:
+      type: object
+      additionalProperties: false
+      description: A kind of craft material.
+      required:
+        - id
+        - slug
+        - name
+        - default_unit
+      properties:
+        id:
+          type: string
+          description: Category id (UUID).
+          example: 8a3b1c2d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+        slug:
+          type: string
+          description: Stable slug used in filters and item data.
+          example: pearls
+        name:
+          type: string
+          description: Russian name shown to the user.
+          example: Жемчуг
+        default_unit:
+          type: string
+          description: |
+            Unit an item of this category is counted in when it does not name
+            one.
+          example: шт
+
+    CraftManufacturer:
+      type: object
+      additionalProperties: false
+      description: A producer of craft material.
+      required:
+        - id
+        - name
+        - website
+      properties:
+        id:
+          type: string
+          description: Manufacturer id (UUID).
+          example: 9b4c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e
+        name:
+          type: string
+          description: Manufacturer name.
+          example: PRECIOSA
+        website:
+          type: string
+          description: Manufacturer website; empty when unknown.
+          example: https://www.preciosa.com
+
+    CraftItem:
+      type: object
+      additionalProperties: false
+      description: |
+        A catalogue entry: either a global item shared by every workspace or a
+        private item of one workspace. `stock_qty` and `in_inventory` describe
+        what the requested workspace holds.
+      required:
+        - id
+        - workspace_id
+        - private
+        - category
+        - category_name
+        - manufacturer
+        - article
+        - series
+        - name
+        - color_name
+        - color_hex
+        - color_source
+        - size
+        - finish
+        - unit
+        - pack_size
+        - attrs
+        - source
+        - source_url
+        - image_url
+        - stock_qty
+        - in_inventory
+      properties:
+        id:
+          type: string
+          description: Catalogue item id (UUID).
+          example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+        workspace_id:
+          type: string
+          nullable: true
+          description: |
+            Workspace that owns a private item, or `null` for a global catalogue
+            item.
+          example: 44444444-4444-4444-8444-444444444444
+        private:
+          type: boolean
+          description: |
+            True when the item belongs to this workspace and can be edited or
+            deleted; false for a read-only global item.
+          example: true
+        category:
+          type: string
+          description: Category slug.
+          example: pearls
+        category_name:
+          type: string
+          description: Russian category name.
+          example: Жемчуг
+        manufacturer:
+          type: string
+          description: Manufacturer name; empty when none.
+          example: PRECIOSA
+        article:
+          type: string
+          description: Manufacturer article number; empty when none.
+          example: 111 39 001
+        series:
+          type: string
+          description: Series or variety; empty when none.
+          example: Rondelle
+        name:
+          type: string
+          description: Item name.
+          example: Жемчуг Майорка айвори 2 мм
+        color_name:
+          type: string
+          description: Colour name; empty when unknown.
+          example: айвори
+        color_hex:
+          type: string
+          description: Colour as `#RRGGBB`; empty when unknown.
+          example: "#F2E8D5"
+        color_source:
+          type: string
+          description: |
+            How trustworthy `color_hex` is: `official` (published by the
+            manufacturer), `approx` (estimated) or empty.
+          example: approx
+        size:
+          type: string
+          description: Size as free text; empty when unknown.
+          example: 2 мм
+        finish:
+          type: string
+          description: Finish or coating as free text; empty when unknown.
+          example: матовый
+        unit:
+          type: string
+          description: Unit the quantity is counted in.
+          example: шт
+        pack_size:
+          type: number
+          format: double
+          nullable: true
+          description: |
+            How many base units one pack holds, or `null` when unknown or not
+            applicable.
+          example: 100
+        attrs:
+          type: object
+          additionalProperties: true
+          description: |
+            Category specific attributes; an empty object when there are none.
+          example: {}
+        source:
+          type: string
+          description: |
+            Where the row came from: `manual`, a scraper name or an import.
+          example: manual
+        source_url:
+          type: string
+          description: Page the data came from; empty for manual items.
+          example: ""
+        image_url:
+          type: string
+          description: Product image URL; empty when there is none.
+          example: ""
+        stock_qty:
+          type: number
+          format: double
+          description: Quantity the workspace holds, in `unit`.
+          example: 12
+        in_inventory:
+          type: boolean
+          description: Whether the workspace has a stock row for the item.
+          example: true
+
+    CraftItemInput:
+      type: object
+      additionalProperties: false
+      description: |
+        Data of a private catalogue item. `PUT` replaces every field, so an
+        omitted field is not kept from the previous version.
+      required:
+        - category
+      properties:
+        category:
+          type: string
+          description: Category slug, see `/craft/categories`.
+          example: pearls
+        manufacturer:
+          type: string
+          description: Manufacturer name; an unknown name is created.
+          example: PRECIOSA
+        article:
+          type: string
+          description: Manufacturer article number.
+          example: 111 39 001
+        series:
+          type: string
+          description: Series or variety.
+          example: Rondelle
+        name:
+          type: string
+          maxLength: 200
+          description: |
+            Item name, up to 200 characters. Defaults to the manufacturer and
+            the article when omitted.
+          example: Жемчуг Майорка айвори 2 мм
+        color_name:
+          type: string
+          description: Colour name.
+          example: айвори
+        color_hex:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+          description: Colour as `#RRGGBB`.
+          example: "#F2E8D5"
+        color_source:
+          type: string
+          enum:
+            - official
+            - approx
+          description: |
+            How trustworthy the colour is. Defaults to `approx` when
+            `color_hex` is set and this field is omitted.
+          example: approx
+        size:
+          type: string
+          description: Size as free text.
+          example: 2 мм
+        finish:
+          type: string
+          description: Finish or coating as free text.
+          example: матовый
+        unit:
+          type: string
+          description: |
+            Unit the quantity is counted in. Defaults to the default unit of
+            the category.
+          example: шт
+        pack_size:
+          type: number
+          format: double
+          nullable: true
+          description: How many base units one pack holds; must be positive.
+          example: 100
+        attrs:
+          type: object
+          additionalProperties: true
+          description: Category specific attributes.
+          example: {}
+
+    CraftStockEntry:
+      type: object
+      additionalProperties: false
+      description: One stock row of a workspace with its catalogue item.
+      required:
+        - item
+        - qty
+        - location
+        - notes
+        - updated_at
+      properties:
+        item:
+          $ref: "#/components/schemas/CraftItem"
+        qty:
+          type: number
+          format: double
+          description: Quantity held, in the unit of the item.
+          example: 12
+        location:
+          type: string
+          description: Where the material is stored; empty when unspecified.
+          example: Ящик 2
+        notes:
+          type: string
+          description: Free-form notes about this stock; empty when none.
+          example: Куплено на ярмарке
+        updated_at:
+          type: string
+          format: date-time
+          description: When the stock row last changed.
+          example: "2026-01-16T08:00:00Z"
+
+    SetCraftStockRequest:
+      type: object
+      additionalProperties: false
+      description: Absolute quantity of a stocktake.
+      required:
+        - qty
+      properties:
+        qty:
+          type: number
+          format: double
+          minimum: 0
+          description: New absolute quantity, zero or more.
+          example: 12
+        reason:
+          type: string
+          description: Why the quantity changed; stored in the stock log.
+          example: Пересчёт
+
+    AdjustCraftStockRequest:
+      type: object
+      additionalProperties: false
+      description: Relative change of the stock.
+      required:
+        - delta
+      properties:
+        delta:
+          type: number
+          format: double
+          description: |
+            Change of the quantity in the unit of the item: positive adds,
+            negative uses up. Zero is rejected.
+          example: -1
+        reason:
+          type: string
+          description: Why the quantity changed; stored in the stock log.
+          example: Проект «Серьги»
+
+    UpdateCraftStockMetaRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Where a stock row is stored. Both fields are sent in full; a missing
+        field is stored as empty.
+      required:
+        - location
+        - notes
+      properties:
+        location:
+          type: string
+          description: Where the material is stored.
+          example: Ящик 2
+        notes:
+          type: string
+          description: Free-form notes about this stock.
+          example: Куплено на ярмарке
+
+    LinkCraftItemRequest:
+      type: object
+      additionalProperties: false
+      description: Target of a link operation.
+      required:
+        - target_item_id
+      properties:
+        target_item_id:
+          type: string
+          description: |
+            Catalogue item that receives the stock of the private item. Its unit
+            must match the unit of the private item.
+          example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
 
   responses:
     Error:

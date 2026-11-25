@@ -103,8 +103,8 @@ POST /oauth/revoke    (RFC 7009)
 | `profile:read` | `whoami`; выдается неявно, если у токена есть любой другой scope |
 | `reminders:read` | `reminders_list`, `reminders_get` |
 | `reminders:write` | `reminders_create`, `reminders_update`, `reminders_delete`, `reminders_complete` |
-| `craft:read` | чтение каталога, запасов и wishlist workspace (инструменты `craft_*` на `/mcp/w/{id}`) |
-| `craft:write` | изменение каталога, запасов и wishlist workspace |
+| `craft:read` | чтение каталога, запасов, проектов и wishlist workspace (инструменты `craft_*` на `/mcp/w/{id}`) |
+| `craft:write` | изменение каталога, запасов, проектов и wishlist workspace |
 
 Неизвестный, просроченный или отозванный токен → `401` (тот же ответ для всех
 трёх случаев, чтобы нельзя было перебором отличить причину). Недостаточная
@@ -138,6 +138,29 @@ reverse proxy (в бэклоге — `docs/PLAN.md` §7).
 | `reminders_list` | List reminders | только чтение |
 | `reminders_update` | Update a reminder | изменяет |
 | `whoami` | Who am I | только чтение |
+| `craft_catalog_search` | Search the catalogue | только чтение |
+| `craft_inventory_list` | List stock | только чтение |
+| `craft_item_create` | Create a private item | изменяет |
+| `craft_item_delete` | Delete a private item | изменяет и удаляет |
+| `craft_item_link` | Link a private item to the catalogue | изменяет и удаляет |
+| `craft_item_update` | Update a private item | изменяет |
+| `craft_project_create` | Create a project | изменяет |
+| `craft_project_get` | Get a project | только чтение |
+| `craft_project_list` | List projects | только чтение |
+| `craft_project_set_material` | Plan a material for a project | изменяет |
+| `craft_project_shortage_to_wishlist` | Add the project shortage to the wish list | изменяет |
+| `craft_project_use_material` | Use material for a project | изменяет |
+| `craft_reference` | Craft reference data | только чтение |
+| `craft_stock_adjust` | Change stock by a delta | изменяет |
+| `craft_stock_remove` | Remove an item from stock | изменяет и удаляет |
+| `craft_stock_set` | Set stock to a value | изменяет |
+| `craft_wishlist_add` | Add a wish | изменяет |
+| `craft_wishlist_link_add` | Add a shop link to a wish | изменяет |
+| `craft_wishlist_link_remove` | Remove a shop link from a wish | изменяет и удаляет |
+| `craft_wishlist_list` | List the wish list | только чтение |
+| `craft_wishlist_mark_bought` | Mark a wish as bought | изменяет |
+| `craft_wishlist_remove` | Remove a wish | изменяет и удаляет |
+| `craft_wishlist_update` | Update a wish | изменяет |
 
 ### `reminders_complete`
 
@@ -1123,6 +1146,3847 @@ Return the Cublyverse user behind the personal access token: principal id, profi
 }
 ```
 
+### `craft_catalog_search`
+
+Search the catalogue
+
+Search the shared catalogue (manufacturer catalogues such as PRECIOSA or DMC) and the private items of this workspace. Filters are optional; query matches an article prefix or a part of the name or colour. Each result shows how much of it the workspace holds (stock_qty) and its unit.
+
+**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "category": {
+      "description": "category slug, see craft_reference",
+      "type": "string"
+    },
+    "limit": {
+      "description": "page size 1..200, default 50",
+      "type": "integer"
+    },
+    "manufacturer": {
+      "description": "manufacturer name, case-insensitive exact match",
+      "type": "string"
+    },
+    "offset": {
+      "description": "number of results to skip",
+      "type": "integer"
+    },
+    "only_in_stock": {
+      "description": "only items the workspace holds",
+      "type": "boolean"
+    },
+    "query": {
+      "description": "article prefix or part of the name or colour name",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "description": "matching items",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "article": {
+            "description": "manufacturer article number",
+            "type": "string"
+          },
+          "attrs": {
+            "additionalProperties": true,
+            "description": "category specific attributes",
+            "type": "object"
+          },
+          "category": {
+            "description": "category slug",
+            "type": "string"
+          },
+          "category_name": {
+            "description": "category name in Russian",
+            "type": "string"
+          },
+          "color_hex": {
+            "description": "colour as #RRGGBB",
+            "type": "string"
+          },
+          "color_name": {
+            "description": "colour name",
+            "type": "string"
+          },
+          "color_source": {
+            "description": "official or approx: how trustworthy color_hex is",
+            "type": "string"
+          },
+          "finish": {
+            "description": "finish or coating, free text",
+            "type": "string"
+          },
+          "id": {
+            "description": "catalogue item id (UUID)",
+            "type": "string"
+          },
+          "in_inventory": {
+            "description": "whether the workspace has a stock row for the item",
+            "type": "boolean"
+          },
+          "manufacturer": {
+            "description": "manufacturer name",
+            "type": "string"
+          },
+          "name": {
+            "description": "item name",
+            "type": "string"
+          },
+          "pack_size": {
+            "description": "how many base units one pack holds, when known",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "private": {
+            "description": "true for an item private to this workspace, false for a global catalogue item",
+            "type": "boolean"
+          },
+          "series": {
+            "description": "series or variety",
+            "type": "string"
+          },
+          "size": {
+            "description": "size, free text",
+            "type": "string"
+          },
+          "stock_qty": {
+            "description": "quantity this workspace holds, in unit",
+            "type": "number"
+          },
+          "unit": {
+            "description": "unit the quantity is counted in",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "private",
+          "category",
+          "category_name",
+          "name",
+          "unit",
+          "stock_qty",
+          "in_inventory"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_inventory_list`
+
+List stock
+
+List what the workspace holds: items with quantity and unit, optionally filtered by category, manufacturer or text. Use max_qty to find items that are running low.
+
+**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "category": {
+      "description": "category slug, see craft_reference",
+      "type": "string"
+    },
+    "limit": {
+      "description": "page size 1..200, default 50",
+      "type": "integer"
+    },
+    "manufacturer": {
+      "description": "manufacturer name, case-insensitive exact match",
+      "type": "string"
+    },
+    "max_qty": {
+      "description": "only rows with quantity at most this value, to find low stock",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "offset": {
+      "description": "number of results to skip",
+      "type": "integer"
+    },
+    "query": {
+      "description": "article prefix or part of the name or colour name",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "stock": {
+      "description": "stock rows",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "additionalProperties": false,
+            "description": "the catalogue item",
+            "properties": {
+              "article": {
+                "description": "manufacturer article number",
+                "type": "string"
+              },
+              "attrs": {
+                "additionalProperties": true,
+                "description": "category specific attributes",
+                "type": "object"
+              },
+              "category": {
+                "description": "category slug",
+                "type": "string"
+              },
+              "category_name": {
+                "description": "category name in Russian",
+                "type": "string"
+              },
+              "color_hex": {
+                "description": "colour as #RRGGBB",
+                "type": "string"
+              },
+              "color_name": {
+                "description": "colour name",
+                "type": "string"
+              },
+              "color_source": {
+                "description": "official or approx: how trustworthy color_hex is",
+                "type": "string"
+              },
+              "finish": {
+                "description": "finish or coating, free text",
+                "type": "string"
+              },
+              "id": {
+                "description": "catalogue item id (UUID)",
+                "type": "string"
+              },
+              "in_inventory": {
+                "description": "whether the workspace has a stock row for the item",
+                "type": "boolean"
+              },
+              "manufacturer": {
+                "description": "manufacturer name",
+                "type": "string"
+              },
+              "name": {
+                "description": "item name",
+                "type": "string"
+              },
+              "pack_size": {
+                "description": "how many base units one pack holds, when known",
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "private": {
+                "description": "true for an item private to this workspace, false for a global catalogue item",
+                "type": "boolean"
+              },
+              "series": {
+                "description": "series or variety",
+                "type": "string"
+              },
+              "size": {
+                "description": "size, free text",
+                "type": "string"
+              },
+              "stock_qty": {
+                "description": "quantity this workspace holds, in unit",
+                "type": "number"
+              },
+              "unit": {
+                "description": "unit the quantity is counted in",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "private",
+              "category",
+              "category_name",
+              "name",
+              "unit",
+              "stock_qty",
+              "in_inventory"
+            ],
+            "type": "object"
+          },
+          "location": {
+            "description": "where it is stored",
+            "type": "string"
+          },
+          "notes": {
+            "description": "notes about this stock",
+            "type": "string"
+          },
+          "qty": {
+            "description": "quantity held, in item.unit",
+            "type": "number"
+          },
+          "updated_at": {
+            "description": "last change in RFC 3339 UTC",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "qty",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "stock"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_item_create`
+
+Create a private item
+
+Create a catalogue item private to this workspace, for material that is in no manufacturer catalogue (for example a thread of Mallorca pearls). The unit defaults to the category's default unit. It can be linked to an official catalogue item later with craft_item_link.
+
+**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "article": {
+      "description": "article number",
+      "type": "string"
+    },
+    "attrs": {
+      "additionalProperties": true,
+      "description": "category specific attributes",
+      "type": "object"
+    },
+    "category": {
+      "description": "category slug, see craft_reference",
+      "type": "string"
+    },
+    "color_hex": {
+      "description": "colour as #RRGGBB",
+      "type": "string"
+    },
+    "color_name": {
+      "description": "colour name",
+      "type": "string"
+    },
+    "color_source": {
+      "description": "official or approx; approx when omitted and color_hex is set",
+      "type": "string"
+    },
+    "finish": {
+      "description": "finish or coating, free text",
+      "type": "string"
+    },
+    "manufacturer": {
+      "description": "manufacturer name; created when unknown",
+      "type": "string"
+    },
+    "name": {
+      "description": "item name; defaults to manufacturer + article",
+      "type": "string"
+    },
+    "pack_size": {
+      "description": "how many base units one pack holds",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "series": {
+      "description": "series or variety",
+      "type": "string"
+    },
+    "size": {
+      "description": "size, free text",
+      "type": "string"
+    },
+    "unit": {
+      "description": "unit; the category default when omitted",
+      "type": "string"
+    }
+  },
+  "required": [
+    "category"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "article": {
+      "description": "manufacturer article number",
+      "type": "string"
+    },
+    "attrs": {
+      "additionalProperties": true,
+      "description": "category specific attributes",
+      "type": "object"
+    },
+    "category": {
+      "description": "category slug",
+      "type": "string"
+    },
+    "category_name": {
+      "description": "category name in Russian",
+      "type": "string"
+    },
+    "color_hex": {
+      "description": "colour as #RRGGBB",
+      "type": "string"
+    },
+    "color_name": {
+      "description": "colour name",
+      "type": "string"
+    },
+    "color_source": {
+      "description": "official or approx: how trustworthy color_hex is",
+      "type": "string"
+    },
+    "finish": {
+      "description": "finish or coating, free text",
+      "type": "string"
+    },
+    "id": {
+      "description": "catalogue item id (UUID)",
+      "type": "string"
+    },
+    "in_inventory": {
+      "description": "whether the workspace has a stock row for the item",
+      "type": "boolean"
+    },
+    "manufacturer": {
+      "description": "manufacturer name",
+      "type": "string"
+    },
+    "name": {
+      "description": "item name",
+      "type": "string"
+    },
+    "pack_size": {
+      "description": "how many base units one pack holds, when known",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "private": {
+      "description": "true for an item private to this workspace, false for a global catalogue item",
+      "type": "boolean"
+    },
+    "series": {
+      "description": "series or variety",
+      "type": "string"
+    },
+    "size": {
+      "description": "size, free text",
+      "type": "string"
+    },
+    "stock_qty": {
+      "description": "quantity this workspace holds, in unit",
+      "type": "number"
+    },
+    "unit": {
+      "description": "unit the quantity is counted in",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "private",
+    "category",
+    "category_name",
+    "name",
+    "unit",
+    "stock_qty",
+    "in_inventory"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_item_delete`
+
+Delete a private item
+
+Delete a private item together with its stock. Global catalogue items cannot be deleted.
+
+**Доступ:** изменяет и удаляет. Вызов может удалить данные; клиент должен подтверждать его у пользователя.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "item_id": {
+      "description": "catalogue item id (UUID)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "item_id": {
+      "description": "item whose stock row was removed",
+      "type": "string"
+    },
+    "removed": {
+      "description": "always true on success",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "item_id",
+    "removed"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_item_link`
+
+Link a private item to the catalogue
+
+Move the stock of a private item to another catalogue item (usually the official one) and delete the private item. Units must match; quantities are summed when the target is already in stock.
+
+**Доступ:** изменяет и удаляет. Вызов может удалить данные; клиент должен подтверждать его у пользователя.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "private_item_id": {
+      "description": "the private item to merge away",
+      "type": "string"
+    },
+    "target_item_id": {
+      "description": "the catalogue item that receives its stock",
+      "type": "string"
+    }
+  },
+  "required": [
+    "private_item_id",
+    "target_item_id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "item": {
+      "additionalProperties": false,
+      "description": "the catalogue item",
+      "properties": {
+        "article": {
+          "description": "manufacturer article number",
+          "type": "string"
+        },
+        "attrs": {
+          "additionalProperties": true,
+          "description": "category specific attributes",
+          "type": "object"
+        },
+        "category": {
+          "description": "category slug",
+          "type": "string"
+        },
+        "category_name": {
+          "description": "category name in Russian",
+          "type": "string"
+        },
+        "color_hex": {
+          "description": "colour as #RRGGBB",
+          "type": "string"
+        },
+        "color_name": {
+          "description": "colour name",
+          "type": "string"
+        },
+        "color_source": {
+          "description": "official or approx: how trustworthy color_hex is",
+          "type": "string"
+        },
+        "finish": {
+          "description": "finish or coating, free text",
+          "type": "string"
+        },
+        "id": {
+          "description": "catalogue item id (UUID)",
+          "type": "string"
+        },
+        "in_inventory": {
+          "description": "whether the workspace has a stock row for the item",
+          "type": "boolean"
+        },
+        "manufacturer": {
+          "description": "manufacturer name",
+          "type": "string"
+        },
+        "name": {
+          "description": "item name",
+          "type": "string"
+        },
+        "pack_size": {
+          "description": "how many base units one pack holds, when known",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "private": {
+          "description": "true for an item private to this workspace, false for a global catalogue item",
+          "type": "boolean"
+        },
+        "series": {
+          "description": "series or variety",
+          "type": "string"
+        },
+        "size": {
+          "description": "size, free text",
+          "type": "string"
+        },
+        "stock_qty": {
+          "description": "quantity this workspace holds, in unit",
+          "type": "number"
+        },
+        "unit": {
+          "description": "unit the quantity is counted in",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "private",
+        "category",
+        "category_name",
+        "name",
+        "unit",
+        "stock_qty",
+        "in_inventory"
+      ],
+      "type": "object"
+    },
+    "location": {
+      "description": "where it is stored",
+      "type": "string"
+    },
+    "notes": {
+      "description": "notes about this stock",
+      "type": "string"
+    },
+    "qty": {
+      "description": "quantity held, in item.unit",
+      "type": "number"
+    },
+    "updated_at": {
+      "description": "last change in RFC 3339 UTC",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item",
+    "qty",
+    "updated_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_item_update`
+
+Update a private item
+
+Replace the data of a private item of this workspace. All fields are replaced, so read the item with craft_catalog_search first and send the full data. Global catalogue items cannot be changed.
+
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "article": {
+      "description": "article number",
+      "type": "string"
+    },
+    "attrs": {
+      "additionalProperties": true,
+      "description": "category specific attributes",
+      "type": "object"
+    },
+    "category": {
+      "description": "category slug, see craft_reference",
+      "type": "string"
+    },
+    "color_hex": {
+      "description": "colour as #RRGGBB",
+      "type": "string"
+    },
+    "color_name": {
+      "description": "colour name",
+      "type": "string"
+    },
+    "color_source": {
+      "description": "official or approx; approx when omitted and color_hex is set",
+      "type": "string"
+    },
+    "finish": {
+      "description": "finish or coating, free text",
+      "type": "string"
+    },
+    "item_id": {
+      "description": "id of the private item to replace",
+      "type": "string"
+    },
+    "manufacturer": {
+      "description": "manufacturer name; created when unknown",
+      "type": "string"
+    },
+    "name": {
+      "description": "item name; defaults to manufacturer + article",
+      "type": "string"
+    },
+    "pack_size": {
+      "description": "how many base units one pack holds",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "series": {
+      "description": "series or variety",
+      "type": "string"
+    },
+    "size": {
+      "description": "size, free text",
+      "type": "string"
+    },
+    "unit": {
+      "description": "unit; the category default when omitted",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_id",
+    "category"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "article": {
+      "description": "manufacturer article number",
+      "type": "string"
+    },
+    "attrs": {
+      "additionalProperties": true,
+      "description": "category specific attributes",
+      "type": "object"
+    },
+    "category": {
+      "description": "category slug",
+      "type": "string"
+    },
+    "category_name": {
+      "description": "category name in Russian",
+      "type": "string"
+    },
+    "color_hex": {
+      "description": "colour as #RRGGBB",
+      "type": "string"
+    },
+    "color_name": {
+      "description": "colour name",
+      "type": "string"
+    },
+    "color_source": {
+      "description": "official or approx: how trustworthy color_hex is",
+      "type": "string"
+    },
+    "finish": {
+      "description": "finish or coating, free text",
+      "type": "string"
+    },
+    "id": {
+      "description": "catalogue item id (UUID)",
+      "type": "string"
+    },
+    "in_inventory": {
+      "description": "whether the workspace has a stock row for the item",
+      "type": "boolean"
+    },
+    "manufacturer": {
+      "description": "manufacturer name",
+      "type": "string"
+    },
+    "name": {
+      "description": "item name",
+      "type": "string"
+    },
+    "pack_size": {
+      "description": "how many base units one pack holds, when known",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "private": {
+      "description": "true for an item private to this workspace, false for a global catalogue item",
+      "type": "boolean"
+    },
+    "series": {
+      "description": "series or variety",
+      "type": "string"
+    },
+    "size": {
+      "description": "size, free text",
+      "type": "string"
+    },
+    "stock_qty": {
+      "description": "quantity this workspace holds, in unit",
+      "type": "number"
+    },
+    "unit": {
+      "description": "unit the quantity is counted in",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "private",
+    "category",
+    "category_name",
+    "name",
+    "unit",
+    "stock_qty",
+    "in_inventory"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_project_create`
+
+Create a project
+
+Create a craft project with a name and optional notes. Materials are added with craft_project_set_material.
+
+**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "description": "project name, 1 to 200 characters",
+      "type": "string"
+    },
+    "notes": {
+      "description": "free-text notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "id": {
+      "description": "project id (UUID)",
+      "type": "string"
+    },
+    "material_count": {
+      "description": "number of materials planned",
+      "type": "integer"
+    },
+    "materials": {
+      "description": "materials; empty when the project is fresh or listed",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "additionalProperties": false,
+            "description": "the catalogue item with the current stock",
+            "properties": {
+              "article": {
+                "description": "manufacturer article number",
+                "type": "string"
+              },
+              "attrs": {
+                "additionalProperties": true,
+                "description": "category specific attributes",
+                "type": "object"
+              },
+              "category": {
+                "description": "category slug",
+                "type": "string"
+              },
+              "category_name": {
+                "description": "category name in Russian",
+                "type": "string"
+              },
+              "color_hex": {
+                "description": "colour as #RRGGBB",
+                "type": "string"
+              },
+              "color_name": {
+                "description": "colour name",
+                "type": "string"
+              },
+              "color_source": {
+                "description": "official or approx: how trustworthy color_hex is",
+                "type": "string"
+              },
+              "finish": {
+                "description": "finish or coating, free text",
+                "type": "string"
+              },
+              "id": {
+                "description": "catalogue item id (UUID)",
+                "type": "string"
+              },
+              "in_inventory": {
+                "description": "whether the workspace has a stock row for the item",
+                "type": "boolean"
+              },
+              "manufacturer": {
+                "description": "manufacturer name",
+                "type": "string"
+              },
+              "name": {
+                "description": "item name",
+                "type": "string"
+              },
+              "pack_size": {
+                "description": "how many base units one pack holds, when known",
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "private": {
+                "description": "true for an item private to this workspace, false for a global catalogue item",
+                "type": "boolean"
+              },
+              "series": {
+                "description": "series or variety",
+                "type": "string"
+              },
+              "size": {
+                "description": "size, free text",
+                "type": "string"
+              },
+              "stock_qty": {
+                "description": "quantity this workspace holds, in unit",
+                "type": "number"
+              },
+              "unit": {
+                "description": "unit the quantity is counted in",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "private",
+              "category",
+              "category_name",
+              "name",
+              "unit",
+              "stock_qty",
+              "in_inventory"
+            ],
+            "type": "object"
+          },
+          "qty_planned": {
+            "description": "planned quantity, absent when no plan is set",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "qty_used": {
+            "description": "quantity already used by the project",
+            "type": "number"
+          },
+          "shortage": {
+            "description": "max(0, qty_planned - qty_used - stock): how much is still to buy",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item",
+          "qty_used",
+          "shortage"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "name": {
+      "description": "project name",
+      "type": "string"
+    },
+    "notes": {
+      "description": "free-text notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "material_count",
+    "materials",
+    "created_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_project_get`
+
+Get a project
+
+Return one project with its materials: planned quantity, quantity already used, the current stock and the shortage. shortage = max(0, qty_planned - qty_used - stock), the quantity still to buy.
+
+**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "description": "project id (UUID)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "id": {
+      "description": "project id (UUID)",
+      "type": "string"
+    },
+    "material_count": {
+      "description": "number of materials planned",
+      "type": "integer"
+    },
+    "materials": {
+      "description": "materials; empty when the project is fresh or listed",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "additionalProperties": false,
+            "description": "the catalogue item with the current stock",
+            "properties": {
+              "article": {
+                "description": "manufacturer article number",
+                "type": "string"
+              },
+              "attrs": {
+                "additionalProperties": true,
+                "description": "category specific attributes",
+                "type": "object"
+              },
+              "category": {
+                "description": "category slug",
+                "type": "string"
+              },
+              "category_name": {
+                "description": "category name in Russian",
+                "type": "string"
+              },
+              "color_hex": {
+                "description": "colour as #RRGGBB",
+                "type": "string"
+              },
+              "color_name": {
+                "description": "colour name",
+                "type": "string"
+              },
+              "color_source": {
+                "description": "official or approx: how trustworthy color_hex is",
+                "type": "string"
+              },
+              "finish": {
+                "description": "finish or coating, free text",
+                "type": "string"
+              },
+              "id": {
+                "description": "catalogue item id (UUID)",
+                "type": "string"
+              },
+              "in_inventory": {
+                "description": "whether the workspace has a stock row for the item",
+                "type": "boolean"
+              },
+              "manufacturer": {
+                "description": "manufacturer name",
+                "type": "string"
+              },
+              "name": {
+                "description": "item name",
+                "type": "string"
+              },
+              "pack_size": {
+                "description": "how many base units one pack holds, when known",
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "private": {
+                "description": "true for an item private to this workspace, false for a global catalogue item",
+                "type": "boolean"
+              },
+              "series": {
+                "description": "series or variety",
+                "type": "string"
+              },
+              "size": {
+                "description": "size, free text",
+                "type": "string"
+              },
+              "stock_qty": {
+                "description": "quantity this workspace holds, in unit",
+                "type": "number"
+              },
+              "unit": {
+                "description": "unit the quantity is counted in",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "private",
+              "category",
+              "category_name",
+              "name",
+              "unit",
+              "stock_qty",
+              "in_inventory"
+            ],
+            "type": "object"
+          },
+          "qty_planned": {
+            "description": "planned quantity, absent when no plan is set",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "qty_used": {
+            "description": "quantity already used by the project",
+            "type": "number"
+          },
+          "shortage": {
+            "description": "max(0, qty_planned - qty_used - stock): how much is still to buy",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item",
+          "qty_used",
+          "shortage"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "name": {
+      "description": "project name",
+      "type": "string"
+    },
+    "notes": {
+      "description": "free-text notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "material_count",
+    "materials",
+    "created_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_project_list`
+
+List projects
+
+List the craft projects of the workspace with the number of materials planned in each.
+
+**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "projects": {
+      "description": "projects of the workspace; empty when there are none",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "description": "creation time in RFC 3339 UTC",
+            "type": "string"
+          },
+          "id": {
+            "description": "project id (UUID)",
+            "type": "string"
+          },
+          "material_count": {
+            "description": "number of materials planned",
+            "type": "integer"
+          },
+          "materials": {
+            "description": "materials; empty when the project is fresh or listed",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "item": {
+                  "additionalProperties": false,
+                  "description": "the catalogue item with the current stock",
+                  "properties": {
+                    "article": {
+                      "description": "manufacturer article number",
+                      "type": "string"
+                    },
+                    "attrs": {
+                      "additionalProperties": true,
+                      "description": "category specific attributes",
+                      "type": "object"
+                    },
+                    "category": {
+                      "description": "category slug",
+                      "type": "string"
+                    },
+                    "category_name": {
+                      "description": "category name in Russian",
+                      "type": "string"
+                    },
+                    "color_hex": {
+                      "description": "colour as #RRGGBB",
+                      "type": "string"
+                    },
+                    "color_name": {
+                      "description": "colour name",
+                      "type": "string"
+                    },
+                    "color_source": {
+                      "description": "official or approx: how trustworthy color_hex is",
+                      "type": "string"
+                    },
+                    "finish": {
+                      "description": "finish or coating, free text",
+                      "type": "string"
+                    },
+                    "id": {
+                      "description": "catalogue item id (UUID)",
+                      "type": "string"
+                    },
+                    "in_inventory": {
+                      "description": "whether the workspace has a stock row for the item",
+                      "type": "boolean"
+                    },
+                    "manufacturer": {
+                      "description": "manufacturer name",
+                      "type": "string"
+                    },
+                    "name": {
+                      "description": "item name",
+                      "type": "string"
+                    },
+                    "pack_size": {
+                      "description": "how many base units one pack holds, when known",
+                      "type": [
+                        "null",
+                        "number"
+                      ]
+                    },
+                    "private": {
+                      "description": "true for an item private to this workspace, false for a global catalogue item",
+                      "type": "boolean"
+                    },
+                    "series": {
+                      "description": "series or variety",
+                      "type": "string"
+                    },
+                    "size": {
+                      "description": "size, free text",
+                      "type": "string"
+                    },
+                    "stock_qty": {
+                      "description": "quantity this workspace holds, in unit",
+                      "type": "number"
+                    },
+                    "unit": {
+                      "description": "unit the quantity is counted in",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "private",
+                    "category",
+                    "category_name",
+                    "name",
+                    "unit",
+                    "stock_qty",
+                    "in_inventory"
+                  ],
+                  "type": "object"
+                },
+                "qty_planned": {
+                  "description": "planned quantity, absent when no plan is set",
+                  "type": [
+                    "null",
+                    "number"
+                  ]
+                },
+                "qty_used": {
+                  "description": "quantity already used by the project",
+                  "type": "number"
+                },
+                "shortage": {
+                  "description": "max(0, qty_planned - qty_used - stock): how much is still to buy",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "item",
+                "qty_used",
+                "shortage"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "name": {
+            "description": "project name",
+            "type": "string"
+          },
+          "notes": {
+            "description": "free-text notes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "material_count",
+          "materials",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "projects"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_project_set_material`
+
+Plan a material for a project
+
+Add a catalogue item to the project plan or change its planned quantity. Identify the item by item_id or by manufacturer + article. A missing qty_planned clears the plan; used quantity and stock are untouched.
+
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "article": {
+      "description": "article number, with manufacturer, instead of item_id",
+      "type": "string"
+    },
+    "category": {
+      "description": "category slug, only to disambiguate manufacturer + article",
+      "type": "string"
+    },
+    "item_id": {
+      "description": "catalogue item id (UUID); use it when known",
+      "type": "string"
+    },
+    "manufacturer": {
+      "description": "manufacturer name, with article, instead of item_id",
+      "type": "string"
+    },
+    "project_id": {
+      "description": "project id (UUID)",
+      "type": "string"
+    },
+    "qty_planned": {
+      "description": "planned quantity, 0 or more; omit to clear the plan",
+      "type": [
+        "null",
+        "number"
+      ]
+    }
+  },
+  "required": [
+    "project_id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "id": {
+      "description": "project id (UUID)",
+      "type": "string"
+    },
+    "material_count": {
+      "description": "number of materials planned",
+      "type": "integer"
+    },
+    "materials": {
+      "description": "materials; empty when the project is fresh or listed",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "additionalProperties": false,
+            "description": "the catalogue item with the current stock",
+            "properties": {
+              "article": {
+                "description": "manufacturer article number",
+                "type": "string"
+              },
+              "attrs": {
+                "additionalProperties": true,
+                "description": "category specific attributes",
+                "type": "object"
+              },
+              "category": {
+                "description": "category slug",
+                "type": "string"
+              },
+              "category_name": {
+                "description": "category name in Russian",
+                "type": "string"
+              },
+              "color_hex": {
+                "description": "colour as #RRGGBB",
+                "type": "string"
+              },
+              "color_name": {
+                "description": "colour name",
+                "type": "string"
+              },
+              "color_source": {
+                "description": "official or approx: how trustworthy color_hex is",
+                "type": "string"
+              },
+              "finish": {
+                "description": "finish or coating, free text",
+                "type": "string"
+              },
+              "id": {
+                "description": "catalogue item id (UUID)",
+                "type": "string"
+              },
+              "in_inventory": {
+                "description": "whether the workspace has a stock row for the item",
+                "type": "boolean"
+              },
+              "manufacturer": {
+                "description": "manufacturer name",
+                "type": "string"
+              },
+              "name": {
+                "description": "item name",
+                "type": "string"
+              },
+              "pack_size": {
+                "description": "how many base units one pack holds, when known",
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "private": {
+                "description": "true for an item private to this workspace, false for a global catalogue item",
+                "type": "boolean"
+              },
+              "series": {
+                "description": "series or variety",
+                "type": "string"
+              },
+              "size": {
+                "description": "size, free text",
+                "type": "string"
+              },
+              "stock_qty": {
+                "description": "quantity this workspace holds, in unit",
+                "type": "number"
+              },
+              "unit": {
+                "description": "unit the quantity is counted in",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "private",
+              "category",
+              "category_name",
+              "name",
+              "unit",
+              "stock_qty",
+              "in_inventory"
+            ],
+            "type": "object"
+          },
+          "qty_planned": {
+            "description": "planned quantity, absent when no plan is set",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "qty_used": {
+            "description": "quantity already used by the project",
+            "type": "number"
+          },
+          "shortage": {
+            "description": "max(0, qty_planned - qty_used - stock): how much is still to buy",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item",
+          "qty_used",
+          "shortage"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "name": {
+      "description": "project name",
+      "type": "string"
+    },
+    "notes": {
+      "description": "free-text notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "material_count",
+    "materials",
+    "created_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_project_shortage_to_wishlist`
+
+Add the project shortage to the wish list
+
+Add every material of the project whose shortage is positive (the quantity still to buy) to the wish list, skipping materials that are already wanted. Returns the added wishes; a repeated call adds nothing.
+
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "description": "project id (UUID)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "wishes": {
+      "description": "wish list entries; empty when there are none",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_item_id": {
+            "description": "catalogue item id, absent for a free-text wish",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "creation time in RFC 3339 UTC",
+            "type": "string"
+          },
+          "id": {
+            "description": "wish list entry id (UUID)",
+            "type": "string"
+          },
+          "item": {
+            "additionalProperties": false,
+            "description": "catalogue item summary with the current stock, absent for a free-text wish",
+            "properties": {
+              "article": {
+                "description": "manufacturer article number",
+                "type": "string"
+              },
+              "attrs": {
+                "additionalProperties": true,
+                "description": "category specific attributes",
+                "type": "object"
+              },
+              "category": {
+                "description": "category slug",
+                "type": "string"
+              },
+              "category_name": {
+                "description": "category name in Russian",
+                "type": "string"
+              },
+              "color_hex": {
+                "description": "colour as #RRGGBB",
+                "type": "string"
+              },
+              "color_name": {
+                "description": "colour name",
+                "type": "string"
+              },
+              "color_source": {
+                "description": "official or approx: how trustworthy color_hex is",
+                "type": "string"
+              },
+              "finish": {
+                "description": "finish or coating, free text",
+                "type": "string"
+              },
+              "id": {
+                "description": "catalogue item id (UUID)",
+                "type": "string"
+              },
+              "in_inventory": {
+                "description": "whether the workspace has a stock row for the item",
+                "type": "boolean"
+              },
+              "manufacturer": {
+                "description": "manufacturer name",
+                "type": "string"
+              },
+              "name": {
+                "description": "item name",
+                "type": "string"
+              },
+              "pack_size": {
+                "description": "how many base units one pack holds, when known",
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "private": {
+                "description": "true for an item private to this workspace, false for a global catalogue item",
+                "type": "boolean"
+              },
+              "series": {
+                "description": "series or variety",
+                "type": "string"
+              },
+              "size": {
+                "description": "size, free text",
+                "type": "string"
+              },
+              "stock_qty": {
+                "description": "quantity this workspace holds, in unit",
+                "type": "number"
+              },
+              "unit": {
+                "description": "unit the quantity is counted in",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "private",
+              "category",
+              "category_name",
+              "name",
+              "unit",
+              "stock_qty",
+              "in_inventory"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "links": {
+            "description": "shop pages for this wish",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "created_at": {
+                  "description": "creation time in RFC 3339 UTC",
+                  "type": "string"
+                },
+                "currency": {
+                  "description": "currency of price",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "link id (UUID)",
+                  "type": "string"
+                },
+                "in_stock": {
+                  "description": "whether the shop had it in stock at the last check",
+                  "type": [
+                    "null",
+                    "boolean"
+                  ]
+                },
+                "price": {
+                  "description": "price when known",
+                  "type": [
+                    "null",
+                    "number"
+                  ]
+                },
+                "shop_name": {
+                  "description": "shop name",
+                  "type": "string"
+                },
+                "url": {
+                  "description": "shop page, http or https",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "url",
+                "created_at"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "note": {
+            "description": "free-text note",
+            "type": "string"
+          },
+          "priority": {
+            "description": "0 normal, 1 or 2 high",
+            "type": "integer"
+          },
+          "qty_wanted": {
+            "description": "how much is wanted, in the item unit",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "status": {
+            "description": "wanted, ordered or bought",
+            "type": "string"
+          },
+          "title": {
+            "description": "what is wanted",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "last change time in RFC 3339 UTC",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "priority",
+          "status",
+          "links",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "wishes"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_project_use_material`
+
+Use material for a project
+
+Withdraw material from the stock for a project: decreases the stock and increases the used quantity of the material in the same transaction. A withdrawal larger than the stock is an error and nothing changes. The inventory log records the project name as the reason.
+
+**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "article": {
+      "description": "article number, with manufacturer, instead of item_id",
+      "type": "string"
+    },
+    "category": {
+      "description": "category slug, only to disambiguate manufacturer + article",
+      "type": "string"
+    },
+    "item_id": {
+      "description": "catalogue item id (UUID); use it when known",
+      "type": "string"
+    },
+    "manufacturer": {
+      "description": "manufacturer name, with article, instead of item_id",
+      "type": "string"
+    },
+    "project_id": {
+      "description": "project id (UUID)",
+      "type": "string"
+    },
+    "qty": {
+      "description": "quantity to withdraw from the stock and mark used, positive",
+      "type": "number"
+    }
+  },
+  "required": [
+    "project_id",
+    "qty"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "id": {
+      "description": "project id (UUID)",
+      "type": "string"
+    },
+    "material_count": {
+      "description": "number of materials planned",
+      "type": "integer"
+    },
+    "materials": {
+      "description": "materials; empty when the project is fresh or listed",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "additionalProperties": false,
+            "description": "the catalogue item with the current stock",
+            "properties": {
+              "article": {
+                "description": "manufacturer article number",
+                "type": "string"
+              },
+              "attrs": {
+                "additionalProperties": true,
+                "description": "category specific attributes",
+                "type": "object"
+              },
+              "category": {
+                "description": "category slug",
+                "type": "string"
+              },
+              "category_name": {
+                "description": "category name in Russian",
+                "type": "string"
+              },
+              "color_hex": {
+                "description": "colour as #RRGGBB",
+                "type": "string"
+              },
+              "color_name": {
+                "description": "colour name",
+                "type": "string"
+              },
+              "color_source": {
+                "description": "official or approx: how trustworthy color_hex is",
+                "type": "string"
+              },
+              "finish": {
+                "description": "finish or coating, free text",
+                "type": "string"
+              },
+              "id": {
+                "description": "catalogue item id (UUID)",
+                "type": "string"
+              },
+              "in_inventory": {
+                "description": "whether the workspace has a stock row for the item",
+                "type": "boolean"
+              },
+              "manufacturer": {
+                "description": "manufacturer name",
+                "type": "string"
+              },
+              "name": {
+                "description": "item name",
+                "type": "string"
+              },
+              "pack_size": {
+                "description": "how many base units one pack holds, when known",
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "private": {
+                "description": "true for an item private to this workspace, false for a global catalogue item",
+                "type": "boolean"
+              },
+              "series": {
+                "description": "series or variety",
+                "type": "string"
+              },
+              "size": {
+                "description": "size, free text",
+                "type": "string"
+              },
+              "stock_qty": {
+                "description": "quantity this workspace holds, in unit",
+                "type": "number"
+              },
+              "unit": {
+                "description": "unit the quantity is counted in",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "private",
+              "category",
+              "category_name",
+              "name",
+              "unit",
+              "stock_qty",
+              "in_inventory"
+            ],
+            "type": "object"
+          },
+          "qty_planned": {
+            "description": "planned quantity, absent when no plan is set",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "qty_used": {
+            "description": "quantity already used by the project",
+            "type": "number"
+          },
+          "shortage": {
+            "description": "max(0, qty_planned - qty_used - stock): how much is still to buy",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item",
+          "qty_used",
+          "shortage"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "name": {
+      "description": "project name",
+      "type": "string"
+    },
+    "notes": {
+      "description": "free-text notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "material_count",
+    "materials",
+    "created_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_reference`
+
+Craft reference data
+
+List the material categories (slug, name, default unit) and the known manufacturers of the craft supplies catalogue. Call it first to learn the valid category slugs and units before searching or creating items.
+
+**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "categories": {
+      "description": "all material categories",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "default_unit": {
+            "description": "unit used when an item does not name one",
+            "type": "string"
+          },
+          "name": {
+            "description": "category name in Russian",
+            "type": "string"
+          },
+          "slug": {
+            "description": "category slug to use in filters and item data",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "default_unit"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "manufacturers": {
+      "description": "known manufacturer names",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "units": {
+      "description": "every valid unit",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "categories",
+    "manufacturers",
+    "units"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_stock_adjust`
+
+Change stock by a delta
+
+Add to or use up material: delta is positive to add and negative to use. Identify the item by item_id, or by manufacturer + article (+ category when ambiguous). The stock row is created on first use. A withdrawal larger than the stock is an error. The change is logged with the optional reason.
+
+**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "article": {
+      "description": "article number, with manufacturer, instead of item_id",
+      "type": "string"
+    },
+    "category": {
+      "description": "category slug, only to disambiguate manufacturer + article",
+      "type": "string"
+    },
+    "delta": {
+      "description": "change of the quantity in the item's unit: positive adds, negative uses up",
+      "type": "number"
+    },
+    "item_id": {
+      "description": "catalogue item id (UUID); use it when known",
+      "type": "string"
+    },
+    "manufacturer": {
+      "description": "manufacturer name, with article, instead of item_id",
+      "type": "string"
+    },
+    "reason": {
+      "description": "why, for example the project name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "delta"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "item": {
+      "additionalProperties": false,
+      "description": "the catalogue item",
+      "properties": {
+        "article": {
+          "description": "manufacturer article number",
+          "type": "string"
+        },
+        "attrs": {
+          "additionalProperties": true,
+          "description": "category specific attributes",
+          "type": "object"
+        },
+        "category": {
+          "description": "category slug",
+          "type": "string"
+        },
+        "category_name": {
+          "description": "category name in Russian",
+          "type": "string"
+        },
+        "color_hex": {
+          "description": "colour as #RRGGBB",
+          "type": "string"
+        },
+        "color_name": {
+          "description": "colour name",
+          "type": "string"
+        },
+        "color_source": {
+          "description": "official or approx: how trustworthy color_hex is",
+          "type": "string"
+        },
+        "finish": {
+          "description": "finish or coating, free text",
+          "type": "string"
+        },
+        "id": {
+          "description": "catalogue item id (UUID)",
+          "type": "string"
+        },
+        "in_inventory": {
+          "description": "whether the workspace has a stock row for the item",
+          "type": "boolean"
+        },
+        "manufacturer": {
+          "description": "manufacturer name",
+          "type": "string"
+        },
+        "name": {
+          "description": "item name",
+          "type": "string"
+        },
+        "pack_size": {
+          "description": "how many base units one pack holds, when known",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "private": {
+          "description": "true for an item private to this workspace, false for a global catalogue item",
+          "type": "boolean"
+        },
+        "series": {
+          "description": "series or variety",
+          "type": "string"
+        },
+        "size": {
+          "description": "size, free text",
+          "type": "string"
+        },
+        "stock_qty": {
+          "description": "quantity this workspace holds, in unit",
+          "type": "number"
+        },
+        "unit": {
+          "description": "unit the quantity is counted in",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "private",
+        "category",
+        "category_name",
+        "name",
+        "unit",
+        "stock_qty",
+        "in_inventory"
+      ],
+      "type": "object"
+    },
+    "location": {
+      "description": "where it is stored",
+      "type": "string"
+    },
+    "notes": {
+      "description": "notes about this stock",
+      "type": "string"
+    },
+    "qty": {
+      "description": "quantity held, in item.unit",
+      "type": "number"
+    },
+    "updated_at": {
+      "description": "last change in RFC 3339 UTC",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item",
+    "qty",
+    "updated_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_stock_remove`
+
+Remove an item from stock
+
+Delete the stock row of an item (the catalogue item itself stays).
+
+**Доступ:** изменяет и удаляет. Вызов может удалить данные; клиент должен подтверждать его у пользователя.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "article": {
+      "description": "article number, with manufacturer, instead of item_id",
+      "type": "string"
+    },
+    "category": {
+      "description": "category slug, only to disambiguate manufacturer + article",
+      "type": "string"
+    },
+    "item_id": {
+      "description": "catalogue item id (UUID); use it when known",
+      "type": "string"
+    },
+    "manufacturer": {
+      "description": "manufacturer name, with article, instead of item_id",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "item_id": {
+      "description": "item whose stock row was removed",
+      "type": "string"
+    },
+    "removed": {
+      "description": "always true on success",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "item_id",
+    "removed"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_stock_set`
+
+Set stock to a value
+
+Set the quantity of an item to an absolute value (a stocktake). Identify the item like craft_stock_adjust. The change is logged.
+
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "article": {
+      "description": "article number, with manufacturer, instead of item_id",
+      "type": "string"
+    },
+    "category": {
+      "description": "category slug, only to disambiguate manufacturer + article",
+      "type": "string"
+    },
+    "item_id": {
+      "description": "catalogue item id (UUID); use it when known",
+      "type": "string"
+    },
+    "manufacturer": {
+      "description": "manufacturer name, with article, instead of item_id",
+      "type": "string"
+    },
+    "qty": {
+      "description": "new absolute quantity in the item's unit, 0 or more",
+      "type": "number"
+    },
+    "reason": {
+      "description": "why, for example stocktake",
+      "type": "string"
+    }
+  },
+  "required": [
+    "qty"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "item": {
+      "additionalProperties": false,
+      "description": "the catalogue item",
+      "properties": {
+        "article": {
+          "description": "manufacturer article number",
+          "type": "string"
+        },
+        "attrs": {
+          "additionalProperties": true,
+          "description": "category specific attributes",
+          "type": "object"
+        },
+        "category": {
+          "description": "category slug",
+          "type": "string"
+        },
+        "category_name": {
+          "description": "category name in Russian",
+          "type": "string"
+        },
+        "color_hex": {
+          "description": "colour as #RRGGBB",
+          "type": "string"
+        },
+        "color_name": {
+          "description": "colour name",
+          "type": "string"
+        },
+        "color_source": {
+          "description": "official or approx: how trustworthy color_hex is",
+          "type": "string"
+        },
+        "finish": {
+          "description": "finish or coating, free text",
+          "type": "string"
+        },
+        "id": {
+          "description": "catalogue item id (UUID)",
+          "type": "string"
+        },
+        "in_inventory": {
+          "description": "whether the workspace has a stock row for the item",
+          "type": "boolean"
+        },
+        "manufacturer": {
+          "description": "manufacturer name",
+          "type": "string"
+        },
+        "name": {
+          "description": "item name",
+          "type": "string"
+        },
+        "pack_size": {
+          "description": "how many base units one pack holds, when known",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "private": {
+          "description": "true for an item private to this workspace, false for a global catalogue item",
+          "type": "boolean"
+        },
+        "series": {
+          "description": "series or variety",
+          "type": "string"
+        },
+        "size": {
+          "description": "size, free text",
+          "type": "string"
+        },
+        "stock_qty": {
+          "description": "quantity this workspace holds, in unit",
+          "type": "number"
+        },
+        "unit": {
+          "description": "unit the quantity is counted in",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "private",
+        "category",
+        "category_name",
+        "name",
+        "unit",
+        "stock_qty",
+        "in_inventory"
+      ],
+      "type": "object"
+    },
+    "location": {
+      "description": "where it is stored",
+      "type": "string"
+    },
+    "notes": {
+      "description": "notes about this stock",
+      "type": "string"
+    },
+    "qty": {
+      "description": "quantity held, in item.unit",
+      "type": "number"
+    },
+    "updated_at": {
+      "description": "last change in RFC 3339 UTC",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item",
+    "qty",
+    "updated_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_wishlist_add`
+
+Add a wish
+
+Add an entry to the wish list: either a catalogue item (catalog_item_id) or free text (title) for something that is not in any catalogue yet. The title defaults to the item name. qty_wanted is optional and must be positive; priority is 0 (normal), 1 or 2 (high). A catalogue item can be wanted only once at a time.
+
+**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "catalog_item_id": {
+      "description": "catalogue item id (UUID); omit for a free-text wish",
+      "type": "string"
+    },
+    "note": {
+      "description": "free-text note",
+      "type": "string"
+    },
+    "priority": {
+      "description": "0 normal, 1 or 2 high",
+      "type": "integer"
+    },
+    "qty_wanted": {
+      "description": "how much is wanted, positive, in the item unit",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "title": {
+      "description": "what is wanted; defaults to the item name when catalog_item_id is set",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "catalog_item_id": {
+      "description": "catalogue item id, absent for a free-text wish",
+      "type": "string"
+    },
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "id": {
+      "description": "wish list entry id (UUID)",
+      "type": "string"
+    },
+    "item": {
+      "additionalProperties": false,
+      "description": "catalogue item summary with the current stock, absent for a free-text wish",
+      "properties": {
+        "article": {
+          "description": "manufacturer article number",
+          "type": "string"
+        },
+        "attrs": {
+          "additionalProperties": true,
+          "description": "category specific attributes",
+          "type": "object"
+        },
+        "category": {
+          "description": "category slug",
+          "type": "string"
+        },
+        "category_name": {
+          "description": "category name in Russian",
+          "type": "string"
+        },
+        "color_hex": {
+          "description": "colour as #RRGGBB",
+          "type": "string"
+        },
+        "color_name": {
+          "description": "colour name",
+          "type": "string"
+        },
+        "color_source": {
+          "description": "official or approx: how trustworthy color_hex is",
+          "type": "string"
+        },
+        "finish": {
+          "description": "finish or coating, free text",
+          "type": "string"
+        },
+        "id": {
+          "description": "catalogue item id (UUID)",
+          "type": "string"
+        },
+        "in_inventory": {
+          "description": "whether the workspace has a stock row for the item",
+          "type": "boolean"
+        },
+        "manufacturer": {
+          "description": "manufacturer name",
+          "type": "string"
+        },
+        "name": {
+          "description": "item name",
+          "type": "string"
+        },
+        "pack_size": {
+          "description": "how many base units one pack holds, when known",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "private": {
+          "description": "true for an item private to this workspace, false for a global catalogue item",
+          "type": "boolean"
+        },
+        "series": {
+          "description": "series or variety",
+          "type": "string"
+        },
+        "size": {
+          "description": "size, free text",
+          "type": "string"
+        },
+        "stock_qty": {
+          "description": "quantity this workspace holds, in unit",
+          "type": "number"
+        },
+        "unit": {
+          "description": "unit the quantity is counted in",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "private",
+        "category",
+        "category_name",
+        "name",
+        "unit",
+        "stock_qty",
+        "in_inventory"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "links": {
+      "description": "shop pages for this wish",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "description": "creation time in RFC 3339 UTC",
+            "type": "string"
+          },
+          "currency": {
+            "description": "currency of price",
+            "type": "string"
+          },
+          "id": {
+            "description": "link id (UUID)",
+            "type": "string"
+          },
+          "in_stock": {
+            "description": "whether the shop had it in stock at the last check",
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "price": {
+            "description": "price when known",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "shop_name": {
+            "description": "shop name",
+            "type": "string"
+          },
+          "url": {
+            "description": "shop page, http or https",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "note": {
+      "description": "free-text note",
+      "type": "string"
+    },
+    "priority": {
+      "description": "0 normal, 1 or 2 high",
+      "type": "integer"
+    },
+    "qty_wanted": {
+      "description": "how much is wanted, in the item unit",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "status": {
+      "description": "wanted, ordered or bought",
+      "type": "string"
+    },
+    "title": {
+      "description": "what is wanted",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "last change time in RFC 3339 UTC",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "priority",
+    "status",
+    "links",
+    "created_at",
+    "updated_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_wishlist_link_add`
+
+Add a shop link to a wish
+
+Attach a shop page where the wished item can be bought: an http(s) url, the shop name, and optionally the price, currency and whether the shop has it in stock.
+
+**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "currency": {
+      "description": "currency of price, for example RUB or EUR",
+      "type": "string"
+    },
+    "in_stock": {
+      "description": "whether the shop has it in stock",
+      "type": [
+        "null",
+        "boolean"
+      ]
+    },
+    "price": {
+      "description": "price, 0 or more",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "shop_name": {
+      "description": "shop name",
+      "type": "string"
+    },
+    "url": {
+      "description": "shop page, must start with http:// or https://",
+      "type": "string"
+    },
+    "wish_id": {
+      "description": "wish list entry id (UUID)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "wish_id",
+    "url"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "currency": {
+      "description": "currency of price",
+      "type": "string"
+    },
+    "id": {
+      "description": "link id (UUID)",
+      "type": "string"
+    },
+    "in_stock": {
+      "description": "whether the shop had it in stock at the last check",
+      "type": [
+        "null",
+        "boolean"
+      ]
+    },
+    "price": {
+      "description": "price when known",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "shop_name": {
+      "description": "shop name",
+      "type": "string"
+    },
+    "url": {
+      "description": "shop page, http or https",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "url",
+    "created_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_wishlist_link_remove`
+
+Remove a shop link from a wish
+
+Delete one shop link of a wish list entry.
+
+**Доступ:** изменяет и удаляет. Вызов может удалить данные; клиент должен подтверждать его у пользователя.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "link_id": {
+      "description": "shop link id (UUID)",
+      "type": "string"
+    },
+    "wish_id": {
+      "description": "wish list entry id (UUID)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "wish_id",
+    "link_id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "link_id": {
+      "description": "id of the removed shop link",
+      "type": "string"
+    },
+    "removed": {
+      "description": "always true on success",
+      "type": "boolean"
+    },
+    "wish_id": {
+      "description": "wish list entry the link belonged to",
+      "type": "string"
+    }
+  },
+  "required": [
+    "wish_id",
+    "link_id",
+    "removed"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_wishlist_list`
+
+List the wish list
+
+List what the workspace wants to buy. By default only entries with status wanted are returned; pass ordered or bought for another status, or all for every entry. Each entry shows its catalogue item (with the current stock), its links to shops and qty_wanted.
+
+**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "description": "wanted (default), ordered, bought or all",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "wishes": {
+      "description": "wish list entries; empty when there are none",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_item_id": {
+            "description": "catalogue item id, absent for a free-text wish",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "creation time in RFC 3339 UTC",
+            "type": "string"
+          },
+          "id": {
+            "description": "wish list entry id (UUID)",
+            "type": "string"
+          },
+          "item": {
+            "additionalProperties": false,
+            "description": "catalogue item summary with the current stock, absent for a free-text wish",
+            "properties": {
+              "article": {
+                "description": "manufacturer article number",
+                "type": "string"
+              },
+              "attrs": {
+                "additionalProperties": true,
+                "description": "category specific attributes",
+                "type": "object"
+              },
+              "category": {
+                "description": "category slug",
+                "type": "string"
+              },
+              "category_name": {
+                "description": "category name in Russian",
+                "type": "string"
+              },
+              "color_hex": {
+                "description": "colour as #RRGGBB",
+                "type": "string"
+              },
+              "color_name": {
+                "description": "colour name",
+                "type": "string"
+              },
+              "color_source": {
+                "description": "official or approx: how trustworthy color_hex is",
+                "type": "string"
+              },
+              "finish": {
+                "description": "finish or coating, free text",
+                "type": "string"
+              },
+              "id": {
+                "description": "catalogue item id (UUID)",
+                "type": "string"
+              },
+              "in_inventory": {
+                "description": "whether the workspace has a stock row for the item",
+                "type": "boolean"
+              },
+              "manufacturer": {
+                "description": "manufacturer name",
+                "type": "string"
+              },
+              "name": {
+                "description": "item name",
+                "type": "string"
+              },
+              "pack_size": {
+                "description": "how many base units one pack holds, when known",
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "private": {
+                "description": "true for an item private to this workspace, false for a global catalogue item",
+                "type": "boolean"
+              },
+              "series": {
+                "description": "series or variety",
+                "type": "string"
+              },
+              "size": {
+                "description": "size, free text",
+                "type": "string"
+              },
+              "stock_qty": {
+                "description": "quantity this workspace holds, in unit",
+                "type": "number"
+              },
+              "unit": {
+                "description": "unit the quantity is counted in",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "private",
+              "category",
+              "category_name",
+              "name",
+              "unit",
+              "stock_qty",
+              "in_inventory"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "links": {
+            "description": "shop pages for this wish",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "created_at": {
+                  "description": "creation time in RFC 3339 UTC",
+                  "type": "string"
+                },
+                "currency": {
+                  "description": "currency of price",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "link id (UUID)",
+                  "type": "string"
+                },
+                "in_stock": {
+                  "description": "whether the shop had it in stock at the last check",
+                  "type": [
+                    "null",
+                    "boolean"
+                  ]
+                },
+                "price": {
+                  "description": "price when known",
+                  "type": [
+                    "null",
+                    "number"
+                  ]
+                },
+                "shop_name": {
+                  "description": "shop name",
+                  "type": "string"
+                },
+                "url": {
+                  "description": "shop page, http or https",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "url",
+                "created_at"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "note": {
+            "description": "free-text note",
+            "type": "string"
+          },
+          "priority": {
+            "description": "0 normal, 1 or 2 high",
+            "type": "integer"
+          },
+          "qty_wanted": {
+            "description": "how much is wanted, in the item unit",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "status": {
+            "description": "wanted, ordered or bought",
+            "type": "string"
+          },
+          "title": {
+            "description": "what is wanted",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "last change time in RFC 3339 UTC",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "priority",
+          "status",
+          "links",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "wishes"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_wishlist_mark_bought`
+
+Mark a wish as bought
+
+Mark a wish list entry as bought. With add_to_stock set and a catalogue item, the wanted quantity is added to the stock in the same transaction, exactly like craft_stock_adjust; a free-text entry is only marked bought. Repeating the call does not add the quantity twice.
+
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "add_to_stock": {
+      "description": "add the wanted quantity to the stock when the entry points at a catalogue item",
+      "type": "boolean"
+    },
+    "wish_id": {
+      "description": "wish list entry id (UUID)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "wish_id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "catalog_item_id": {
+      "description": "catalogue item id, absent for a free-text wish",
+      "type": "string"
+    },
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "id": {
+      "description": "wish list entry id (UUID)",
+      "type": "string"
+    },
+    "item": {
+      "additionalProperties": false,
+      "description": "catalogue item summary with the current stock, absent for a free-text wish",
+      "properties": {
+        "article": {
+          "description": "manufacturer article number",
+          "type": "string"
+        },
+        "attrs": {
+          "additionalProperties": true,
+          "description": "category specific attributes",
+          "type": "object"
+        },
+        "category": {
+          "description": "category slug",
+          "type": "string"
+        },
+        "category_name": {
+          "description": "category name in Russian",
+          "type": "string"
+        },
+        "color_hex": {
+          "description": "colour as #RRGGBB",
+          "type": "string"
+        },
+        "color_name": {
+          "description": "colour name",
+          "type": "string"
+        },
+        "color_source": {
+          "description": "official or approx: how trustworthy color_hex is",
+          "type": "string"
+        },
+        "finish": {
+          "description": "finish or coating, free text",
+          "type": "string"
+        },
+        "id": {
+          "description": "catalogue item id (UUID)",
+          "type": "string"
+        },
+        "in_inventory": {
+          "description": "whether the workspace has a stock row for the item",
+          "type": "boolean"
+        },
+        "manufacturer": {
+          "description": "manufacturer name",
+          "type": "string"
+        },
+        "name": {
+          "description": "item name",
+          "type": "string"
+        },
+        "pack_size": {
+          "description": "how many base units one pack holds, when known",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "private": {
+          "description": "true for an item private to this workspace, false for a global catalogue item",
+          "type": "boolean"
+        },
+        "series": {
+          "description": "series or variety",
+          "type": "string"
+        },
+        "size": {
+          "description": "size, free text",
+          "type": "string"
+        },
+        "stock_qty": {
+          "description": "quantity this workspace holds, in unit",
+          "type": "number"
+        },
+        "unit": {
+          "description": "unit the quantity is counted in",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "private",
+        "category",
+        "category_name",
+        "name",
+        "unit",
+        "stock_qty",
+        "in_inventory"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "links": {
+      "description": "shop pages for this wish",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "description": "creation time in RFC 3339 UTC",
+            "type": "string"
+          },
+          "currency": {
+            "description": "currency of price",
+            "type": "string"
+          },
+          "id": {
+            "description": "link id (UUID)",
+            "type": "string"
+          },
+          "in_stock": {
+            "description": "whether the shop had it in stock at the last check",
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "price": {
+            "description": "price when known",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "shop_name": {
+            "description": "shop name",
+            "type": "string"
+          },
+          "url": {
+            "description": "shop page, http or https",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "note": {
+      "description": "free-text note",
+      "type": "string"
+    },
+    "priority": {
+      "description": "0 normal, 1 or 2 high",
+      "type": "integer"
+    },
+    "qty_wanted": {
+      "description": "how much is wanted, in the item unit",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "status": {
+      "description": "wanted, ordered or bought",
+      "type": "string"
+    },
+    "title": {
+      "description": "what is wanted",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "last change time in RFC 3339 UTC",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "priority",
+    "status",
+    "links",
+    "created_at",
+    "updated_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_wishlist_remove`
+
+Remove a wish
+
+Delete a wish list entry together with its links. The stock is not changed.
+
+**Доступ:** изменяет и удаляет. Вызов может удалить данные; клиент должен подтверждать его у пользователя.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "wish_id": {
+      "description": "wish list entry id (UUID)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "wish_id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "removed": {
+      "description": "always true on success",
+      "type": "boolean"
+    },
+    "wish_id": {
+      "description": "id of the removed wish list entry",
+      "type": "string"
+    }
+  },
+  "required": [
+    "wish_id",
+    "removed"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_wishlist_update`
+
+Update a wish
+
+Change the quantity, priority, note or status of a wish list entry. Omitted fields keep their current values; status is wanted, ordered or bought. Use craft_wishlist_mark_bought to also add the purchase to the stock.
+
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "note": {
+      "description": "new note; omit to keep the current one",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "priority": {
+      "description": "new priority 0..2; omit to keep the current one",
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "qty_wanted": {
+      "description": "new wanted quantity, positive; omit to keep the current one",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "status": {
+      "description": "wanted, ordered or bought; omit to keep the current status",
+      "type": "string"
+    },
+    "wish_id": {
+      "description": "wish list entry id (UUID)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "wish_id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "catalog_item_id": {
+      "description": "catalogue item id, absent for a free-text wish",
+      "type": "string"
+    },
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "id": {
+      "description": "wish list entry id (UUID)",
+      "type": "string"
+    },
+    "item": {
+      "additionalProperties": false,
+      "description": "catalogue item summary with the current stock, absent for a free-text wish",
+      "properties": {
+        "article": {
+          "description": "manufacturer article number",
+          "type": "string"
+        },
+        "attrs": {
+          "additionalProperties": true,
+          "description": "category specific attributes",
+          "type": "object"
+        },
+        "category": {
+          "description": "category slug",
+          "type": "string"
+        },
+        "category_name": {
+          "description": "category name in Russian",
+          "type": "string"
+        },
+        "color_hex": {
+          "description": "colour as #RRGGBB",
+          "type": "string"
+        },
+        "color_name": {
+          "description": "colour name",
+          "type": "string"
+        },
+        "color_source": {
+          "description": "official or approx: how trustworthy color_hex is",
+          "type": "string"
+        },
+        "finish": {
+          "description": "finish or coating, free text",
+          "type": "string"
+        },
+        "id": {
+          "description": "catalogue item id (UUID)",
+          "type": "string"
+        },
+        "in_inventory": {
+          "description": "whether the workspace has a stock row for the item",
+          "type": "boolean"
+        },
+        "manufacturer": {
+          "description": "manufacturer name",
+          "type": "string"
+        },
+        "name": {
+          "description": "item name",
+          "type": "string"
+        },
+        "pack_size": {
+          "description": "how many base units one pack holds, when known",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "private": {
+          "description": "true for an item private to this workspace, false for a global catalogue item",
+          "type": "boolean"
+        },
+        "series": {
+          "description": "series or variety",
+          "type": "string"
+        },
+        "size": {
+          "description": "size, free text",
+          "type": "string"
+        },
+        "stock_qty": {
+          "description": "quantity this workspace holds, in unit",
+          "type": "number"
+        },
+        "unit": {
+          "description": "unit the quantity is counted in",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "private",
+        "category",
+        "category_name",
+        "name",
+        "unit",
+        "stock_qty",
+        "in_inventory"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "links": {
+      "description": "shop pages for this wish",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "description": "creation time in RFC 3339 UTC",
+            "type": "string"
+          },
+          "currency": {
+            "description": "currency of price",
+            "type": "string"
+          },
+          "id": {
+            "description": "link id (UUID)",
+            "type": "string"
+          },
+          "in_stock": {
+            "description": "whether the shop had it in stock at the last check",
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "price": {
+            "description": "price when known",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "shop_name": {
+            "description": "shop name",
+            "type": "string"
+          },
+          "url": {
+            "description": "shop page, http or https",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "note": {
+      "description": "free-text note",
+      "type": "string"
+    },
+    "priority": {
+      "description": "0 normal, 1 or 2 high",
+      "type": "integer"
+    },
+    "qty_wanted": {
+      "description": "how much is wanted, in the item unit",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "status": {
+      "description": "wanted, ordered or bought",
+      "type": "string"
+    },
+    "title": {
+      "description": "what is wanted",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "last change time in RFC 3339 UTC",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "priority",
+    "status",
+    "links",
+    "created_at",
+    "updated_at"
+  ],
+  "type": "object"
+}
+```
+
 <!-- END GENERATED MCP TOOLS -->
 
 Блок между маркерами генерируется из кода командой
@@ -1311,6 +5175,84 @@ application/json` и `Accept: application/json, text/event-stream`. Ответ
 подтверждений побеждает ровно одно. Если подтверждать нечего (не срабатывало,
 уже подтверждено, правка отменила срабатывание), инструмент возвращает ошибку
 `nothing to confirm: …`.
+
+### Бусинки: wishlist и проекты
+
+Инструменты `craft_*` живут только на `/mcp/w/{id}`, потому что все их данные
+принадлежат workspace. Примеры ниже — те же `tools/call`, что и выше.
+
+Добавить в wishlist позицию каталога и свободный текст:
+
+```json
+{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"craft_wishlist_add","arguments":{"catalog_item_id":"7b2c1f4e-0a3d-4c8e-9f61-2d5a8b7c6e10","qty_wanted":2,"priority":2,"note":"на подарок"}}}
+```
+
+```json
+{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"craft_wishlist_add","arguments":{"title":"Лента атласная, 1 см"}}}
+```
+
+Список, правка и удаление (по умолчанию видны только `wanted`; `all` — все):
+
+```json
+{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"craft_wishlist_list","arguments":{"status":"all"}}}
+```
+
+```json
+{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"craft_wishlist_update","arguments":{"wish_id":"3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f","status":"ordered","priority":1}}}
+```
+
+```json
+{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"craft_wishlist_remove","arguments":{"wish_id":"3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f"}}}
+```
+
+Ссылки на магазины (url только http(s)):
+
+```json
+{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"craft_wishlist_link_add","arguments":{"wish_id":"3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f","url":"https://shop.example/beads","shop_name":"Магазин","price":12.5,"currency":"RUB","in_stock":true}}}
+```
+
+```json
+{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"craft_wishlist_link_remove","arguments":{"wish_id":"3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f","link_id":"9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"}}}
+```
+
+Покупка: статус `bought`, а с `add_to_stock` купленное количество ещё и
+попадает в остаток (повторный вызов не добавляет его дважды):
+
+```json
+{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"craft_wishlist_mark_bought","arguments":{"wish_id":"3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f","add_to_stock":true}}}
+```
+
+Проекты: создать, запланировать материал, прочитать проект.
+
+```json
+{"jsonrpc":"2.0","id":18,"method":"tools/call","params":{"name":"craft_project_create","arguments":{"name":"Ёлка","notes":"подарок"}}}
+```
+
+```json
+{"jsonrpc":"2.0","id":19,"method":"tools/call","params":{"name":"craft_project_set_material","arguments":{"project_id":"5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f","item_id":"7b2c1f4e-0a3d-4c8e-9f61-2d5a8b7c6e10","qty_planned":20}}}
+```
+
+```json
+{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"craft_project_get","arguments":{"project_id":"5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f"}}}
+```
+
+```json
+{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"craft_project_list","arguments":{}}}
+```
+
+Списать материал на проект: остаток уменьшается, `qty_used` растёт, всё в
+одной транзакции; при нехватке — ошибка и ничего не меняется.
+
+```json
+{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"craft_project_use_material","arguments":{"project_id":"5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f","item_id":"7b2c1f4e-0a3d-4c8e-9f61-2d5a8b7c6e10","qty":8}}}
+```
+
+Дефицит проекта — в wishlist (`shortage = max(0, qty_planned - qty_used -
+stock)`; уже добавленное пропускается):
+
+```json
+{"jsonrpc":"2.0","id":23,"method":"tools/call","params":{"name":"craft_project_shortage_to_wishlist","arguments":{"project_id":"5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f"}}}
+```
 
 ### Сырой HTTP-запрос
 

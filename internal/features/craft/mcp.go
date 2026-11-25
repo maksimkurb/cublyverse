@@ -29,22 +29,26 @@ const (
 
 func boolPtr(v bool) *bool { return &v }
 
+// readAnnotations marks a tool that only reads data.
+func readAnnotations(title string) *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{Title: title, ReadOnlyHint: true, OpenWorldHint: boolPtr(false)}
+}
+
+// writeAnnotations marks a tool that changes data; destructive also means it can
+// remove something.
+func writeAnnotations(title string, destructive, idempotent bool) *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{Title: title, DestructiveHint: boolPtr(destructive), IdempotentHint: idempotent, OpenWorldHint: boolPtr(false)}
+}
+
 // registerMCP adds the tools to the per-workspace endpoint /mcp/w/{id}. The
 // workspace is the one of the endpoint, so no tool takes a workspace argument.
 func (f *Feature) registerMCP(server *mcpserver.Server) {
-	read := func(title string) *mcp.ToolAnnotations {
-		return &mcp.ToolAnnotations{Title: title, ReadOnlyHint: true, OpenWorldHint: boolPtr(false)}
-	}
-	write := func(title string, destructive, idempotent bool) *mcp.ToolAnnotations {
-		return &mcp.ToolAnnotations{Title: title, DestructiveHint: boolPtr(destructive), IdempotentHint: idempotent, OpenWorldHint: boolPtr(false)}
-	}
-
 	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
 		Name: toolReference, Title: "Craft reference data",
 		Description: "List the material categories (slug, name, default unit) and the known " +
 			"manufacturers of the craft supplies catalogue. Call it first to learn the valid " +
 			"category slugs and units before searching or creating items.",
-		Annotations: read("Craft reference data"),
+		Annotations: readAnnotations("Craft reference data"),
 	}, f.mcpReference)
 
 	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
@@ -53,7 +57,7 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 			"and the private items of this workspace. Filters are optional; query matches an " +
 			"article prefix or a part of the name or colour. Each result shows how much of it " +
 			"the workspace holds (stock_qty) and its unit.",
-		Annotations: read("Search the catalogue"),
+		Annotations: readAnnotations("Search the catalogue"),
 	}, f.mcpSearch)
 
 	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
@@ -61,7 +65,7 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Description: "List what the workspace holds: items with quantity and unit, optionally " +
 			"filtered by category, manufacturer or text. Use max_qty to find items that are " +
 			"running low.",
-		Annotations: read("List stock"),
+		Annotations: readAnnotations("List stock"),
 	}, f.mcpInventory)
 
 	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
@@ -70,20 +74,20 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 			"Identify the item by item_id, or by manufacturer + article (+ category when ambiguous). " +
 			"The stock row is created on first use. A withdrawal larger than the stock is an error. " +
 			"The change is logged with the optional reason.",
-		Annotations: write("Change stock by a delta", false, false),
+		Annotations: writeAnnotations("Change stock by a delta", false, false),
 	}, f.mcpStockAdjust)
 
 	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
 		Name: toolStockSet, Title: "Set stock to a value",
 		Description: "Set the quantity of an item to an absolute value (a stocktake). Identify the " +
 			"item like craft_stock_adjust. The change is logged.",
-		Annotations: write("Set stock to a value", false, true),
+		Annotations: writeAnnotations("Set stock to a value", false, true),
 	}, f.mcpStockSet)
 
 	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
 		Name: toolStockRemove, Title: "Remove an item from stock",
 		Description: "Delete the stock row of an item (the catalogue item itself stays).",
-		Annotations: write("Remove an item from stock", true, true),
+		Annotations: writeAnnotations("Remove an item from stock", true, true),
 	}, f.mcpStockRemove)
 
 	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
@@ -92,7 +96,7 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 			"manufacturer catalogue (for example a thread of Mallorca pearls). The unit defaults " +
 			"to the category's default unit. It can be linked to an official catalogue item later " +
 			"with craft_item_link.",
-		Annotations: write("Create a private item", false, false),
+		Annotations: writeAnnotations("Create a private item", false, false),
 	}, f.mcpItemCreate)
 
 	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
@@ -100,13 +104,13 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Description: "Replace the data of a private item of this workspace. All fields are replaced, " +
 			"so read the item with craft_catalog_search first and send the full data. Global " +
 			"catalogue items cannot be changed.",
-		Annotations: write("Update a private item", false, true),
+		Annotations: writeAnnotations("Update a private item", false, true),
 	}, f.mcpItemUpdate)
 
 	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
 		Name: toolItemDelete, Title: "Delete a private item",
 		Description: "Delete a private item together with its stock. Global catalogue items cannot be deleted.",
-		Annotations: write("Delete a private item", true, true),
+		Annotations: writeAnnotations("Delete a private item", true, true),
 	}, f.mcpItemDelete)
 
 	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
@@ -114,8 +118,10 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Description: "Move the stock of a private item to another catalogue item (usually the official " +
 			"one) and delete the private item. Units must match; quantities are summed when the " +
 			"target is already in stock.",
-		Annotations: write("Link a private item to the catalogue", true, false),
+		Annotations: writeAnnotations("Link a private item to the catalogue", true, false),
 	}, f.mcpItemLink)
+
+	f.registerWishlistMCP(server)
 }
 
 // --- shapes ----------------------------------------------------------------
@@ -486,7 +492,7 @@ func mcpError(err error) error {
 	case errors.As(err, &invalid):
 		return errors.New(invalid.Message)
 	case errors.Is(err, ErrNotFound):
-		return errors.New("not found: the item does not exist, is not visible to this workspace, or has no stock row")
+		return errors.New("not found: the object does not exist or is not visible to this workspace")
 	case errors.Is(err, ErrReadOnly):
 		return errors.New("global catalogue items are read-only; create a private item instead")
 	case errors.Is(err, ErrInsufficientStock):

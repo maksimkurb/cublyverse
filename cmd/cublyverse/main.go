@@ -21,6 +21,7 @@ import (
 
 	"github.com/maksimkurb/cublyverse/internal/app"
 	"github.com/maksimkurb/cublyverse/internal/config"
+	"github.com/maksimkurb/cublyverse/internal/features/craft"
 	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/mcpserver"
 	"github.com/maksimkurb/cublyverse/internal/store"
@@ -191,6 +192,7 @@ func runDocs(_ context.Context, args []string, stdout, stderr io.Writer) error {
 	// needs the registrations, never a database or a messenger.
 	server := mcpserver.New(mcpserver.Deps{Version: version.String(), Logger: logger})
 	reminders.NewFeature(nil, logger).RegisterMCP(server)
+	craft.NewFeature(nil).RegisterMCP(server)
 
 	ctx := context.Background()
 	docs, err := server.ToolDocs(ctx)

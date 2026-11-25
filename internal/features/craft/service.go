@@ -1,6 +1,5 @@
 // Package craft implements the craft supplies feature ("Бусинки"): a catalogue
-// of materials, the stock a workspace holds, and (in later stories) projects
-// and a wish list.
+// of materials, the stock a workspace holds, its projects and a wish list.
 //
 // Authorisation is by workspace membership: every method takes the id of the
 // acting user and the workspace and first calls workspace.Service.Require, so a
@@ -364,12 +363,12 @@ func (s *Service) ListInventory(ctx context.Context, userID, workspaceID string,
 // Adjust changes the stock of an item by delta (negative to use material). The
 // stock row is created on first use, so adding an item to the inventory is an
 // adjustment from zero. A withdrawal larger than the stock is
-// ErrInsufficientStock. projectID may be empty.
+// ErrInsufficientStock.
 func (s *Service) Adjust(ctx context.Context, userID, workspaceID, itemID string, delta float64, reason string) (StockEntry, error) {
 	if delta == 0 || math.IsNaN(delta) || math.IsInf(delta, 0) {
 		return StockEntry{}, invalid("Изменение остатка должно быть ненулевым числом.")
 	}
-	return s.change(ctx, userID, workspaceID, itemID, reason, func(ctx context.Context, q *db.Queries, wid, iid pgtype.UUID) (pgtype.Numeric, error) {
+	return s.change(ctx, userID, workspaceID, itemID, reason, pgtype.UUID{}, func(ctx context.Context, q *db.Queries, wid, iid pgtype.UUID) (pgtype.Numeric, error) {
 		row, err := q.AdjustCraftInventoryQty(ctx, db.AdjustCraftInventoryQtyParams{
 			WorkspaceID: wid, CatalogItemID: iid, Qty: numeric(delta),
 		})
@@ -388,7 +387,7 @@ func (s *Service) SetQty(ctx context.Context, userID, workspaceID, itemID string
 	if qty < 0 || math.IsNaN(qty) || math.IsInf(qty, 0) {
 		return StockEntry{}, invalid("Остаток не может быть отрицательным.")
 	}
-	return s.change(ctx, userID, workspaceID, itemID, reason, func(ctx context.Context, q *db.Queries, wid, iid pgtype.UUID) (pgtype.Numeric, error) {
+	return s.change(ctx, userID, workspaceID, itemID, reason, pgtype.UUID{}, func(ctx context.Context, q *db.Queries, wid, iid pgtype.UUID) (pgtype.Numeric, error) {
 		row, err := q.SetCraftInventoryQty(ctx, db.SetCraftInventoryQtyParams{
 			WorkspaceID: wid, CatalogItemID: iid, Qty: numeric(qty),
 		})
@@ -659,9 +658,10 @@ func (s *Service) itemParams(ctx context.Context, q *db.Queries, in ItemInput) (
 	return out, nil
 }
 
-// change runs one stock mutation: ensure the row, apply fn, log.
+// change runs one stock mutation: ensure the row, apply fn, log. projectID is
+// written to the log row and may be empty.
 func (s *Service) change(
-	ctx context.Context, userID, workspaceID, itemID, reason string,
+	ctx context.Context, userID, workspaceID, itemID, reason string, projectID pgtype.UUID,
 	fn func(context.Context, *db.Queries, pgtype.UUID, pgtype.UUID) (pgtype.Numeric, error),
 	delta *float64,
 ) (StockEntry, error) {
@@ -675,36 +675,70 @@ func (s *Service) change(
 	}
 	actor, _ := workspace.ParseID(userID)
 	err = s.st.InTx(ctx, func(q *db.Queries) error {
-		if _, err := s.visible(ctx, q, wid, iid); err != nil {
-			return err
-		}
-		// ON CONFLICT DO NOTHING returns no row when the stock row exists.
-		if _, err := q.InsertCraftInventory(ctx, db.InsertCraftInventoryParams{
-			WorkspaceID: wid, CatalogItemID: iid, Qty: numeric(0),
-		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("ensure stock row: %w", err)
-		}
-		before, err := q.LockCraftInventoryRow(ctx, db.LockCraftInventoryRowParams{WorkspaceID: wid, CatalogItemID: iid})
-		if err != nil {
-			return fmt.Errorf("lock stock row: %w", err)
-		}
-		after, err := fn(ctx, q, wid, iid)
-		if err != nil {
-			return err
-		}
-		d := numFloat(after) - numFloat(before.Qty)
-		if delta != nil {
-			d = *delta
-		}
-		return q.InsertCraftInventoryLog(ctx, db.InsertCraftInventoryLogParams{
-			WorkspaceID: wid, CatalogItemID: iid, UserID: actor,
-			Delta: numeric(d), QtyAfter: after, Reason: strings.TrimSpace(reason),
-		})
+		return s.mutate(ctx, q, wid, iid, actor, projectID, reason, fn, delta)
 	})
 	if err != nil {
 		return StockEntry{}, err
 	}
 	return s.stockEntry(ctx, wid, iid)
+}
+
+// mutate applies one stock mutation inside an existing transaction. The stock
+// row is created at zero first; LockCraftInventoryRow then serialises
+// concurrent changes of the same row.
+func (s *Service) mutate(
+	ctx context.Context, q *db.Queries, wid, iid, actor, projectID pgtype.UUID, reason string,
+	fn func(context.Context, *db.Queries, pgtype.UUID, pgtype.UUID) (pgtype.Numeric, error),
+	delta *float64,
+) error {
+	if _, err := s.visible(ctx, q, wid, iid); err != nil {
+		return err
+	}
+	// ON CONFLICT DO NOTHING returns no row when the stock row exists.
+	if _, err := q.InsertCraftInventory(ctx, db.InsertCraftInventoryParams{
+		WorkspaceID: wid, CatalogItemID: iid, Qty: numeric(0),
+	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("ensure stock row: %w", err)
+	}
+	before, err := q.LockCraftInventoryRow(ctx, db.LockCraftInventoryRowParams{WorkspaceID: wid, CatalogItemID: iid})
+	if err != nil {
+		return fmt.Errorf("lock stock row: %w", err)
+	}
+	after, err := fn(ctx, q, wid, iid)
+	if err != nil {
+		return err
+	}
+	d := numFloat(after) - numFloat(before.Qty)
+	if delta != nil {
+		d = *delta
+	}
+	return q.InsertCraftInventoryLog(ctx, db.InsertCraftInventoryLogParams{
+		WorkspaceID: wid, CatalogItemID: iid, UserID: actor, ProjectID: projectID,
+		Delta: numeric(d), QtyAfter: after, Reason: strings.TrimSpace(reason),
+	})
+}
+
+// adjustInTx applies a relative stock change inside an existing transaction,
+// so a feature can combine it with its own writes atomically.
+func (s *Service) adjustInTx(
+	ctx context.Context, q *db.Queries, wid, iid, actor, projectID pgtype.UUID, delta float64, reason string,
+) (pgtype.Numeric, error) {
+	var after pgtype.Numeric
+	err := s.mutate(ctx, q, wid, iid, actor, projectID, reason,
+		func(ctx context.Context, q *db.Queries, wid, iid pgtype.UUID) (pgtype.Numeric, error) {
+			row, err := q.AdjustCraftInventoryQty(ctx, db.AdjustCraftInventoryQtyParams{
+				WorkspaceID: wid, CatalogItemID: iid, Qty: numeric(delta),
+			})
+			if isCheckViolation(err) {
+				return pgtype.Numeric{}, ErrInsufficientStock
+			}
+			if err != nil {
+				return pgtype.Numeric{}, fmt.Errorf("adjust stock: %w", err)
+			}
+			after = row.Qty
+			return row.Qty, nil
+		}, &delta)
+	return after, err
 }
 
 func (s *Service) stockEntry(ctx context.Context, wid, iid pgtype.UUID) (StockEntry, error) {

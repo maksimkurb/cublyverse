@@ -3,6 +3,9 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"time"
+
+	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/httpapi/gen"
@@ -162,11 +165,13 @@ func createReminderInput(body gen.CreateReminderRequest) reminders.Input {
 		Message:       body.Message,
 		Timezone:      body.Timezone,
 		Kind:          reminders.Kind(body.ScheduleKind),
-		Days:          body.ScheduleDays,
+		Days:          daysFromAPI(body.ScheduleDays),
 		TimeHHMM:      body.Time,
 		RepeatMinutes: reminders.DefaultRepeatMinutes,
 		Enabled:       true,
 	}
+	applyRecurrence(&input, body.Interval, body.MonthWeekPosition, body.MonthWeekday,
+		body.StartDate, endKindName(body.EndKind), body.EndDate, body.EndCount)
 	if body.RepeatMinutes != nil {
 		input.RepeatMinutes = *body.RepeatMinutes
 	}
@@ -178,38 +183,133 @@ func createReminderInput(body gen.CreateReminderRequest) reminders.Input {
 
 // updateReminderInput maps the full replacement body to the service input.
 func updateReminderInput(body gen.UpdateReminderRequest) reminders.Input {
-	return reminders.Input{
+	input := reminders.Input{
 		Message:       body.Message,
 		Timezone:      body.Timezone,
 		Kind:          reminders.Kind(body.ScheduleKind),
-		Days:          body.ScheduleDays,
+		Days:          daysFromAPI(body.ScheduleDays),
 		TimeHHMM:      body.Time,
 		RepeatMinutes: body.RepeatMinutes,
 		Enabled:       body.Enabled,
 	}
+	applyRecurrence(&input, body.Interval, body.MonthWeekPosition, body.MonthWeekday,
+		body.StartDate, stringValue(body.EndKind), body.EndDate, body.EndCount)
+	return input
+}
+
+// endKindName renders the optional create end kind as a string.
+func endKindName(value *gen.CreateReminderRequestEndKind) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+// stringValue renders an optional generated enum as a string.
+func stringValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+// applyRecurrence copies the optional recurrence fields, leaving service
+// defaults for everything a client omitted.
+func applyRecurrence(
+	input *reminders.Input,
+	interval *int,
+	monthWeekPosition *int,
+	monthWeekday *int,
+	startDate *openapi_types.Date,
+	endKind string,
+	endDate *openapi_types.Date,
+	endCount *int,
+) {
+	if interval != nil {
+		input.Interval = *interval
+	}
+	if monthWeekPosition != nil {
+		input.MonthWeekPosition = *monthWeekPosition
+	}
+	if monthWeekday != nil {
+		input.MonthWeekday = *monthWeekday
+	}
+	if startDate != nil {
+		input.StartDate = startDate.String()
+	}
+	if endKind != "" {
+		input.EndKind = reminders.EndKind(endKind)
+	}
+	if endDate != nil {
+		input.EndDate = endDate.String()
+	}
+	if endCount != nil {
+		input.EndCount = *endCount
+	}
+}
+
+// daysFromAPI unwraps the optional day list. An omitted list is empty, which is
+// exactly what a daily, yearly or one-time rule needs.
+func daysFromAPI(days *[]int) []int {
+	if days == nil {
+		return nil
+	}
+	return *days
 }
 
 // reminderToAPI maps the service model to the API schema.
 func reminderToAPI(reminder reminders.Reminder) gen.Reminder {
 	out := gen.Reminder{
-		Id:            reminder.ID,
-		Message:       reminder.Message,
-		Timezone:      reminder.Timezone,
-		ScheduleKind:  gen.ScheduleKind(reminder.Kind),
-		ScheduleDays:  reminder.Days,
-		Time:          reminder.TimeHHMM,
-		RepeatMinutes: reminder.RepeatMinutes,
-		Enabled:       reminder.Enabled,
-		NextDueAt:     reminder.NextDueAt,
-		LastError:     reminder.LastError,
-		CreatedAt:     reminder.CreatedAt,
-		UpdatedAt:     reminder.UpdatedAt,
+		Id:                reminder.ID,
+		Message:           reminder.Message,
+		Timezone:          reminder.Timezone,
+		ScheduleKind:      gen.ScheduleKind(reminder.Kind),
+		ScheduleDays:      reminder.Days,
+		Interval:          reminder.Interval,
+		MonthWeekPosition: optionalInt(reminder.MonthWeekPosition),
+		MonthWeekday:      optionalInt(reminder.MonthWeekday),
+		StartDate:         dateToAPI(reminder.StartDate),
+		EndKind:           gen.ReminderEndKind(reminder.End.Kind),
+		EndDate:           optionalDateToAPI(reminder.End.Date),
+		EndCount:          optionalInt(reminder.End.Count),
+		OccurrencesFired:  reminder.OccurrencesFired,
+		Finished:          reminder.Finished(),
+		FinishedAt:        reminder.FinishedAt,
+		Time:              reminder.TimeHHMM,
+		RepeatMinutes:     reminder.RepeatMinutes,
+		Enabled:           reminder.Enabled,
+		NextDueAt:         reminder.NextDueAt,
+		LastError:         reminder.LastError,
+		CreatedAt:         reminder.CreatedAt,
+		UpdatedAt:         reminder.UpdatedAt,
 	}
 	if reminder.ActiveOccurrence != nil {
 		occurrence := occurrenceToAPI(*reminder.ActiveOccurrence)
 		out.ActiveOccurrence = &occurrence
 	}
 	return out
+}
+
+// optionalInt maps the zero "not set" value to a JSON null.
+func optionalInt(value int) *int {
+	if value == 0 {
+		return nil
+	}
+	return &value
+}
+
+// dateToAPI converts a civil date to the API date type.
+func dateToAPI(value reminders.Date) openapi_types.Date {
+	return openapi_types.Date{Time: time.Date(value.Year, value.Month, value.Day, 0, 0, 0, 0, time.UTC)}
+}
+
+// optionalDateToAPI maps a zero date to a JSON null.
+func optionalDateToAPI(value reminders.Date) *openapi_types.Date {
+	if value.IsZero() {
+		return nil
+	}
+	converted := dateToAPI(value)
+	return &converted
 }
 
 // occurrenceToAPI maps the occurrence of the service model to the API schema.

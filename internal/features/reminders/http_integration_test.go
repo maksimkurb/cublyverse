@@ -176,6 +176,21 @@ func TestHTTPRemindersAPI(t *testing.T) {
 	if created.RepeatMinutes != 10 {
 		t.Errorf("repeat_minutes = %d, want the default 10", created.RepeatMinutes)
 	}
+	if created.Interval != 1 {
+		t.Errorf("interval = %d, want the default 1", created.Interval)
+	}
+	if created.StartDate.IsZero() {
+		t.Error("start_date is zero, want today in the reminder time zone")
+	}
+	if string(created.EndKind) != "none" {
+		t.Errorf("end_kind = %q, want none", created.EndKind)
+	}
+	if created.MonthWeekPosition != nil || created.MonthWeekday != nil {
+		t.Errorf("month_week_position/weekday = %v/%v, want null", created.MonthWeekPosition, created.MonthWeekday)
+	}
+	if created.OccurrencesFired != 0 || created.Finished {
+		t.Errorf("occurrences_fired = %d, finished = %v, want 0/false", created.OccurrencesFired, created.Finished)
+	}
 	if !created.Enabled {
 		t.Error("enabled = false, want the default true")
 	}
@@ -292,5 +307,41 @@ func TestHTTPRemindersAPI(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("reminders of Alice = %d, want 0", count)
+	}
+
+	// The flexible recurrence is part of the same contract: an nth weekday with
+	// a start date and a count end round-trips through the API.
+	nthJSON := `{
+		"message": "Сдать отчёт",
+		"timezone": "Europe/Moscow",
+		"schedule_kind": "monthly",
+		"month_week_position": 2,
+		"month_weekday": 2,
+		"start_date": "2026-02-01",
+		"end_kind": "count",
+		"end_count": 3,
+		"time": "18:00"
+	}`
+	status, body = apiRequest(t, http.MethodPost, base+"/reminders", "token-alice", nthJSON)
+	requireStatus(t, status, http.StatusCreated, body)
+	var nth gen.Reminder
+	if err := json.Unmarshal(body, &nth); err != nil {
+		t.Fatalf("decode nth-weekday reminder %q: %v", body, err)
+	}
+	if nth.ScheduleKind != gen.Monthly {
+		t.Errorf("schedule_kind = %q, want monthly", nth.ScheduleKind)
+	}
+	if len(nth.ScheduleDays) != 0 {
+		t.Errorf("schedule_days = %v, want empty for an nth weekday", nth.ScheduleDays)
+	}
+	if nth.MonthWeekPosition == nil || *nth.MonthWeekPosition != 2 ||
+		nth.MonthWeekday == nil || *nth.MonthWeekday != 2 {
+		t.Errorf("nth weekday = %v/%v, want 2/2", nth.MonthWeekPosition, nth.MonthWeekday)
+	}
+	if string(nth.EndKind) != "count" || nth.EndCount == nil || *nth.EndCount != 3 {
+		t.Errorf("end = %q/%v, want count/3", nth.EndKind, nth.EndCount)
+	}
+	if nth.StartDate.Format("2006-01-02") != "2026-02-01" {
+		t.Errorf("start_date = %s, want 2026-02-01", nth.StartDate)
 	}
 }

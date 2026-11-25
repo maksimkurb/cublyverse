@@ -34,17 +34,45 @@ const (
 	MaxRepeatMinutes = 1440
 	// DefaultRepeatMinutes is used when a client omits the repeat interval.
 	DefaultRepeatMinutes = 10
+	// MinInterval and MaxInterval bound "every N days/weeks/months/years".
+	MinInterval = 1
+	MaxInterval = 1000
+	// MinEndCount and MaxEndCount bound "after N occurrences".
+	MinEndCount = 1
+	MaxEndCount = 10000
 )
 
 // Kind is the schedule shape, re-exported for the adapters so they do not need
 // to import the schedule package.
 type Kind = schedule.Kind
 
+// EndKind is the stop condition of a recurrence, re-exported for adapters.
+type EndKind = schedule.EndKind
+
+// Date is a civil calendar date, re-exported for adapters.
+type Date = schedule.Date
+
 const (
+	// EndNever repeats forever.
+	EndNever = schedule.EndNever
+	// EndUntil repeats through an inclusive end date.
+	EndUntil = schedule.EndUntil
+	// EndCount repeats a fixed number of times.
+	EndCount = schedule.EndCount
+)
+
+const (
+	// Once is a single occurrence on the start date.
+	Once = schedule.Once
+	// Daily repeats every Interval days.
+	Daily = schedule.Daily
 	// Weekly repeats on ISO weekdays (1 = Monday, 7 = Sunday).
 	Weekly = schedule.Weekly
-	// Monthly repeats on days of month (a missing day means the last day).
+	// Monthly repeats on days of month (a missing day means the last day) or on
+	// the nth weekday.
 	Monthly = schedule.Monthly
+	// Yearly repeats on the month and day of the start date.
+	Yearly = schedule.Yearly
 )
 
 // OccurrenceStatus is the state of one firing.
@@ -88,26 +116,49 @@ type Reminder struct {
 	Message string
 	// Timezone is the IANA time zone the schedule is interpreted in.
 	Timezone string
-	// Kind is weekly or monthly.
+	// Kind is once, daily, weekly, monthly or yearly.
 	Kind schedule.Kind
-	// Days are ISO weekdays (1..7) or days of month (1..31), sorted.
+	// Days are ISO weekdays (1..7) for weekly, or days of month (1..31) for a
+	// monthly day-of-month rule.
 	Days []int
+	// Interval is the gap in kind units: every N days, weeks, months or years.
+	Interval int
+	// MonthWeekPosition selects the nth weekday of a monthly rule: 1..4, or -1
+	// for the last one. Zero means the rule uses Days.
+	MonthWeekPosition int
+	// MonthWeekday is the ISO weekday of an nth-weekday monthly rule.
+	MonthWeekday int
+	// StartDate is the first possible day of the rule in Timezone.
+	StartDate schedule.Date
+	// End is the stop condition: never, until a date, or after N occurrences.
+	End schedule.End
 	// TimeHHMM is the local wall clock time, HH:MM.
 	TimeHHMM string
 	// RepeatMinutes is how often an unconfirmed occurrence repeats.
 	RepeatMinutes int
 	// Enabled reports whether the reminder is scheduled.
 	Enabled bool
-	// NextDueAt is the next firing in UTC; nil while the reminder is disabled.
+	// NextDueAt is the next firing in UTC; nil while the reminder is disabled or
+	// has no future occurrence.
 	NextDueAt *time.Time
 	// LastError is the last delivery error, cleared after a successful send.
 	LastError *string
+	// OccurrencesFired is how many occurrences already fired; an end count uses
+	// it to decide when the recurrence is over.
+	OccurrencesFired int
+	// FinishedAt is when the last occurrence of a finite recurrence was
+	// confirmed; nil for a reminder that still has a future occurrence.
+	FinishedAt *time.Time
 	// CreatedAt and UpdatedAt are the row timestamps.
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	// ActiveOccurrence is the firing that waits for confirmation, if any.
 	ActiveOccurrence *Occurrence
 }
+
+// Finished reports whether a finite recurrence is over: a one-time reminder or
+// one whose end date or occurrence count was reached and confirmed.
+func (r Reminder) Finished() bool { return r.FinishedAt != nil }
 
 // Occurrence is one firing of a reminder.
 type Occurrence struct {
@@ -131,14 +182,26 @@ type Occurrence struct {
 
 // Input is the full set of rule fields a client supplies to create or replace a
 // reminder. Update takes the same struct because PUT replaces the whole rule.
+//
+// The old clients only know Kind+Days; the rest is optional. An empty StartDate
+// means "today in the reminder's time zone", an empty EndKind means "never" and
+// an Interval of 0 means 1, so a request that predates the flexible recurrence
+// keeps its exact old meaning.
 type Input struct {
-	Message       string
-	Timezone      string
-	Kind          schedule.Kind
-	Days          []int
-	TimeHHMM      string
-	RepeatMinutes int
-	Enabled       bool
+	Message           string
+	Timezone          string
+	Kind              schedule.Kind
+	Days              []int
+	Interval          int
+	MonthWeekPosition int
+	MonthWeekday      int
+	StartDate         string
+	EndKind           schedule.EndKind
+	EndDate           string
+	EndCount          int
+	TimeHHMM          string
+	RepeatMinutes     int
+	Enabled           bool
 }
 
 // Service is the reminders business logic. Every method takes the principal id
@@ -237,15 +300,22 @@ func (s *Service) CreateTx(ctx context.Context, q *db.Queries, principalID strin
 		return Reminder{}, err
 	}
 	row, err := q.CreateReminder(ctx, db.CreateReminderParams{
-		UserID:        userID,
-		Message:       rule.message,
-		Timezone:      rule.timezone,
-		ScheduleKind:  string(rule.kind),
-		ScheduleDays:  daysToInt16(rule.days),
-		TimeHhmm:      rule.hhmm,
-		RepeatMinutes: int32(rule.repeatMinutes),
-		Enabled:       rule.enabled,
-		NextDueAt:     timestamp(rule.nextDueAt),
+		UserID:            userID,
+		Message:           rule.message,
+		Timezone:          rule.timezone,
+		ScheduleKind:      string(rule.kind),
+		ScheduleDays:      daysToInt16(rule.days),
+		TimeHhmm:          rule.hhmm,
+		RepeatMinutes:     int32(rule.repeatMinutes),
+		Enabled:           rule.enabled,
+		NextDueAt:         timestamp(rule.nextDueAt),
+		IntervalCount:     int32(rule.interval),
+		MonthWeekPosition: optionalInt16(rule.monthWeekPosition),
+		MonthWeekday:      optionalInt16(rule.monthWeekday),
+		StartDate:         dateToPg(rule.startDate),
+		EndKind:           string(rule.end.Kind),
+		EndDate:           dateToPg(rule.end.Date),
+		EndCount:          optionalInt32(rule.end.Count),
 	})
 	if err != nil {
 		return Reminder{}, fmt.Errorf("create reminder: %w", err)
@@ -324,16 +394,23 @@ func (s *Service) Update(ctx context.Context, principalID, id string, input Inpu
 	var updated db.Reminder
 	err = s.st.InTx(ctx, func(q *db.Queries) error {
 		row, err := q.UpdateReminder(ctx, db.UpdateReminderParams{
-			ID:            reminderID,
-			UserID:        userID,
-			Message:       rule.message,
-			Timezone:      rule.timezone,
-			ScheduleKind:  string(rule.kind),
-			ScheduleDays:  daysToInt16(rule.days),
-			TimeHhmm:      rule.hhmm,
-			RepeatMinutes: int32(rule.repeatMinutes),
-			Enabled:       rule.enabled,
-			NextDueAt:     timestamp(rule.nextDueAt),
+			ID:                reminderID,
+			UserID:            userID,
+			Message:           rule.message,
+			Timezone:          rule.timezone,
+			ScheduleKind:      string(rule.kind),
+			ScheduleDays:      daysToInt16(rule.days),
+			TimeHhmm:          rule.hhmm,
+			RepeatMinutes:     int32(rule.repeatMinutes),
+			Enabled:           rule.enabled,
+			NextDueAt:         timestamp(rule.nextDueAt),
+			IntervalCount:     int32(rule.interval),
+			MonthWeekPosition: optionalInt16(rule.monthWeekPosition),
+			MonthWeekday:      optionalInt16(rule.monthWeekday),
+			StartDate:         dateToPg(rule.startDate),
+			EndKind:           string(rule.end.Kind),
+			EndDate:           dateToPg(rule.end.Date),
+			EndCount:          optionalInt32(rule.end.Count),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -516,7 +593,30 @@ func (s *Service) completeOccurrence(ctx context.Context, userID, reminderID, oc
 		)
 		return CompletionCompleted, nil
 	}
-	s.editCompleted(ctx, reminderFromRow(row, nil), occurrenceFromRow(completed), completed.Deliveries, completedAt)
+	reminder := reminderFromRow(row, nil)
+	// A finite recurrence ends with the confirmation of its last occurrence:
+	// from now on the rule has no future occurrence, so it becomes «завершено»
+	// instead of looking like a user-disabled reminder.
+	if _, nextErr := reminder.recurrence().NextDue(completedAt, reminder.OccurrencesFired); errors.Is(nextErr, schedule.ErrNoOccurrence) {
+		finished, finishErr := s.st.Queries().FinishReminder(ctx, db.FinishReminderParams{
+			FinishedAt: completedAt,
+			ReminderID: reminderID,
+			UserID:     userID,
+		})
+		switch {
+		case finishErr == nil:
+			reminder = reminderFromRow(finished, nil)
+		case errors.Is(finishErr, pgx.ErrNoRows):
+			// The reminder disappeared between the confirmation and this
+			// update; there is nothing left to show.
+		default:
+			s.logger.ErrorContext(ctx, "mark reminder finished failed",
+				slog.String("reminder_id", formatUUID(reminderID)),
+				slog.String("error", finishErr.Error()),
+			)
+		}
+	}
+	s.editCompleted(ctx, reminder, occurrenceFromRow(completed), completed.Deliveries, completedAt)
 	return CompletionCompleted, nil
 }
 
@@ -583,28 +683,68 @@ func (s *Service) activeOccurrence(ctx context.Context, reminderID pgtype.UUID) 
 // rule is the validated, canonical form of an Input together with the computed
 // next due time.
 type rule struct {
-	message       string
-	timezone      string
-	kind          schedule.Kind
-	days          []int
-	hhmm          string
-	repeatMinutes int
-	enabled       bool
-	nextDueAt     *time.Time
+	message           string
+	timezone          string
+	kind              schedule.Kind
+	days              []int
+	interval          int
+	monthWeekPosition int
+	monthWeekday      int
+	startDate         schedule.Date
+	end               schedule.End
+	hhmm              string
+	repeatMinutes     int
+	enabled           bool
+	nextDueAt         *time.Time
+}
+
+// recurrence turns the rule into the pure description the schedule package
+// computes with.
+func (r rule) recurrence() schedule.Recurrence {
+	return schedule.Recurrence{
+		Kind:              r.kind,
+		Interval:          r.interval,
+		Days:              r.days,
+		MonthWeekPosition: r.monthWeekPosition,
+		MonthWeekday:      r.monthWeekday,
+		StartDate:         r.startDate,
+		End:               r.end,
+		TimeHHMM:          r.hhmm,
+		Timezone:          r.timezone,
+	}
+}
+
+// recurrence is the schedule description of a stored reminder.
+func (r Reminder) recurrence() schedule.Recurrence {
+	return schedule.Recurrence{
+		Kind:              r.Kind,
+		Interval:          r.Interval,
+		Days:              r.Days,
+		MonthWeekPosition: r.MonthWeekPosition,
+		MonthWeekday:      r.MonthWeekday,
+		StartDate:         r.StartDate,
+		End:               r.End,
+		TimeHHMM:          r.TimeHHMM,
+		Timezone:          r.Timezone,
+	}
 }
 
 // normalize validates the input and computes next_due_at. Everything that
 // reaches the database is canonical: trimmed message, sorted days, fixed-width
 // time.
 func (s *Service) normalize(input Input) (rule, error) {
-	validated, err := canonicalize(input)
+	now := s.now()
+	validated, err := canonicalizeAt(input, now)
 	if err != nil {
 		return rule{}, err
 	}
 	if !validated.enabled {
 		return validated, nil
 	}
-	next, err := schedule.NextDue(s.now(), validated.kind, validated.days, validated.hhmm, validated.timezone)
+	next, err := validated.recurrence().NextDue(now, 0)
+	if errors.Is(err, schedule.ErrNoOccurrence) {
+		return rule{}, validationErrorf("В расписании нет будущих срабатываний")
+	}
 	if err != nil {
 		return rule{}, fmt.Errorf("compute next due time: %w", err)
 	}
@@ -612,18 +752,26 @@ func (s *Service) normalize(input Input) (rule, error) {
 	return validated, nil
 }
 
-// canonicalize validates the input and returns its canonical form without the
+// canonicalize validates the input without a clock. It is used where the actual
+// instant does not matter (parsing an export); the service always uses the
+// clock-aware form so "today" is the user's today.
+func canonicalize(input Input) (rule, error) {
+	return canonicalizeAt(input, time.Now().UTC())
+}
+
+// canonicalizeAt validates the input and returns its canonical form without the
 // next due time, which depends on the current instant. It is the single copy of
 // the validation rules: the service, the bot form and the legacy import all go
 // through it.
-func canonicalize(input Input) (rule, error) {
+func canonicalizeAt(input Input, now time.Time) (rule, error) {
 	message := strings.TrimSpace(input.Message)
 	if length := utf8.RuneCountInString(message); length < 1 || length > MaxMessageRunes {
 		return rule{}, validationErrorf("Сообщение должно быть от 1 до %d символов", MaxMessageRunes)
 	}
 
 	timezone := strings.TrimSpace(input.Timezone)
-	if _, err := schedule.LoadLocation(timezone); err != nil {
+	location, err := schedule.LoadLocation(timezone)
+	if err != nil {
 		return rule{}, validationErrorf("Неизвестный часовой пояс")
 	}
 
@@ -632,9 +780,38 @@ func canonicalize(input Input) (rule, error) {
 		return rule{}, validationErrorf("Время должно быть в формате ЧЧ:ММ")
 	}
 
+	interval := input.Interval
+	if interval == 0 {
+		interval = 1
+	}
+	if interval < MinInterval || interval > MaxInterval {
+		return rule{}, validationErrorf("Интервал должен быть от %d до %d", MinInterval, MaxInterval)
+	}
+
+	startDate := schedule.DateOf(now, location)
+	if value := strings.TrimSpace(input.StartDate); value != "" {
+		parsed, err := schedule.ParseDate(value)
+		if err != nil {
+			return rule{}, validationErrorf("Дата начала должна быть в формате ГГГГ-ММ-ДД")
+		}
+		startDate = parsed
+	}
+
 	days := schedule.NormalizeDays(input.Days)
+	monthWeekPosition := input.MonthWeekPosition
+	monthWeekday := input.MonthWeekday
+
 	switch input.Kind {
+	case schedule.Once:
+		// A one-time rule has no days of its own: the start date is the date.
+		days = nil
+		monthWeekPosition, monthWeekday = 0, 0
+		interval = 1
+	case schedule.Daily, schedule.Yearly:
+		days = nil
+		monthWeekPosition, monthWeekday = 0, 0
 	case schedule.Weekly:
+		monthWeekPosition, monthWeekday = 0, 0
 		if len(days) == 0 {
 			return rule{}, validationErrorf("Укажите хотя бы один день недели")
 		}
@@ -642,14 +819,58 @@ func canonicalize(input Input) (rule, error) {
 			return rule{}, validationErrorf("Дни недели должны быть от 1 (Пн) до 7 (Вс)")
 		}
 	case schedule.Monthly:
-		if len(days) == 0 {
-			return rule{}, validationErrorf("Укажите хотя бы один день месяца")
+		if monthWeekPosition == 0 && monthWeekday != 0 {
+			return rule{}, validationErrorf("Укажите позицию дня недели в месяце")
 		}
-		if err := schedule.ValidateDays(schedule.Monthly, days); err != nil {
-			return rule{}, validationErrorf("Дни месяца должны быть от 1 до 31")
+		if monthWeekPosition != 0 {
+			if len(days) > 0 {
+				return rule{}, validationErrorf("Нельзя одновременно указать дни месяца и день недели")
+			}
+			if monthWeekPosition < -1 || monthWeekPosition == 0 || monthWeekPosition > 4 {
+				return rule{}, validationErrorf("Позиция дня недели должна быть от 1 до 4 или последняя")
+			}
+			if monthWeekday < 1 || monthWeekday > 7 {
+				return rule{}, validationErrorf("День недели должен быть от 1 (Пн) до 7 (Вс)")
+			}
+			days = nil
+		} else {
+			if len(days) == 0 {
+				return rule{}, validationErrorf("Укажите хотя бы один день месяца")
+			}
+			if err := schedule.ValidateDays(schedule.Monthly, days); err != nil {
+				return rule{}, validationErrorf("Дни месяца должны быть от 1 до 31")
+			}
 		}
 	default:
 		return rule{}, validationErrorf("Неизвестный тип расписания")
+	}
+
+	end := schedule.End{Kind: schedule.EndNever}
+	switch input.EndKind {
+	case "", schedule.EndNever:
+	case schedule.EndUntil:
+		value := strings.TrimSpace(input.EndDate)
+		if value == "" {
+			return rule{}, validationErrorf("Укажите дату окончания")
+		}
+		endDate, err := schedule.ParseDate(value)
+		if err != nil {
+			return rule{}, validationErrorf("Дата окончания должна быть в формате ГГГГ-ММ-ДД")
+		}
+		if endDate.Before(startDate) {
+			return rule{}, validationErrorf("Дата окончания не может быть раньше даты начала")
+		}
+		end = schedule.End{Kind: schedule.EndUntil, Date: endDate}
+	case schedule.EndCount:
+		if input.EndCount < MinEndCount || input.EndCount > MaxEndCount {
+			return rule{}, validationErrorf("Количество повторов должно быть от %d до %d", MinEndCount, MaxEndCount)
+		}
+		end = schedule.End{Kind: schedule.EndCount, Count: input.EndCount}
+	default:
+		return rule{}, validationErrorf("Неизвестное условие окончания")
+	}
+	if input.Kind == schedule.Once {
+		end = schedule.End{Kind: schedule.EndNever}
 	}
 
 	if input.RepeatMinutes < MinRepeatMinutes || input.RepeatMinutes > MaxRepeatMinutes {
@@ -659,13 +880,18 @@ func canonicalize(input Input) (rule, error) {
 	}
 
 	return rule{
-		message:       message,
-		timezone:      timezone,
-		kind:          input.Kind,
-		days:          days,
-		hhmm:          hhmm,
-		repeatMinutes: input.RepeatMinutes,
-		enabled:       input.Enabled,
+		message:           message,
+		timezone:          timezone,
+		kind:              input.Kind,
+		days:              days,
+		interval:          interval,
+		monthWeekPosition: monthWeekPosition,
+		monthWeekday:      monthWeekday,
+		startDate:         startDate,
+		end:               end,
+		hhmm:              hhmm,
+		repeatMinutes:     input.RepeatMinutes,
+		enabled:           input.Enabled,
 	}, nil
 }
 
@@ -744,20 +970,83 @@ func daysToInt(days []int16) []int {
 	return out
 }
 
+// dateToPg converts a civil date to the date column value. A zero date is NULL.
+func dateToPg(value schedule.Date) pgtype.Date {
+	if value.IsZero() {
+		return pgtype.Date{}
+	}
+	return pgtype.Date{
+		Time:  time.Date(value.Year, value.Month, value.Day, 0, 0, 0, 0, time.UTC),
+		Valid: true,
+	}
+}
+
+// dateFromPg converts a date column to a civil date.
+func dateFromPg(value pgtype.Date) schedule.Date {
+	if !value.Valid {
+		return schedule.Date{}
+	}
+	return schedule.Date{Year: value.Time.Year(), Month: value.Time.Month(), Day: value.Time.Day()}
+}
+
+// optionalInt16 maps a zero to SQL NULL, which keeps "no nth weekday" a single
+// representation instead of 0 and NULL.
+func optionalInt16(value int) *int16 {
+	if value == 0 {
+		return nil
+	}
+	converted := int16(value)
+	return &converted
+}
+
+// optionalInt32 maps a zero to SQL NULL, used by the end count.
+func optionalInt32(value int) *int32 {
+	if value == 0 {
+		return nil
+	}
+	converted := int32(value)
+	return &converted
+}
+
+func intFromOptional(pointer *int16) int {
+	if pointer == nil {
+		return 0
+	}
+	return int(*pointer)
+}
+
+func int32FromOptional(pointer *int32) int {
+	if pointer == nil {
+		return 0
+	}
+	return int(*pointer)
+}
+
 func reminderFromRow(row db.Reminder, active *db.ReminderOccurrence) Reminder {
 	reminder := Reminder{
-		ID:            formatUUID(row.ID),
-		Message:       row.Message,
-		Timezone:      row.Timezone,
-		Kind:          schedule.Kind(row.ScheduleKind),
-		Days:          daysToInt(row.ScheduleDays),
-		TimeHHMM:      row.TimeHhmm,
-		RepeatMinutes: int(row.RepeatMinutes),
-		Enabled:       row.Enabled,
-		NextDueAt:     timePtr(row.NextDueAt),
-		LastError:     row.LastError,
-		CreatedAt:     row.CreatedAt.UTC(),
-		UpdatedAt:     row.UpdatedAt.UTC(),
+		ID:                formatUUID(row.ID),
+		Message:           row.Message,
+		Timezone:          row.Timezone,
+		Kind:              schedule.Kind(row.ScheduleKind),
+		Days:              daysToInt(row.ScheduleDays),
+		Interval:          int(row.IntervalCount),
+		MonthWeekPosition: intFromOptional(row.MonthWeekPosition),
+		MonthWeekday:      intFromOptional(row.MonthWeekday),
+		StartDate:         dateFromPg(row.StartDate),
+		End: schedule.End{
+			Kind:  schedule.EndKind(row.EndKind),
+			Date:  dateFromPg(row.EndDate),
+			Count: int32FromOptional(row.EndCount),
+		},
+		TimeHHMM:         row.TimeHhmm,
+		RepeatMinutes:    int(row.RepeatMinutes),
+		Enabled:          row.Enabled,
+		NextDueAt:        timePtr(row.NextDueAt),
+		LastError:        row.LastError,
+		OccurrencesFired: int(row.OccurrencesFired),
+		FinishedAt:       timePtr(row.FinishedAt),
+		CreatedAt:        row.CreatedAt.UTC(),
+		UpdatedAt:        row.UpdatedAt.UTC(),
 	}
 	if active != nil {
 		occurrence := occurrenceFromRow(*active)

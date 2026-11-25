@@ -18,11 +18,18 @@ import (
 type Kind string
 
 const (
+	// Once is a single occurrence on the start date.
+	Once Kind = "once"
+	// Daily repeats every Interval days.
+	Daily Kind = "daily"
 	// Weekly repeats on ISO weekdays: 1 is Monday, 7 is Sunday.
 	Weekly Kind = "weekly"
 	// Monthly repeats on days of month. A day the month does not have means the
 	// last day of that month: 31 is 28 or 29 February, 30 is 30 April.
 	Monthly Kind = "monthly"
+	// Yearly repeats on the month and day of the start date; 29 February becomes
+	// 28 February in a year that has no 29th.
+	Yearly Kind = "yearly"
 )
 
 // Search bounds. A weekly schedule always matches within a week and a monthly

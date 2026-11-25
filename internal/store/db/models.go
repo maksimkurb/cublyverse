@@ -237,20 +237,29 @@ type OauthToken struct {
 }
 
 type Reminder struct {
-	ID            pgtype.UUID        `json:"id"`
-	UserID        pgtype.UUID        `json:"user_id"`
-	Message       string             `json:"message"`
-	Timezone      string             `json:"timezone"`
-	ScheduleKind  string             `json:"schedule_kind"`
-	ScheduleDays  []int16            `json:"schedule_days"`
-	TimeHhmm      string             `json:"time_hhmm"`
-	RepeatMinutes int32              `json:"repeat_minutes"`
-	Enabled       bool               `json:"enabled"`
-	NextDueAt     pgtype.Timestamptz `json:"next_due_at"`
-	LastError     *string            `json:"last_error"`
-	LockUntil     pgtype.Timestamptz `json:"lock_until"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     time.Time          `json:"updated_at"`
+	ID                pgtype.UUID        `json:"id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	Message           string             `json:"message"`
+	Timezone          string             `json:"timezone"`
+	ScheduleKind      string             `json:"schedule_kind"`
+	ScheduleDays      []int16            `json:"schedule_days"`
+	TimeHhmm          string             `json:"time_hhmm"`
+	RepeatMinutes     int32              `json:"repeat_minutes"`
+	Enabled           bool               `json:"enabled"`
+	NextDueAt         pgtype.Timestamptz `json:"next_due_at"`
+	LastError         *string            `json:"last_error"`
+	LockUntil         pgtype.Timestamptz `json:"lock_until"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+	IntervalCount     int32              `json:"interval_count"`
+	MonthWeekPosition *int16             `json:"month_week_position"`
+	MonthWeekday      *int16             `json:"month_weekday"`
+	StartDate         pgtype.Date        `json:"start_date"`
+	EndKind           string             `json:"end_kind"`
+	EndDate           pgtype.Date        `json:"end_date"`
+	EndCount          *int32             `json:"end_count"`
+	OccurrencesFired  int32              `json:"occurrences_fired"`
+	FinishedAt        pgtype.Timestamptz `json:"finished_at"`
 }
 
 type ReminderOccurrence struct {

@@ -228,9 +228,17 @@ func (s *Scheduler) fireFirst(ctx context.Context, c claim, now, lease time.Time
 		return nil
 	}
 	reminder := reminderFromRow(c.reminder, nil)
-	nextDue, err := schedule.NextDue(now, reminder.Kind, reminder.Days, reminder.TimeHHMM, reminder.Timezone)
-	if err != nil {
-		return s.recordFailure(ctx, c, now, lease, fmt.Errorf("compute next due time: %w", err))
+	// The next firing is the (fired+1)-th occurrence of the recurrence. A finite
+	// rule can have none: the last occurrence is on its way, so next_due_at
+	// becomes NULL now and the rule is marked finished after the confirmation.
+	nextDue, nextErr := reminder.recurrence().NextDue(now, reminder.OccurrencesFired+1)
+	var nextDueAt pgtype.Timestamptz
+	switch {
+	case errors.Is(nextErr, schedule.ErrNoOccurrence):
+	case nextErr != nil:
+		return s.recordFailure(ctx, c, now, lease, fmt.Errorf("compute next due time: %w", nextErr))
+	default:
+		nextDueAt = timestamp(&nextDue)
 	}
 
 	occurrenceID, err := newOccurrenceID()
@@ -251,7 +259,7 @@ func (s *Scheduler) fireFirst(ctx context.Context, c claim, now, lease time.Time
 	nextRepeat := now.Add(repeatInterval(reminder.RepeatMinutes))
 	err = s.service.st.InTx(ctx, func(q *db.Queries) error {
 		if _, err := q.FinishReminderFirstFire(ctx, db.FinishReminderFirstFireParams{
-			NextDueAt:      nextDue,
+			NextDueAt:      nextDueAt,
 			Now:            now,
 			ReminderID:     c.reminder.ID,
 			LockUntil:      lease,

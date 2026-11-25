@@ -936,7 +936,32 @@ ul {
   height: 48px;
 }
 
+.reminder-form__custom {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+  border: 1.5px dashed var(--line-soft);
+  border-radius: var(--radius-card);
+}
+
+.reminder-form__interval,
+.reminder-form__nth {
+  display: flex;
+  gap: 10px;
+}
+
+.reminder-form__interval .cv-field:first-child {
+  flex: 0 0 96px;
+}
+
 .weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.month-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;

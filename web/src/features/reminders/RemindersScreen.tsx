@@ -10,21 +10,21 @@ import { IconCheck, IconPlus } from "../../ui/icons";
 import { ReminderEditor } from "./ReminderEditor";
 import { toggleBody, useCompleteReminder, useRemindersQuery, useUpdateReminder } from "./data";
 import { defaultTimezone, weekdayOptions } from "./form";
-import { reminderScheduleLine, reminderStatusLine } from "./format";
+import { reminderScheduleLine, reminderStatusLine, scheduleChipLabel } from "./format";
 
 type EditorState = { mode: "create" } | { mode: "edit"; reminder: Reminder } | null;
 
-type Filter = "all" | "weekly" | "monthly";
+type Filter = "all" | "recurring" | "once";
 
 const FILTERS: ReadonlyArray<{ value: Filter; label: string }> = [
   { value: "all", label: "Все" },
-  { value: "weekly", label: "По дням" },
-  { value: "monthly", label: "По числам" },
+  { value: "recurring", label: "Повторяющиеся" },
+  { value: "once", label: "Один раз" },
 ];
 
-/** The days of a reminder as chips: seven weekday squares or the month days. */
+/** The days of a reminder as chips: weekday squares, month days or a short kind label. */
 function ScheduleChips({ reminder }: { reminder: Reminder }) {
-  if (reminder.schedule_kind === "monthly") {
+  if (reminder.schedule_kind === "monthly" && (reminder.month_week_position === null || reminder.month_week_position === undefined)) {
     return (
       <span className="day-chips" aria-hidden="true">
         {reminder.schedule_days.map((day) => (
@@ -36,13 +36,20 @@ function ScheduleChips({ reminder }: { reminder: Reminder }) {
       </span>
     );
   }
+  if (reminder.schedule_kind === "weekly") {
+    return (
+      <span className="day-chips" aria-hidden="true">
+        {weekdayOptions.map(({ day, label }) => (
+          <span className={reminder.schedule_days.includes(day) ? "day-chip day-chip--on" : "day-chip"} key={day}>
+            {label.slice(0, 1)}
+          </span>
+        ))}
+      </span>
+    );
+  }
   return (
     <span className="day-chips" aria-hidden="true">
-      {weekdayOptions.map(({ day, label }) => (
-        <span className={reminder.schedule_days.includes(day) ? "day-chip day-chip--on" : "day-chip"} key={day}>
-          {label.slice(0, 1)}
-        </span>
-      ))}
+      <span className="day-chip day-chip--month">{scheduleChipLabel(reminder)}</span>
     </span>
   );
 }
@@ -87,7 +94,12 @@ export default function RemindersScreen() {
     optimistic[reminder.id] === undefined ? reminder : { ...reminder, enabled: optimistic[reminder.id] },
   );
   const pending = reminders.filter((reminder) => reminder.active_occurrence);
-  const visible = filter === "all" ? reminders : reminders.filter((reminder) => reminder.schedule_kind === filter);
+  const visible =
+    filter === "all"
+      ? reminders
+      : reminders.filter((reminder) =>
+          filter === "once" ? reminder.schedule_kind === "once" : reminder.schedule_kind !== "once",
+        );
 
   async function toggle(reminder: Reminder, enabled: boolean) {
     if (toggling[reminder.id]) {
@@ -204,7 +216,7 @@ export default function RemindersScreen() {
                   <Switch
                     aria-label={`Включить напоминание: ${reminder.message}`}
                     checked={reminder.enabled}
-                    disabled={Boolean(toggling[reminder.id])}
+                    disabled={Boolean(toggling[reminder.id]) || reminder.finished}
                     onCheckedChange={(checked) => void toggle(reminder, checked)}
                   />
                 </span>

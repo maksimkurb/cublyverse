@@ -677,17 +677,22 @@ export interface components {
             message: string;
         };
         /**
-         * @description Shape of the schedule.
+         * @description Shape of the recurrence.
          *
-         *     * `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
-         *       Sunday.
-         *     * `monthly` — `schedule_days` are days of month 1..31. A day the month
-         *       does not have means the last day of that month: 31 is 28 or 29
-         *       February, 31 is 30 April.
+         *     * `once` — a single occurrence on `start_date` at `time`; the reminder
+         *       is finished after the occurrence is confirmed.
+         *     * `daily` — every `interval` days (1 means every day) at `time`.
+         *     * `weekly` — every `interval` weeks on `schedule_days`, ISO weekdays 1..7
+         *       (1 = Monday, 7 = Sunday).
+         *     * `monthly` — every `interval` months, either on `schedule_days` (days of
+         *       month 1..31, a day the month does not have means its last day) or on
+         *       the nth weekday given by `month_week_position` and `month_weekday`.
+         *     * `yearly` — every `interval` years on the month and day of `start_date`;
+         *       29 February becomes 28 February in a non-leap year.
          * @example weekly
          * @enum {string}
          */
-        ScheduleKind: "weekly" | "monthly";
+        ScheduleKind: "once" | "daily" | "weekly" | "monthly" | "yearly";
         /**
          * @description A reminder rule together with the occurrence that waits for
          *     confirmation, if any.
@@ -720,8 +725,10 @@ export interface components {
             timezone: string;
             schedule_kind: components["schemas"]["ScheduleKind"];
             /**
-             * @description Days of the schedule, sorted and without duplicates. Weekly days are
-             *     1..7 (Monday..Sunday), monthly days are 1..31.
+             * @description Days of a `weekly` or `monthly` day-of-month rule, sorted and without
+             *     duplicates. Weekly days are 1..7 (Monday..Sunday), monthly days are
+             *     1..31. Empty for `once`, `daily`, `yearly` and an nth-weekday
+             *     `monthly` rule.
              * @example [
              *       1,
              *       3,
@@ -729,6 +736,77 @@ export interface components {
              *     ]
              */
             schedule_days: number[];
+            /**
+             * @description Gap between occurrences in units of `schedule_kind`: every N days,
+             *     weeks, months or years. `1` means every day/week/month/year. It is
+             *     always relative to `start_date`; ignored by `once`.
+             * @example 1
+             */
+            interval: number;
+            /**
+             * @description Position of the weekday in a monthly rule: 1..4 for the first through
+             *     fourth, or -1 for the last one. `null` means the rule uses
+             *     `schedule_days` (days of month) instead.
+             * @example null
+             */
+            month_week_position: number | null;
+            /**
+             * @description ISO weekday of an nth-weekday monthly rule: 1 is Monday, 7 is Sunday.
+             *     `null` unless `month_week_position` is set.
+             * @example null
+             */
+            month_weekday: number | null;
+            /**
+             * Format: date
+             * @description First possible day of the recurrence as `YYYY-MM-DD` in `timezone`.
+             *     For `once` it is the date of the single occurrence; for `yearly` its
+             *     month and day are the anniversary. A new reminder defaults to today in
+             *     its time zone.
+             * @example 2026-01-05
+             */
+            start_date: string;
+            /**
+             * @description How a repeating recurrence stops: `none` repeats forever, `until`
+             *     repeats through `end_date`, `count` repeats `end_count` times in
+             *     total. A `once` reminder always has `none`.
+             * @example none
+             * @enum {string}
+             */
+            end_kind: "none" | "until" | "count";
+            /**
+             * Format: date
+             * @description Last allowed day for `end_kind` `until`, as `YYYY-MM-DD` in
+             *     `timezone`; `null` for the other end kinds.
+             * @example null
+             */
+            end_date: string | null;
+            /**
+             * @description Total number of occurrences for `end_kind` `count`; `null` for the
+             *     other end kinds.
+             * @example null
+             */
+            end_count: number | null;
+            /**
+             * @description How many occurrences already fired. Editing the rule resets it to 0;
+             *     a `count` end compares it with `end_count`.
+             * @example 0
+             */
+            occurrences_fired: number;
+            /**
+             * @description Whether a finite recurrence is over: a `once` reminder or one whose
+             *     end date or occurrence count was reached and the last occurrence was
+             *     confirmed. A finished reminder is not scheduled and is shown as
+             *     «завершено».
+             * @example false
+             */
+            finished: boolean;
+            /**
+             * Format: date-time
+             * @description When the last occurrence of a finite recurrence was confirmed, or
+             *     `null` while the reminder still has a future occurrence.
+             * @example null
+             */
+            finished_at: string | null;
             /**
              * @description Local wall clock time as `HH:MM` (24 hours, zero padded).
              * @example 09:30
@@ -831,8 +909,10 @@ export interface components {
             completed_at: string | null;
         };
         /**
-         * @description Fields of a new reminder. `repeat_minutes` defaults to 10 and `enabled`
-         *     to `true`, so the common case needs neither.
+         * @description Fields of a new reminder. `repeat_minutes` defaults to 10, `enabled` to
+         *     `true`, `interval` to 1, `end_kind` to `none` and `start_date` to today
+         *     in `timezone`, so a request that only names `schedule_kind`,
+         *     `schedule_days` and `time` keeps the old weekly/monthly behaviour.
          */
         CreateReminderRequest: {
             /**
@@ -847,14 +927,62 @@ export interface components {
             timezone: string;
             schedule_kind: components["schemas"]["ScheduleKind"];
             /**
-             * @description At least one day. Weekly days are 1..7, monthly days are 1..31.
+             * @description Days of a `weekly` or `monthly` day-of-month rule. Weekly days are
+             *     1..7, monthly days are 1..31. Omit for `once`, `daily`, `yearly` and
+             *     an nth-weekday `monthly` rule.
              * @example [
              *       1,
              *       3,
              *       5
              *     ]
              */
-            schedule_days: number[];
+            schedule_days?: number[];
+            /**
+             * @description Every N days/weeks/months/years, relative to `start_date`. Omitted
+             *     means 1.
+             * @default 1
+             * @example 1
+             */
+            interval: number;
+            /**
+             * @description For a monthly nth-weekday rule: 1..4 for the first through fourth
+             *     weekday, or -1 for the last one. Omit for a day-of-month rule.
+             * @example null
+             */
+            month_week_position?: number | null;
+            /**
+             * @description ISO weekday (1 = Monday, 7 = Sunday) of an nth-weekday monthly rule.
+             *     Required together with `month_week_position`.
+             * @example null
+             */
+            month_weekday?: number | null;
+            /**
+             * Format: date
+             * @description First possible day as `YYYY-MM-DD` in `timezone`; the date of a
+             *     `once` reminder and the anniversary of a `yearly` one. Omitted means
+             *     today in `timezone`.
+             * @example 2026-01-05
+             */
+            start_date?: string;
+            /**
+             * @description Stop condition of a repeating rule: never, until `end_date`, or after
+             *     `end_count` occurrences. Omitted means `none`; `once` ignores it.
+             * @default none
+             * @example none
+             * @enum {string}
+             */
+            end_kind: "none" | "until" | "count";
+            /**
+             * Format: date
+             * @description Last allowed day for `until`, as `YYYY-MM-DD` in `timezone`.
+             * @example null
+             */
+            end_date?: string | null;
+            /**
+             * @description Total number of occurrences for `count`.
+             * @example null
+             */
+            end_count?: number | null;
             /**
              * @description Local wall clock time as `HH:MM`.
              * @example 09:30
@@ -875,8 +1003,10 @@ export interface components {
             enabled: boolean;
         };
         /**
-         * @description The whole rule: `PUT` replaces every field, so all of them are required.
-         *     An omitted field is not kept from the previous version.
+         * @description The whole rule: `PUT` replaces every field, so the rule fields are
+         *     required. Recurrence additions are optional with the same defaults as a
+         *     create: `interval` 1, `end_kind` `none` and `start_date` today in
+         *     `timezone`. Editing the rule resets the fired counter.
          */
         UpdateReminderRequest: {
             /**
@@ -891,13 +1021,56 @@ export interface components {
             timezone: string;
             schedule_kind: components["schemas"]["ScheduleKind"];
             /**
-             * @description At least one day. Weekly days are 1..7, monthly days are 1..31.
+             * @description Days of a `weekly` or `monthly` day-of-month rule. Weekly days are
+             *     1..7, monthly days are 1..31. Empty for `once`, `daily`, `yearly` and
+             *     an nth-weekday `monthly` rule.
              * @example [
              *       2,
              *       4
              *     ]
              */
-            schedule_days: number[];
+            schedule_days?: number[];
+            /**
+             * @description Every N days/weeks/months/years, relative to `start_date`.
+             * @default 1
+             * @example 1
+             */
+            interval: number;
+            /**
+             * @description For a monthly nth-weekday rule: 1..4 or -1 for the last weekday.
+             * @example null
+             */
+            month_week_position?: number | null;
+            /**
+             * @description ISO weekday (1 = Monday, 7 = Sunday) of an nth-weekday monthly rule.
+             * @example null
+             */
+            month_weekday?: number | null;
+            /**
+             * Format: date
+             * @description First possible day as `YYYY-MM-DD` in `timezone`. Omitted means today
+             *     in `timezone`.
+             * @example 2026-01-05
+             */
+            start_date?: string;
+            /**
+             * @description Stop condition: never, until `end_date`, or after `end_count`.
+             * @default none
+             * @example none
+             * @enum {string}
+             */
+            end_kind: "none" | "until" | "count";
+            /**
+             * Format: date
+             * @description Last allowed day for `until`.
+             * @example null
+             */
+            end_date?: string | null;
+            /**
+             * @description Total number of occurrences for `count`.
+             * @example null
+             */
+            end_count?: number | null;
             /**
              * @description Local wall clock time as `HH:MM`.
              * @example 20:00

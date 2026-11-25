@@ -215,6 +215,10 @@ Confirm the occurrence that is waiting for confirmation, exactly like the «✅ 
         "object"
       ]
     },
+    "count": {
+      "description": "total number of occurrences, zero when there is no count end",
+      "type": "integer"
+    },
     "created_at": {
       "description": "creation time in RFC 3339 UTC",
       "type": "string"
@@ -223,9 +227,21 @@ Confirm the occurrence that is waiting for confirmation, exactly like the «✅ 
       "description": "whether the reminder is scheduled",
       "type": "boolean"
     },
+    "finished": {
+      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
+      "type": "boolean"
+    },
+    "finished_at": {
+      "description": "finish time in RFC 3339 UTC, empty while not finished",
+      "type": "string"
+    },
     "id": {
       "description": "reminder id (UUID)",
       "type": "string"
+    },
+    "interval": {
+      "description": "every N days/weeks/months/years",
+      "type": "integer"
     },
     "last_error": {
       "description": "last delivery error, empty when the reminder is delivered",
@@ -236,7 +252,7 @@ Confirm the occurrence that is waiting for confirmation, exactly like the «✅ 
       "type": "string"
     },
     "month_days": {
-      "description": "days of month, present when schedule_kind is monthly",
+      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
       "items": {
         "type": "integer"
       },
@@ -246,7 +262,37 @@ Confirm the occurrence that is waiting for confirmation, exactly like the «✅ 
       ]
     },
     "next_due_at": {
-      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled",
+      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
+      "type": "string"
+    },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "occurrences_fired": {
+      "description": "how many occurrences already fired; editing resets it",
+      "type": "integer"
+    },
+    "repeat": {
+      "description": "once, daily, weekly, monthly or yearly",
       "type": "string"
     },
     "repeat_minutes": {
@@ -254,7 +300,11 @@ Confirm the occurrence that is waiting for confirmation, exactly like the «✅ 
       "type": "integer"
     },
     "schedule_kind": {
-      "description": "weekly or monthly",
+      "description": "alias of repeat, kept for older clients",
+      "type": "string"
+    },
+    "start_date": {
+      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
       "type": "string"
     },
     "time": {
@@ -265,12 +315,16 @@ Confirm the occurrence that is waiting for confirmation, exactly like the «✅ 
       "description": "IANA time zone of the schedule",
       "type": "string"
     },
+    "until": {
+      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
+      "type": "string"
+    },
     "updated_at": {
       "description": "last change time in RFC 3339 UTC",
       "type": "string"
     },
     "weekdays": {
-      "description": "weekly days as mon..sun, present when schedule_kind is weekly",
+      "description": "weekly days as mon..sun, present when repeat is weekly",
       "items": {
         "type": "string"
       },
@@ -283,7 +337,12 @@ Confirm the occurrence that is waiting for confirmation, exactly like the «✅ 
   "required": [
     "id",
     "message",
+    "repeat",
     "schedule_kind",
+    "interval",
+    "start_date",
+    "occurrences_fired",
+    "finished",
     "time",
     "time_zone",
     "repeat_minutes",
@@ -299,7 +358,7 @@ Confirm the occurrence that is waiting for confirmation, exactly like the «✅ 
 
 Create a reminder
 
-Create a recurring reminder for the current user. Give either weekdays (mon..sun or 1..7) or month_days (1..31), a local time HH:MM and optionally an IANA time zone; without a time zone the user's profile time zone is used. The reminder is enabled by default and repeats an unconfirmed occurrence every repeat_minutes (default 10). Returns the stored reminder with its next due time in UTC.
+Create a reminder for the current user. The recurrence is chosen with repeat: once (needs date), daily, weekly (needs weekdays), monthly (month_days or nth_weekday such as the second Tuesday or the last Friday) or yearly. interval makes it every N days/weeks/months/years and is relative to start_date; until or count stops the repetition. The old shape without repeat still works: weekdays means weekly and month_days means monthly. Without a time zone the user's profile time zone is used. Returns the stored reminder with its next due time in UTC.
 
 **Доступ:** изменяет. Каждый вызов создаёт новое состояние.
 
@@ -309,6 +368,14 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
 {
   "additionalProperties": false,
   "properties": {
+    "count": {
+      "description": "total number of occurrences, 1..10000; the reminder stops after them. Do not combine with until",
+      "type": "integer"
+    },
+    "date": {
+      "description": "date of a one-time reminder as YYYY-MM-DD in the reminder time zone. Also accepted as start_date for repeat=once",
+      "type": "string"
+    },
     "enabled": {
       "description": "create the reminder already scheduled. Default true",
       "type": [
@@ -316,12 +383,16 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
         "boolean"
       ]
     },
+    "interval": {
+      "description": "every N days/weeks/months/years, 1..1000. Default 1, for example interval=2 with repeat=weekly means every second week",
+      "type": "integer"
+    },
     "message": {
       "description": "reminder text in the user's language, 1 to 1500 characters",
       "type": "string"
     },
     "month_days": {
-      "description": "monthly schedule: days of month 1..31. A day the month does not have means its last day. Use either weekdays or month_days",
+      "description": "monthly day-of-month schedule: days 1..31. A day the month does not have means its last day. Use either weekdays, month_days or nth_weekday",
       "items": {
         "type": "integer"
       },
@@ -330,12 +401,42 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
         "array"
       ]
     },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "monthly nth-weekday schedule, for example the second Tuesday. Use either weekdays, month_days or nth_weekday",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "repeat": {
+      "description": "recurrence kind: once, daily, weekly, monthly or yearly. Omit it to use the old shape: weekdays means weekly, month_days means monthly",
+      "type": "string"
+    },
     "repeat_minutes": {
       "description": "how often an unconfirmed occurrence repeats, 1..1440 minutes. Default 10",
       "type": [
         "null",
         "integer"
       ]
+    },
+    "start_date": {
+      "description": "first possible day as YYYY-MM-DD in the reminder time zone; defaults to today. For repeat=yearly its month and day are the anniversary",
+      "type": "string"
     },
     "time": {
       "description": "local wall clock time as HH:MM in 24-hour form, for example 09:30",
@@ -345,8 +446,12 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
       "description": "IANA time zone such as Europe/Moscow. Defaults to the user's profile time zone",
       "type": "string"
     },
+    "until": {
+      "description": "last allowed day as YYYY-MM-DD; the reminder stops after it. Do not combine with count",
+      "type": "string"
+    },
     "weekdays": {
-      "description": "weekly schedule: day names mon,tue,wed,thu,fri,sat,sun or ISO numbers 1..7 (1 = Monday). Use either weekdays or month_days",
+      "description": "weekly schedule: day names mon,tue,wed,thu,fri,sat,sun or ISO numbers 1..7 (1 = Monday). Use either weekdays, month_days or nth_weekday",
       "items": {
         "type": "string"
       },
@@ -414,6 +519,10 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
         "object"
       ]
     },
+    "count": {
+      "description": "total number of occurrences, zero when there is no count end",
+      "type": "integer"
+    },
     "created_at": {
       "description": "creation time in RFC 3339 UTC",
       "type": "string"
@@ -422,9 +531,21 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
       "description": "whether the reminder is scheduled",
       "type": "boolean"
     },
+    "finished": {
+      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
+      "type": "boolean"
+    },
+    "finished_at": {
+      "description": "finish time in RFC 3339 UTC, empty while not finished",
+      "type": "string"
+    },
     "id": {
       "description": "reminder id (UUID)",
       "type": "string"
+    },
+    "interval": {
+      "description": "every N days/weeks/months/years",
+      "type": "integer"
     },
     "last_error": {
       "description": "last delivery error, empty when the reminder is delivered",
@@ -435,7 +556,7 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
       "type": "string"
     },
     "month_days": {
-      "description": "days of month, present when schedule_kind is monthly",
+      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
       "items": {
         "type": "integer"
       },
@@ -445,7 +566,37 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
       ]
     },
     "next_due_at": {
-      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled",
+      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
+      "type": "string"
+    },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "occurrences_fired": {
+      "description": "how many occurrences already fired; editing resets it",
+      "type": "integer"
+    },
+    "repeat": {
+      "description": "once, daily, weekly, monthly or yearly",
       "type": "string"
     },
     "repeat_minutes": {
@@ -453,7 +604,11 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
       "type": "integer"
     },
     "schedule_kind": {
-      "description": "weekly or monthly",
+      "description": "alias of repeat, kept for older clients",
+      "type": "string"
+    },
+    "start_date": {
+      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
       "type": "string"
     },
     "time": {
@@ -464,12 +619,16 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
       "description": "IANA time zone of the schedule",
       "type": "string"
     },
+    "until": {
+      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
+      "type": "string"
+    },
     "updated_at": {
       "description": "last change time in RFC 3339 UTC",
       "type": "string"
     },
     "weekdays": {
-      "description": "weekly days as mon..sun, present when schedule_kind is weekly",
+      "description": "weekly days as mon..sun, present when repeat is weekly",
       "items": {
         "type": "string"
       },
@@ -482,7 +641,12 @@ Create a recurring reminder for the current user. Give either weekdays (mon..sun
   "required": [
     "id",
     "message",
+    "repeat",
     "schedule_kind",
+    "interval",
+    "start_date",
+    "occurrences_fired",
+    "finished",
     "time",
     "time_zone",
     "repeat_minutes",
@@ -619,6 +783,10 @@ Return one reminder by id together with its pending occurrence, if any. A remind
         "object"
       ]
     },
+    "count": {
+      "description": "total number of occurrences, zero when there is no count end",
+      "type": "integer"
+    },
     "created_at": {
       "description": "creation time in RFC 3339 UTC",
       "type": "string"
@@ -627,9 +795,21 @@ Return one reminder by id together with its pending occurrence, if any. A remind
       "description": "whether the reminder is scheduled",
       "type": "boolean"
     },
+    "finished": {
+      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
+      "type": "boolean"
+    },
+    "finished_at": {
+      "description": "finish time in RFC 3339 UTC, empty while not finished",
+      "type": "string"
+    },
     "id": {
       "description": "reminder id (UUID)",
       "type": "string"
+    },
+    "interval": {
+      "description": "every N days/weeks/months/years",
+      "type": "integer"
     },
     "last_error": {
       "description": "last delivery error, empty when the reminder is delivered",
@@ -640,7 +820,7 @@ Return one reminder by id together with its pending occurrence, if any. A remind
       "type": "string"
     },
     "month_days": {
-      "description": "days of month, present when schedule_kind is monthly",
+      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
       "items": {
         "type": "integer"
       },
@@ -650,7 +830,37 @@ Return one reminder by id together with its pending occurrence, if any. A remind
       ]
     },
     "next_due_at": {
-      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled",
+      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
+      "type": "string"
+    },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "occurrences_fired": {
+      "description": "how many occurrences already fired; editing resets it",
+      "type": "integer"
+    },
+    "repeat": {
+      "description": "once, daily, weekly, monthly or yearly",
       "type": "string"
     },
     "repeat_minutes": {
@@ -658,7 +868,11 @@ Return one reminder by id together with its pending occurrence, if any. A remind
       "type": "integer"
     },
     "schedule_kind": {
-      "description": "weekly or monthly",
+      "description": "alias of repeat, kept for older clients",
+      "type": "string"
+    },
+    "start_date": {
+      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
       "type": "string"
     },
     "time": {
@@ -669,12 +883,16 @@ Return one reminder by id together with its pending occurrence, if any. A remind
       "description": "IANA time zone of the schedule",
       "type": "string"
     },
+    "until": {
+      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
+      "type": "string"
+    },
     "updated_at": {
       "description": "last change time in RFC 3339 UTC",
       "type": "string"
     },
     "weekdays": {
-      "description": "weekly days as mon..sun, present when schedule_kind is weekly",
+      "description": "weekly days as mon..sun, present when repeat is weekly",
       "items": {
         "type": "string"
       },
@@ -687,7 +905,12 @@ Return one reminder by id together with its pending occurrence, if any. A remind
   "required": [
     "id",
     "message",
+    "repeat",
     "schedule_kind",
+    "interval",
+    "start_date",
+    "occurrences_fired",
+    "finished",
     "time",
     "time_zone",
     "repeat_minutes",
@@ -771,6 +994,10 @@ List every reminder of the current user with its schedule, next due time and, wh
               "object"
             ]
           },
+          "count": {
+            "description": "total number of occurrences, zero when there is no count end",
+            "type": "integer"
+          },
           "created_at": {
             "description": "creation time in RFC 3339 UTC",
             "type": "string"
@@ -779,9 +1006,21 @@ List every reminder of the current user with its schedule, next due time and, wh
             "description": "whether the reminder is scheduled",
             "type": "boolean"
           },
+          "finished": {
+            "description": "true when the recurrence has no future occurrence and the last one was confirmed",
+            "type": "boolean"
+          },
+          "finished_at": {
+            "description": "finish time in RFC 3339 UTC, empty while not finished",
+            "type": "string"
+          },
           "id": {
             "description": "reminder id (UUID)",
             "type": "string"
+          },
+          "interval": {
+            "description": "every N days/weeks/months/years",
+            "type": "integer"
           },
           "last_error": {
             "description": "last delivery error, empty when the reminder is delivered",
@@ -792,7 +1031,7 @@ List every reminder of the current user with its schedule, next due time and, wh
             "type": "string"
           },
           "month_days": {
-            "description": "days of month, present when schedule_kind is monthly",
+            "description": "days of month, present when repeat is monthly and nth_weekday is absent",
             "items": {
               "type": "integer"
             },
@@ -802,7 +1041,37 @@ List every reminder of the current user with its schedule, next due time and, wh
             ]
           },
           "next_due_at": {
-            "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled",
+            "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
+            "type": "string"
+          },
+          "nth_weekday": {
+            "additionalProperties": false,
+            "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
+            "properties": {
+              "position": {
+                "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+                "type": "integer"
+              },
+              "weekday": {
+                "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+                "type": "string"
+              }
+            },
+            "required": [
+              "position",
+              "weekday"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "occurrences_fired": {
+            "description": "how many occurrences already fired; editing resets it",
+            "type": "integer"
+          },
+          "repeat": {
+            "description": "once, daily, weekly, monthly or yearly",
             "type": "string"
           },
           "repeat_minutes": {
@@ -810,7 +1079,11 @@ List every reminder of the current user with its schedule, next due time and, wh
             "type": "integer"
           },
           "schedule_kind": {
-            "description": "weekly or monthly",
+            "description": "alias of repeat, kept for older clients",
+            "type": "string"
+          },
+          "start_date": {
+            "description": "first possible day as YYYY-MM-DD in the reminder time zone",
             "type": "string"
           },
           "time": {
@@ -821,12 +1094,16 @@ List every reminder of the current user with its schedule, next due time and, wh
             "description": "IANA time zone of the schedule",
             "type": "string"
           },
+          "until": {
+            "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
+            "type": "string"
+          },
           "updated_at": {
             "description": "last change time in RFC 3339 UTC",
             "type": "string"
           },
           "weekdays": {
-            "description": "weekly days as mon..sun, present when schedule_kind is weekly",
+            "description": "weekly days as mon..sun, present when repeat is weekly",
             "items": {
               "type": "string"
             },
@@ -839,7 +1116,12 @@ List every reminder of the current user with its schedule, next due time and, wh
         "required": [
           "id",
           "message",
+          "repeat",
           "schedule_kind",
+          "interval",
+          "start_date",
+          "occurrences_fired",
+          "finished",
           "time",
           "time_zone",
           "repeat_minutes",
@@ -866,7 +1148,7 @@ List every reminder of the current user with its schedule, next due time and, wh
 
 Update a reminder
 
-Change a reminder. Omitted fields keep their current values: message, time, weekdays or month_days, time_zone, repeat_minutes and enabled are all optional apart from the id. A change cancels the pending occurrence and recomputes the next due time. Returns the updated reminder.
+Change a reminder. Omitted fields keep their current values: message, repeat and its interval/weekdays/month_days/nth_weekday/date/start_date/until/count, time, time_zone, repeat_minutes and enabled are all optional apart from the id. A recurrence change cancels the pending occurrence, resets the fired counter and recomputes the next due time. Returns the updated reminder.
 
 **Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
 
@@ -876,6 +1158,17 @@ Change a reminder. Omitted fields keep their current values: message, time, week
 {
   "additionalProperties": false,
   "properties": {
+    "count": {
+      "description": "new total number of occurrences 1..10000; removes an until end. Omit to keep the current end",
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "date": {
+      "description": "new date of a one-time reminder as YYYY-MM-DD. Omit to keep the current date",
+      "type": "string"
+    },
     "enabled": {
       "description": "enable or disable the reminder. Omit to keep the current state",
       "type": [
@@ -887,12 +1180,19 @@ Change a reminder. Omitted fields keep their current values: message, time, week
       "description": "reminder id (UUID) to change",
       "type": "string"
     },
+    "interval": {
+      "description": "every N days/weeks/months/years, 1..1000. Omit to keep the current interval",
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
     "message": {
       "description": "new reminder text, 1 to 1500 characters. Omit to keep the current text",
       "type": "string"
     },
     "month_days": {
-      "description": "monthly schedule: days of month 1..31. Omit to keep the current schedule; do not combine with weekdays",
+      "description": "monthly day-of-month schedule: days 1..31. Omit to keep the current schedule",
       "items": {
         "type": "integer"
       },
@@ -901,12 +1201,42 @@ Change a reminder. Omitted fields keep their current values: message, time, week
         "array"
       ]
     },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "monthly nth-weekday schedule. Omit to keep the current schedule",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "repeat": {
+      "description": "new recurrence kind: once, daily, weekly, monthly or yearly. Omit to keep the current one",
+      "type": "string"
+    },
     "repeat_minutes": {
       "description": "new repeat interval 1..1440 minutes. Omit to keep the current one",
       "type": [
         "null",
         "integer"
       ]
+    },
+    "start_date": {
+      "description": "new first possible day as YYYY-MM-DD. Omit to keep the current one",
+      "type": "string"
     },
     "time": {
       "description": "new local wall clock time HH:MM. Omit to keep the current time",
@@ -916,8 +1246,12 @@ Change a reminder. Omitted fields keep their current values: message, time, week
       "description": "new IANA time zone. Omit to keep the current one",
       "type": "string"
     },
+    "until": {
+      "description": "new last allowed day as YYYY-MM-DD; removes a count end. Omit to keep the current end",
+      "type": "string"
+    },
     "weekdays": {
-      "description": "weekly schedule: day names mon..sun or ISO numbers 1..7. Omit to keep the current schedule; do not combine with month_days",
+      "description": "weekly schedule: day names mon..sun or ISO numbers 1..7. Omit to keep the current schedule",
       "items": {
         "type": "string"
       },
@@ -984,6 +1318,10 @@ Change a reminder. Omitted fields keep their current values: message, time, week
         "object"
       ]
     },
+    "count": {
+      "description": "total number of occurrences, zero when there is no count end",
+      "type": "integer"
+    },
     "created_at": {
       "description": "creation time in RFC 3339 UTC",
       "type": "string"
@@ -992,9 +1330,21 @@ Change a reminder. Omitted fields keep their current values: message, time, week
       "description": "whether the reminder is scheduled",
       "type": "boolean"
     },
+    "finished": {
+      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
+      "type": "boolean"
+    },
+    "finished_at": {
+      "description": "finish time in RFC 3339 UTC, empty while not finished",
+      "type": "string"
+    },
     "id": {
       "description": "reminder id (UUID)",
       "type": "string"
+    },
+    "interval": {
+      "description": "every N days/weeks/months/years",
+      "type": "integer"
     },
     "last_error": {
       "description": "last delivery error, empty when the reminder is delivered",
@@ -1005,7 +1355,7 @@ Change a reminder. Omitted fields keep their current values: message, time, week
       "type": "string"
     },
     "month_days": {
-      "description": "days of month, present when schedule_kind is monthly",
+      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
       "items": {
         "type": "integer"
       },
@@ -1015,7 +1365,37 @@ Change a reminder. Omitted fields keep their current values: message, time, week
       ]
     },
     "next_due_at": {
-      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled",
+      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
+      "type": "string"
+    },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "occurrences_fired": {
+      "description": "how many occurrences already fired; editing resets it",
+      "type": "integer"
+    },
+    "repeat": {
+      "description": "once, daily, weekly, monthly or yearly",
       "type": "string"
     },
     "repeat_minutes": {
@@ -1023,7 +1403,11 @@ Change a reminder. Omitted fields keep their current values: message, time, week
       "type": "integer"
     },
     "schedule_kind": {
-      "description": "weekly or monthly",
+      "description": "alias of repeat, kept for older clients",
+      "type": "string"
+    },
+    "start_date": {
+      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
       "type": "string"
     },
     "time": {
@@ -1034,12 +1418,16 @@ Change a reminder. Omitted fields keep their current values: message, time, week
       "description": "IANA time zone of the schedule",
       "type": "string"
     },
+    "until": {
+      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
+      "type": "string"
+    },
     "updated_at": {
       "description": "last change time in RFC 3339 UTC",
       "type": "string"
     },
     "weekdays": {
-      "description": "weekly days as mon..sun, present when schedule_kind is weekly",
+      "description": "weekly days as mon..sun, present when repeat is weekly",
       "items": {
         "type": "string"
       },
@@ -1052,7 +1440,12 @@ Change a reminder. Omitted fields keep their current values: message, time, week
   "required": [
     "id",
     "message",
+    "repeat",
     "schedule_kind",
+    "interval",
+    "start_date",
+    "occurrences_fired",
+    "finished",
     "time",
     "time_zone",
     "repeat_minutes",
@@ -1251,7 +1644,31 @@ application/json` и `Accept: application/json, text/event-stream`. Ответ
 Повтор по умолчанию — 10 минут, напоминание включено. `weekdays` принимает и
 имена (`mon`..`sun`), и номера ISO (`1`..`7`); для месячного расписания вместо
 `weekdays` передаётся `month_days` (1..31, несуществующий день = последний день
-месяца).
+месяца) или `nth_weekday`, например второй вторник:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "reminders_create",
+    "arguments": {
+      "message": "Сдать отчёт",
+      "repeat": "monthly",
+      "nth_weekday": {"position": 2, "weekday": "tue"},
+      "start_date": "2026-02-01",
+      "until": "2026-12-31",
+      "time": "18:00"
+    }
+  }
+}
+```
+
+`repeat` — `once`, `daily`, `weekly`, `monthly` или `yearly`; `interval` делает
+повтор «каждые N» дней/недель/месяцев/лет от `start_date`; `date` задаёт день
+разового напоминания; `until` или `count` останавливают повтор. Старая форма без
+`repeat` (только `weekdays` или `month_days`) работает как раньше.
 
 ### Изменение напоминания (`reminders_update`)
 
@@ -1272,10 +1689,11 @@ application/json` и `Accept: application/json, text/event-stream`. Ответ
 ```
 
 Передавайте только то, что меняется: остальные поля адаптер берёт из текущего
-напоминания. Правка отменяет ожидающее срабатывание и пересчитывает
-`next_due_at` от текущего момента. Выключение — `"enabled": false`; включение
-обратно — `"enabled": true`. Нельзя одновременно передать `weekdays` и
-`month_days`.
+напоминания. Правка отменяет ожидающее срабатывание, сбрасывает счётчик
+срабатываний и пересчитывает `next_due_at` от текущего момента. Выключение —
+`"enabled": false`; включение обратно — `"enabled": true`. В одном вызове
+нельзя смешивать `weekdays`, `month_days` и `nth_weekday`; `until` и `count`
+взаимоисключающие.
 
 ### Удаление напоминания (`reminders_delete`)
 

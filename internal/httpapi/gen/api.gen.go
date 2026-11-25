@@ -20,6 +20,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Defines values for APITokenScope.
@@ -67,6 +68,48 @@ func (e BindingPlatform) Valid() bool {
 	}
 }
 
+// Defines values for CreateReminderRequestEndKind.
+const (
+	CreateReminderRequestEndKindCount CreateReminderRequestEndKind = "count"
+	CreateReminderRequestEndKindNone  CreateReminderRequestEndKind = "none"
+	CreateReminderRequestEndKindUntil CreateReminderRequestEndKind = "until"
+)
+
+// Valid indicates whether the value is a known member of the CreateReminderRequestEndKind enum.
+func (e CreateReminderRequestEndKind) Valid() bool {
+	switch e {
+	case CreateReminderRequestEndKindCount:
+		return true
+	case CreateReminderRequestEndKindNone:
+		return true
+	case CreateReminderRequestEndKindUntil:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReminderEndKind.
+const (
+	ReminderEndKindCount ReminderEndKind = "count"
+	ReminderEndKindNone  ReminderEndKind = "none"
+	ReminderEndKindUntil ReminderEndKind = "until"
+)
+
+// Valid indicates whether the value is a known member of the ReminderEndKind enum.
+func (e ReminderEndKind) Valid() bool {
+	switch e {
+	case ReminderEndKindCount:
+		return true
+	case ReminderEndKindNone:
+		return true
+	case ReminderEndKindUntil:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReminderOccurrenceStatus.
 const (
 	Active    ReminderOccurrenceStatus = "active"
@@ -90,16 +133,25 @@ func (e ReminderOccurrenceStatus) Valid() bool {
 
 // Defines values for ScheduleKind.
 const (
+	Daily   ScheduleKind = "daily"
 	Monthly ScheduleKind = "monthly"
+	Once    ScheduleKind = "once"
 	Weekly  ScheduleKind = "weekly"
+	Yearly  ScheduleKind = "yearly"
 )
 
 // Valid indicates whether the value is a known member of the ScheduleKind enum.
 func (e ScheduleKind) Valid() bool {
 	switch e {
+	case Daily:
+		return true
 	case Monthly:
 		return true
+	case Once:
+		return true
 	case Weekly:
+		return true
+	case Yearly:
 		return true
 	default:
 		return false
@@ -118,6 +170,27 @@ func (e TelegramAuthResponseStatus) Valid() bool {
 	case LinkRequired:
 		return true
 	case Ok:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateReminderRequestEndKind.
+const (
+	UpdateReminderRequestEndKindCount UpdateReminderRequestEndKind = "count"
+	UpdateReminderRequestEndKindNone  UpdateReminderRequestEndKind = "none"
+	UpdateReminderRequestEndKindUntil UpdateReminderRequestEndKind = "until"
+)
+
+// Valid indicates whether the value is a known member of the UpdateReminderRequestEndKind enum.
+func (e UpdateReminderRequestEndKind) Valid() bool {
+	switch e {
+	case UpdateReminderRequestEndKindCount:
+		return true
+	case UpdateReminderRequestEndKindNone:
+		return true
+	case UpdateReminderRequestEndKindUntil:
 		return true
 	default:
 		return false
@@ -257,8 +330,10 @@ type Connection struct {
 	WorkspaceName *string `json:"workspace_name"`
 }
 
-// CreateReminderRequest Fields of a new reminder. `repeat_minutes` defaults to 10 and `enabled`
-// to `true`, so the common case needs neither.
+// CreateReminderRequest Fields of a new reminder. `repeat_minutes` defaults to 10, `enabled` to
+// `true`, `interval` to 1, `end_kind` to `none` and `start_date` to today
+// in `timezone`, so a request that only names `schedule_kind`,
+// `schedule_days` and `time` keeps the old weekly/monthly behaviour.
 type CreateReminderRequest struct {
 	// Enabled Create the reminder already scheduled. `false` stores it disabled,
 	// without a next due time.
@@ -267,33 +342,76 @@ type CreateReminderRequest struct {
 	// Example: true
 	Enabled *bool `json:"enabled,omitempty"`
 
+	// EndCount Total number of occurrences for `count`.
+	EndCount *int `json:"end_count,omitempty"`
+
+	// EndDate Last allowed day for `until`, as `YYYY-MM-DD` in `timezone`.
+	EndDate *openapi_types.Date `json:"end_date,omitempty"`
+
+	// EndKind Stop condition of a repeating rule: never, until `end_date`, or after
+	// `end_count` occurrences. Omitted means `none`; `once` ignores it.
+	//
+	//
+	// Example: none
+	EndKind *CreateReminderRequestEndKind `json:"end_kind,omitempty"`
+
+	// Interval Every N days/weeks/months/years, relative to `start_date`. Omitted
+	// means 1.
+	//
+	//
+	// Example: 1
+	Interval *int `json:"interval,omitempty"`
+
 	// Message Reminder text, 1..1500 characters.
 	//
 	// Example: Выпить таблетку
 	Message string `json:"message"`
+
+	// MonthWeekPosition For a monthly nth-weekday rule: 1..4 for the first through fourth
+	// weekday, or -1 for the last one. Omit for a day-of-month rule.
+	MonthWeekPosition *int `json:"month_week_position,omitempty"`
+
+	// MonthWeekday ISO weekday (1 = Monday, 7 = Sunday) of an nth-weekday monthly rule.
+	// Required together with `month_week_position`.
+	MonthWeekday *int `json:"month_weekday,omitempty"`
 
 	// RepeatMinutes Repeat interval of an unconfirmed occurrence.
 	//
 	// Example: 10
 	RepeatMinutes *int `json:"repeat_minutes,omitempty"`
 
-	// ScheduleDays At least one day. Weekly days are 1..7, monthly days are 1..31.
+	// ScheduleDays Days of a `weekly` or `monthly` day-of-month rule. Weekly days are
+	// 1..7, monthly days are 1..31. Omit for `once`, `daily`, `yearly` and
+	// an nth-weekday `monthly` rule.
 	//
 	//
 	// Example: [1,3,5]
-	ScheduleDays []int `json:"schedule_days"`
+	ScheduleDays *[]int `json:"schedule_days,omitempty"`
 
-	// ScheduleKind Shape of the schedule.
+	// ScheduleKind Shape of the recurrence.
 	//
-	// * `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
-	//   Sunday.
-	// * `monthly` — `schedule_days` are days of month 1..31. A day the month
-	//   does not have means the last day of that month: 31 is 28 or 29
-	//   February, 31 is 30 April.
+	// * `once` — a single occurrence on `start_date` at `time`; the reminder
+	//   is finished after the occurrence is confirmed.
+	// * `daily` — every `interval` days (1 means every day) at `time`.
+	// * `weekly` — every `interval` weeks on `schedule_days`, ISO weekdays 1..7
+	//   (1 = Monday, 7 = Sunday).
+	// * `monthly` — every `interval` months, either on `schedule_days` (days of
+	//   month 1..31, a day the month does not have means its last day) or on
+	//   the nth weekday given by `month_week_position` and `month_weekday`.
+	// * `yearly` — every `interval` years on the month and day of `start_date`;
+	//   29 February becomes 28 February in a non-leap year.
 	//
 	//
 	// Example: weekly
 	ScheduleKind ScheduleKind `json:"schedule_kind"`
+
+	// StartDate First possible day as `YYYY-MM-DD` in `timezone`; the date of a
+	// `once` reminder and the anniversary of a `yearly` one. Omitted means
+	// today in `timezone`.
+	//
+	//
+	// Example: 2026-01-05
+	StartDate *openapi_types.Date `json:"start_date,omitempty"`
 
 	// Time Local wall clock time as `HH:MM`.
 	//
@@ -305,6 +423,12 @@ type CreateReminderRequest struct {
 	// Example: Europe/Moscow
 	Timezone string `json:"timezone"`
 }
+
+// CreateReminderRequestEndKind Stop condition of a repeating rule: never, until `end_date`, or after
+// `end_count` occurrences. Omitted means `none`; `once` ignores it.
+//
+// Example: none
+type CreateReminderRequestEndKind string
 
 // CreateTokenRequest Fields of a new personal access token.
 type CreateTokenRequest struct {
@@ -438,10 +562,47 @@ type Reminder struct {
 	// Example: true
 	Enabled bool `json:"enabled"`
 
+	// EndCount Total number of occurrences for `end_kind` `count`; `null` for the
+	// other end kinds.
+	EndCount *int `json:"end_count"`
+
+	// EndDate Last allowed day for `end_kind` `until`, as `YYYY-MM-DD` in
+	// `timezone`; `null` for the other end kinds.
+	EndDate *openapi_types.Date `json:"end_date"`
+
+	// EndKind How a repeating recurrence stops: `none` repeats forever, `until`
+	// repeats through `end_date`, `count` repeats `end_count` times in
+	// total. A `once` reminder always has `none`.
+	//
+	//
+	// Example: none
+	EndKind ReminderEndKind `json:"end_kind"`
+
+	// Finished Whether a finite recurrence is over: a `once` reminder or one whose
+	// end date or occurrence count was reached and the last occurrence was
+	// confirmed. A finished reminder is not scheduled and is shown as
+	// «завершено».
+	//
+	//
+	// Example: false
+	Finished bool `json:"finished"`
+
+	// FinishedAt When the last occurrence of a finite recurrence was confirmed, or
+	// `null` while the reminder still has a future occurrence.
+	FinishedAt *time.Time `json:"finished_at"`
+
 	// Id Reminder id (UUID).
 	//
 	// Example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
 	Id string `json:"id"`
+
+	// Interval Gap between occurrences in units of `schedule_kind`: every N days,
+	// weeks, months or years. `1` means every day/week/month/year. It is
+	// always relative to `start_date`; ignored by `once`.
+	//
+	//
+	// Example: 1
+	Interval int `json:"interval"`
 
 	// LastError Last delivery error, or `null`. It is cleared after the next
 	// successful delivery.
@@ -454,12 +615,28 @@ type Reminder struct {
 	// Example: Выпить таблетку
 	Message string `json:"message"`
 
+	// MonthWeekPosition Position of the weekday in a monthly rule: 1..4 for the first through
+	// fourth, or -1 for the last one. `null` means the rule uses
+	// `schedule_days` (days of month) instead.
+	MonthWeekPosition *int `json:"month_week_position"`
+
+	// MonthWeekday ISO weekday of an nth-weekday monthly rule: 1 is Monday, 7 is Sunday.
+	// `null` unless `month_week_position` is set.
+	MonthWeekday *int `json:"month_weekday"`
+
 	// NextDueAt Next firing in UTC, or `null` while the reminder is disabled. The
 	// scheduler advances it after every firing.
 	//
 	//
 	// Example: 2026-01-12T06:30:00Z
 	NextDueAt *time.Time `json:"next_due_at"`
+
+	// OccurrencesFired How many occurrences already fired. Editing the rule resets it to 0;
+	// a `count` end compares it with `end_count`.
+	//
+	//
+	// Example: 0
+	OccurrencesFired int `json:"occurrences_fired"`
 
 	// RepeatMinutes How often an unconfirmed occurrence is repeated, in minutes. Every
 	// repeat replaces the previous message, so only one reminder message
@@ -469,24 +646,40 @@ type Reminder struct {
 	// Example: 10
 	RepeatMinutes int `json:"repeat_minutes"`
 
-	// ScheduleDays Days of the schedule, sorted and without duplicates. Weekly days are
-	// 1..7 (Monday..Sunday), monthly days are 1..31.
+	// ScheduleDays Days of a `weekly` or `monthly` day-of-month rule, sorted and without
+	// duplicates. Weekly days are 1..7 (Monday..Sunday), monthly days are
+	// 1..31. Empty for `once`, `daily`, `yearly` and an nth-weekday
+	// `monthly` rule.
 	//
 	//
 	// Example: [1,3,5]
 	ScheduleDays []int `json:"schedule_days"`
 
-	// ScheduleKind Shape of the schedule.
+	// ScheduleKind Shape of the recurrence.
 	//
-	// * `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
-	//   Sunday.
-	// * `monthly` — `schedule_days` are days of month 1..31. A day the month
-	//   does not have means the last day of that month: 31 is 28 or 29
-	//   February, 31 is 30 April.
+	// * `once` — a single occurrence on `start_date` at `time`; the reminder
+	//   is finished after the occurrence is confirmed.
+	// * `daily` — every `interval` days (1 means every day) at `time`.
+	// * `weekly` — every `interval` weeks on `schedule_days`, ISO weekdays 1..7
+	//   (1 = Monday, 7 = Sunday).
+	// * `monthly` — every `interval` months, either on `schedule_days` (days of
+	//   month 1..31, a day the month does not have means its last day) or on
+	//   the nth weekday given by `month_week_position` and `month_weekday`.
+	// * `yearly` — every `interval` years on the month and day of `start_date`;
+	//   29 February becomes 28 February in a non-leap year.
 	//
 	//
 	// Example: weekly
 	ScheduleKind ScheduleKind `json:"schedule_kind"`
+
+	// StartDate First possible day of the recurrence as `YYYY-MM-DD` in `timezone`.
+	// For `once` it is the date of the single occurrence; for `yearly` its
+	// month and day are the anniversary. A new reminder defaults to today in
+	// its time zone.
+	//
+	//
+	// Example: 2026-01-05
+	StartDate openapi_types.Date `json:"start_date"`
 
 	// Time Local wall clock time as `HH:MM` (24 hours, zero padded).
 	//
@@ -505,6 +698,13 @@ type Reminder struct {
 	// Example: 2026-01-05T09:00:00Z
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// ReminderEndKind How a repeating recurrence stops: `none` repeats forever, `until`
+// repeats through `end_date`, `count` repeats `end_count` times in
+// total. A `once` reminder always has `none`.
+//
+// Example: none
+type ReminderEndKind string
 
 // ReminderOccurrence One firing of a reminder. A reminder has at most one active occurrence at
 // a time: the message that was sent and waits for confirmation. While it is
@@ -563,13 +763,18 @@ type ReminderOccurrence struct {
 // Example: active
 type ReminderOccurrenceStatus string
 
-// ScheduleKind Shape of the schedule.
+// ScheduleKind Shape of the recurrence.
 //
-//   - `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
-//     Sunday.
-//   - `monthly` — `schedule_days` are days of month 1..31. A day the month
-//     does not have means the last day of that month: 31 is 28 or 29
-//     February, 31 is 30 April.
+//   - `once` — a single occurrence on `start_date` at `time`; the reminder
+//     is finished after the occurrence is confirmed.
+//   - `daily` — every `interval` days (1 means every day) at `time`.
+//   - `weekly` — every `interval` weeks on `schedule_days`, ISO weekdays 1..7
+//     (1 = Monday, 7 = Sunday).
+//   - `monthly` — every `interval` months, either on `schedule_days` (days of
+//     month 1..31, a day the month does not have means its last day) or on
+//     the nth weekday given by `month_week_position` and `month_weekday`.
+//   - `yearly` — every `interval` years on the month and day of `start_date`;
+//     29 February becomes 28 February in a non-leap year.
 //
 // Example: weekly
 type ScheduleKind string
@@ -641,8 +846,10 @@ type UpdateMeRequest struct {
 	Timezone string `json:"timezone"`
 }
 
-// UpdateReminderRequest The whole rule: `PUT` replaces every field, so all of them are required.
-// An omitted field is not kept from the previous version.
+// UpdateReminderRequest The whole rule: `PUT` replaces every field, so the rule fields are
+// required. Recurrence additions are optional with the same defaults as a
+// create: `interval` 1, `end_kind` `none` and `start_date` today in
+// `timezone`. Editing the rule resets the fired counter.
 type UpdateReminderRequest struct {
 	// Enabled `false` cancels the pending occurrence and clears `next_due_at`.
 	//
@@ -650,33 +857,69 @@ type UpdateReminderRequest struct {
 	// Example: true
 	Enabled bool `json:"enabled"`
 
+	// EndCount Total number of occurrences for `count`.
+	EndCount *int `json:"end_count,omitempty"`
+
+	// EndDate Last allowed day for `until`.
+	EndDate *openapi_types.Date `json:"end_date,omitempty"`
+
+	// EndKind Stop condition: never, until `end_date`, or after `end_count`.
+	//
+	// Example: none
+	EndKind *UpdateReminderRequestEndKind `json:"end_kind,omitempty"`
+
+	// Interval Every N days/weeks/months/years, relative to `start_date`.
+	//
+	// Example: 1
+	Interval *int `json:"interval,omitempty"`
+
 	// Message Reminder text, 1..1500 characters.
 	//
 	// Example: Выпить таблетку
 	Message string `json:"message"`
+
+	// MonthWeekPosition For a monthly nth-weekday rule: 1..4 or -1 for the last weekday.
+	MonthWeekPosition *int `json:"month_week_position,omitempty"`
+
+	// MonthWeekday ISO weekday (1 = Monday, 7 = Sunday) of an nth-weekday monthly rule.
+	MonthWeekday *int `json:"month_weekday,omitempty"`
 
 	// RepeatMinutes Repeat interval of an unconfirmed occurrence.
 	//
 	// Example: 15
 	RepeatMinutes int `json:"repeat_minutes"`
 
-	// ScheduleDays At least one day. Weekly days are 1..7, monthly days are 1..31.
+	// ScheduleDays Days of a `weekly` or `monthly` day-of-month rule. Weekly days are
+	// 1..7, monthly days are 1..31. Empty for `once`, `daily`, `yearly` and
+	// an nth-weekday `monthly` rule.
 	//
 	//
 	// Example: [2,4]
-	ScheduleDays []int `json:"schedule_days"`
+	ScheduleDays *[]int `json:"schedule_days,omitempty"`
 
-	// ScheduleKind Shape of the schedule.
+	// ScheduleKind Shape of the recurrence.
 	//
-	// * `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
-	//   Sunday.
-	// * `monthly` — `schedule_days` are days of month 1..31. A day the month
-	//   does not have means the last day of that month: 31 is 28 or 29
-	//   February, 31 is 30 April.
+	// * `once` — a single occurrence on `start_date` at `time`; the reminder
+	//   is finished after the occurrence is confirmed.
+	// * `daily` — every `interval` days (1 means every day) at `time`.
+	// * `weekly` — every `interval` weeks on `schedule_days`, ISO weekdays 1..7
+	//   (1 = Monday, 7 = Sunday).
+	// * `monthly` — every `interval` months, either on `schedule_days` (days of
+	//   month 1..31, a day the month does not have means its last day) or on
+	//   the nth weekday given by `month_week_position` and `month_weekday`.
+	// * `yearly` — every `interval` years on the month and day of `start_date`;
+	//   29 February becomes 28 February in a non-leap year.
 	//
 	//
 	// Example: weekly
 	ScheduleKind ScheduleKind `json:"schedule_kind"`
+
+	// StartDate First possible day as `YYYY-MM-DD` in `timezone`. Omitted means today
+	// in `timezone`.
+	//
+	//
+	// Example: 2026-01-05
+	StartDate *openapi_types.Date `json:"start_date,omitempty"`
 
 	// Time Local wall clock time as `HH:MM`.
 	//
@@ -688,6 +931,11 @@ type UpdateReminderRequest struct {
 	// Example: Europe/Moscow
 	Timezone string `json:"timezone"`
 }
+
+// UpdateReminderRequestEndKind Stop condition: never, until `end_date`, or after `end_count`.
+//
+// Example: none
+type UpdateReminderRequestEndKind string
 
 // ReminderID Example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
 type ReminderID = string
@@ -2617,166 +2865,187 @@ func (sh *strictHandler) RevokeToken(w http.ResponseWriter, r *http.Request, id 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"/JUVtJ5QE596dtLA6uYgl5Grtfhm/v3Z27P/PwA=",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

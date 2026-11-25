@@ -145,7 +145,7 @@ func TestServiceValidation(t *testing.T) {
 		{name: "hour out of range", apply: func(in *reminders.Input) { in.TimeHHMM = "24:00" }},
 		{name: "unknown time zone", apply: func(in *reminders.Input) { in.Timezone = "Mars/Olympus" }},
 		{name: "local time zone", apply: func(in *reminders.Input) { in.Timezone = "Local" }},
-		{name: "unknown kind", apply: func(in *reminders.Input) { in.Kind = reminders.Kind("daily") }},
+		{name: "unknown kind", apply: func(in *reminders.Input) { in.Kind = reminders.Kind("fortnightly") }},
 	}
 
 	for _, tt := range tests {
@@ -198,8 +198,11 @@ func TestServiceValidation(t *testing.T) {
 		valid := row{message: "x", kind: "weekly", days: []int16{1}, hhmm: "09:00", repeat: 10}
 		insert := func(r row) error {
 			_, err := env.store.Pool().Exec(ctx, `
-				INSERT INTO reminders (user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes)
-				VALUES ($1, $2, 'UTC', $3, $4, $5, $6)`,
+				INSERT INTO reminders (
+					user_id, message, timezone, schedule_kind, schedule_days,
+					time_hhmm, repeat_minutes, start_date
+				)
+				VALUES ($1, $2, 'UTC', $3, $4, $5, $6, DATE '2026-01-05')`,
 				userID, r.message, r.kind, r.days, r.hhmm, r.repeat)
 			return err
 		}
@@ -221,7 +224,7 @@ func TestServiceValidation(t *testing.T) {
 				r.kind = "monthly"
 				r.days = []int16{32}
 			}},
-			{name: "unknown kind", mutate: func(r *row) { r.kind = "daily" }},
+			{name: "unknown kind", mutate: func(r *row) { r.kind = "fortnightly" }},
 		}
 		for _, c := range cases {
 			candidate := valid

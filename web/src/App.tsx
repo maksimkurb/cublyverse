@@ -32,12 +32,13 @@ export interface AppProps {
 
 function RoutedScreen() {
   const route = useRoute();
-  const current = route === "/" ? homeRoute : route;
+  // The token screen moved into the profile; old links keep working.
+  const current = route === "/" ? homeRoute : route === "/tokens" ? "/profile" : route;
   const feature = features.find((item) => item.route === current) ?? features[0];
   const Screen = current === "/profile" ? ProfileScreen : feature.component;
 
   return (
-    <AppShell route={route}>
+    <AppShell route={route === "/tokens" ? "/profile" : route}>
       <Screen />
     </AppShell>
   );

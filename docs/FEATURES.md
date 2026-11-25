@@ -10,7 +10,7 @@
 | Фича | Где | Входы | Статус |
 |---|---|---|---|
 | Напоминания (`reminders`) | `internal/features/reminders` | бот (`/reminders`, кнопка «✅ Выполнено»), API (`/reminders`), MCP (шесть инструментов), WebApp (экран) | ✅ |
-| Бусинки (`craft`) | `internal/features/craft` | API (`/craft`, `/workspaces/{id}/catalog`, `/workspaces/{id}/inventory`), MCP (`/mcp/w/{id}`), WebApp (экраны «Запасы» и «Каталог») | ✅ |
+| Бусинки (`craft`) | `internal/features/craft` | API (`/craft`, `/workspaces/{id}/catalog`, `/workspaces/{id}/inventory`), MCP (`/mcp/w/{id}`), WebApp (экран «Склад») | ✅ |
 | Пространства (`workspaces`) | `internal/workspace` | API (`/workspaces`), MCP (контекст `/mcp/w/{id}`), WebApp (экран «Участники») | ✅ |
 | Доступ по токенам (`tokens`) | `internal/auth` + `web/src/features/tokens` | WebApp и API (`/tokens`); MCP только принимает PAT | ✅ |
 

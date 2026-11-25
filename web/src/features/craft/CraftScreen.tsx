@@ -8,24 +8,24 @@ import { Button, EmptyState, Notice, Segmented, SelectField, Switch, TextField }
 import { IconPlus } from "../../ui/icons";
 import { useCurrentWorkspace } from "../workspaces/selection";
 import { WorkspaceSwitcher } from "../workspaces/WorkspaceSwitcher";
+import { AddStockDialog } from "./AddStockDialog";
 import { CreateCraftItemDialog, LinkCraftItemDialog, StockEditDialog } from "./CraftDialogs";
 import { useAdjustCraftStock, useCraftCatalog, useCraftCategories, useCraftInventory, useCraftManufacturers } from "./data";
 import { formatQty, itemColorLabel, itemMeta, qtyLabel, swatchStyle } from "./format";
+import ProjectsPanel from "./ProjectsPanel";
 import PurchasesPanel from "./PurchasesPanel";
 
-type Tab = "inventory" | "purchases" | "catalog";
+type Tab = "inventory" | "purchases" | "projects" | "catalog";
 
 const TABS: ReadonlyArray<{ value: Tab; label: string }> = [
   { value: "inventory", label: "Запасы" },
   { value: "purchases", label: "Закупки" },
+  { value: "projects", label: "Проекты" },
   { value: "catalog", label: "Каталог" },
 ];
 
 /** Threshold of the low-stock filter. */
 const LOW_STOCK_MAX = 5;
-
-/** Page heading of every tab. */
-const TITLES: Record<Tab, string> = { inventory: "Запасы", purchases: "Закупки", catalog: "Каталог" };
 
 /** Category and manufacturer selects of the stock and catalogue tabs. */
 function CraftFilters({
@@ -125,6 +125,7 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
   const [manufacturer, setManufacturer] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
   const [editing, setEditing] = useState<CraftStockEntry | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const query = useCraftInventory(workspaceId, {
@@ -157,6 +158,13 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
 
   return (
     <section className="page__section" aria-label="Запасы">
+      <div className="craft-actions">
+        <Button variant="primary" onClick={() => setAddOpen(true)}>
+          <IconPlus />
+          Добавить в запасы
+        </Button>
+      </div>
+
       <div className="craft-filters">
         <TextField label="Поиск" placeholder="Название, цвет или артикул" value={q} onChange={(event) => setQ(event.target.value)} />
         <CraftFilters category={category} manufacturer={manufacturer} onCategory={setCategory} onManufacturer={setManufacturer} />
@@ -191,7 +199,7 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
         <EmptyState title={filtered ? "Ничего не найдено" : "Склад пуст"}>
           {filtered
             ? "Измените фильтры или строку поиска."
-            : "Добавьте материал из каталога: откройте вкладку «Каталог» и нажмите «На склад»."}
+            : "Нажмите «Добавить в запасы»: найдите позицию в каталоге или создайте свою."}
         </EmptyState>
       )}
 
@@ -209,6 +217,7 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
         </ul>
       )}
 
+      {addOpen && <AddStockDialog workspaceId={workspaceId} onClose={() => setAddOpen(false)} />}
       {editing && <StockEditDialog workspaceId={workspaceId} entry={editing} onClose={() => setEditing(null)} />}
     </section>
   );
@@ -217,12 +226,10 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
 /** One catalogue result with its stock and actions. */
 function CatalogRow({
   item,
-  busy,
   onAdd,
   onLink,
 }: {
   item: CraftItem;
-  busy: boolean;
   onAdd: (item: CraftItem) => void;
   onLink: (item: CraftItem) => void;
 }) {
@@ -240,7 +247,7 @@ function CatalogRow({
       </div>
       <div className="craft-row__side">
         <span className="craft-qty">{`${formatQty(item.stock_qty)} ${item.unit}`}</span>
-        <Button size="s" variant="solid" aria-label={`Добавить на склад: ${item.name}`} loading={busy} onClick={() => onAdd(item)}>
+        <Button size="s" variant="solid" aria-label={`Добавить на склад: ${item.name}`} onClick={() => onAdd(item)}>
           На склад
         </Button>
         {item.private && (
@@ -255,14 +262,13 @@ function CatalogRow({
 
 /** «Каталог»: search the shared catalogue, create private items and stock them. */
 function CatalogPanel({ workspaceId }: { workspaceId: string }) {
-  const host = useHost();
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [onlyInStock, setOnlyInStock] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [linking, setLinking] = useState<CraftItem | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [adding, setAdding] = useState<CraftItem | null>(null);
 
   const query = useCraftCatalog(workspaceId, {
     q,
@@ -271,24 +277,6 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
     onlyInStock,
     limit: 100,
   });
-  const adjust = useAdjustCraftStock();
-
-  async function handleAdd(item: CraftItem) {
-    setBusyId(item.id);
-    try {
-      await adjust.mutateAsync({
-        params: { path: { id: workspaceId, item_id: item.id } },
-        body: { delta: 1, reason: "Добавлено из каталога" },
-      });
-      host.haptic("success");
-    } catch (cause) {
-      host.haptic("error");
-      await host.showAlert(`Не удалось добавить на склад: ${describeApiError(cause)}`);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   const items = query.data ?? [];
   const filtered = q.trim() !== "" || category !== "" || manufacturer !== "" || onlyInStock;
 
@@ -336,8 +324,7 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
             <CatalogRow
               key={item.id}
               item={item}
-              busy={busyId === item.id}
-              onAdd={(value) => void handleAdd(value)}
+              onAdd={setAdding}
               onLink={setLinking}
             />
           ))}
@@ -347,25 +334,26 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
       {createOpen && (
         <CreateCraftItemDialog workspaceId={workspaceId} onClose={() => setCreateOpen(false)} onCreated={() => setCreateOpen(false)} />
       )}
+      {adding && <AddStockDialog workspaceId={workspaceId} item={adding} onClose={() => setAdding(null)} />}
       {linking && <LinkCraftItemDialog workspaceId={workspaceId} item={linking} onClose={() => setLinking(null)} />}
     </section>
   );
 }
 
 /**
- * «Бусинки»: the stock, purchases and catalogue of the selected workspace. The
- * workspace itself and its members live in the «Участники» screen.
+ * «Склад»: stock, purchases, projects and catalogue of the selected workspace.
+ * The workspace itself and its members live in the «Участники» screen.
  */
 export default function CraftScreen() {
   const [tab, setTab] = useState<Tab>("inventory");
-  usePageTitle(TITLES[tab]);
+  usePageTitle("Склад");
 
   const { query, workspaces, current, select } = useCurrentWorkspace();
 
   return (
     <div className="page">
       <header className="page__head">
-        <h1 className="page__title">{TITLES[tab]}</h1>
+        <h1 className="page__title">Склад</h1>
       </header>
 
       {query.isPending && (
@@ -385,7 +373,7 @@ export default function CraftScreen() {
 
       {query.isSuccess && workspaces.length === 0 && (
         <EmptyState title="Нет пространства">
-          Сначала создайте пространство в разделе «Участники»: запасы и каталог живут внутри него.
+          Сначала создайте пространство в разделе «Участники»: склад живёт внутри него.
         </EmptyState>
       )}
 
@@ -395,6 +383,7 @@ export default function CraftScreen() {
           <Segmented label="Раздел" value={tab} options={TABS} onChange={setTab} />
           {tab === "inventory" && <InventoryPanel workspaceId={current.id} />}
           {tab === "purchases" && <PurchasesPanel workspaceId={current.id} />}
+          {tab === "projects" && <ProjectsPanel key={current.id} workspaceId={current.id} />}
           {tab === "catalog" && <CatalogPanel workspaceId={current.id} />}
         </>
       )}

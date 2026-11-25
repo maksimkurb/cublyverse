@@ -3,7 +3,6 @@ import { useState } from "react";
 import type { APIToken, CreatedToken } from "../../api/client";
 import { describeApiError } from "../../api/errors";
 import { useHost } from "../../host/HostContext";
-import { usePageTitle } from "../../router/router";
 import { Button, EmptyState, Notice } from "../../ui/controls";
 import { IconCopy, IconPlus } from "../../ui/icons";
 import { ConnectionsSection } from "./ConnectionsSection";
@@ -13,14 +12,13 @@ import { useRevokeToken, useTokensQuery } from "./data";
 import { copyToken, expiryLabel, formatTokenDate, prefixLabel, tokenState, tokenStateLabel } from "./tokens";
 
 /**
- * «Токены»: the MCP endpoint and the personal access tokens used by MCP clients and
- * scripts. The screen lists them, creates new ones and revokes them with a
+ * The MCP part of the profile: the endpoint and the personal access tokens used by
+ * MCP clients and scripts. It lists them, creates new ones and revokes them with a
  * second confirming tap. The plaintext appears only in the reveal dialog right
  * after creation.
  */
-export default function TokensScreen() {
+export default function TokensSection() {
   const host = useHost();
-  usePageTitle("Токены");
 
   const query = useTokensQuery();
   const revoke = useRevokeToken();
@@ -61,9 +59,9 @@ export default function TokensScreen() {
   const tokens = query.data;
 
   return (
-    <div className="page">
+    <section className="page__section" aria-label="Токены и MCP">
       <header className="page__head">
-        <h1 className="page__title">Токены</h1>
+        <h2 className="page__heading">Токены и MCP</h2>
         <Button variant="primary" aria-label="Новый токен" onClick={() => setCreateOpen(true)}>
           <IconPlus />
           Новый
@@ -164,6 +162,6 @@ export default function TokensScreen() {
       )}
 
       {revealed && <TokenRevealDialog created={revealed} onClose={() => setRevealed(null)} />}
-    </div>
+    </section>
   );
 }

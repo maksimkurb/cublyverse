@@ -102,7 +102,7 @@ describe("CraftScreen", () => {
 
     renderWithHost(<CraftScreen />);
 
-    expect(screen.getByRole("heading", { name: "Запасы" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Склад" })).toBeInTheDocument();
     expect(screen.getByText("Жемчуг айвори 2 мм")).toBeInTheDocument();
     expect(screen.getByText("7 шт")).toBeInTheDocument();
     expect(screen.getByText(/Ящик 2/)).toBeInTheDocument();
@@ -155,14 +155,15 @@ describe("CraftScreen", () => {
     renderWithHost(<CraftScreen />);
     fireEvent.click(screen.getByRole("button", { name: "Каталог" }));
 
-    expect(screen.getByRole("heading", { name: "Каталог" })).toBeInTheDocument();
     expect(screen.getByText("Бисер белый")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Добавить на склад: Бисер белый" }));
+    fireEvent.change(screen.getByLabelText("Сколько добавить, шт"), { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
     await waitFor(() => expect(adjust.mutateAsync).toHaveBeenCalledTimes(1));
-    expect(adjust.mutateAsync.mock.calls[0][0].body).toMatchObject({ delta: 1 });
+    expect(adjust.mutateAsync.mock.calls[0][0].body).toMatchObject({ delta: 4 });
 
-    fireEvent.click(screen.getByRole("button", { name: "Новая позиция" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Новая позиция" }));
     fireEvent.change(screen.getByLabelText("Название"), { target: { value: "Жемчуг розовый" } });
     fireEvent.change(screen.getByLabelText("Цвет"), { target: { value: "#ff00aa" } });
     fireEvent.click(screen.getByRole("button", { name: "Создать позицию" }));
@@ -191,12 +192,33 @@ describe("CraftScreen", () => {
     });
   });
 
+  it("adds to stock from the stock tab, creating an own item on the way", async () => {
+    const adjust = mutation({ ...makeStock(), notes: "уже было" });
+    adjustMock.mockReturnValue(adjust as never);
+    const setMeta = mutation();
+    setMetaMock.mockReturnValue(setMeta as never);
+    createMock.mockReturnValue(mutation(makeItem({ name: "Лента", in_inventory: false })) as never);
+
+    renderWithHost(<CraftScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Добавить в запасы" }));
+    fireEvent.click(screen.getByRole("button", { name: /создать свою позицию/ }));
+    fireEvent.change(screen.getByLabelText("Название"), { target: { value: "Лента" } });
+    fireEvent.click(screen.getByRole("button", { name: "Создать позицию" }));
+
+    fireEvent.change(await screen.findByLabelText("Сколько добавить, шт"), { target: { value: "2,5" } });
+    fireEvent.change(screen.getByLabelText("Где хранится"), { target: { value: "Ящик 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
+
+    await waitFor(() => expect(setMeta.mutateAsync).toHaveBeenCalledTimes(1));
+    expect(adjust.mutateAsync.mock.calls[0][0].body).toMatchObject({ delta: 2.5 });
+    expect(setMeta.mutateAsync.mock.calls[0][0].body).toEqual({ location: "Ящик 1", notes: "уже было" });
+  });
+
   it("shows the purchase list as a tab next to the stock", () => {
     renderWithHost(<CraftScreen />);
 
     fireEvent.click(screen.getByText("Закупки"));
 
-    expect(screen.getByRole("heading", { name: "Закупки" })).toBeInTheDocument();
     expect(screen.getByText("Список закупок пуст")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Добавить в закупки" })).toBeInTheDocument();
   });

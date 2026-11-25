@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { api, type Me } from "../api/client";
 import { useAuth } from "../auth/AuthProvider";
+import TokensSection from "../features/tokens/TokensSection";
 import { usePageTitle } from "../router/router";
 import { Button, Notice, SelectField } from "../ui/controls";
 import { timezoneOptions } from "./timezones";
@@ -92,6 +93,8 @@ export default function ProfileScreen() {
           ))}
         </ul>
       </section>
+
+      <TokensSection />
 
       {!host.isTelegram && (
         <Button block loading={busy} onClick={() => void logout()}>

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeItem, makeMaterial, makeProject, makeWish, makeWorkspace } from "../../test/fixtures";
 import { renderWithHost } from "../../test/render";
-import ProjectsScreen from "./ProjectsScreen";
+import ProjectsPanel from "./ProjectsPanel";
 import {
   useCraftCatalog,
   useCreateProject,
@@ -16,16 +16,6 @@ import {
   useUpdateProject,
   useUseProjectMaterial,
 } from "./data";
-
-vi.mock("../workspaces/selection", () => ({
-  useCurrentWorkspace: () => ({
-    query: { isPending: false, isSuccess: true, isError: false, data: [makeWorkspace()], refetch: vi.fn() },
-    workspaces: [makeWorkspace()],
-    current: makeWorkspace(),
-    select: vi.fn(),
-  }),
-  writeStoredWorkspaceID: vi.fn(),
-}));
 
 vi.mock("./data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./data")>();
@@ -87,11 +77,10 @@ beforeEach(() => {
   shortageMock.mockReturnValue(mutation([makeWish()]) as never);
 });
 
-describe("ProjectsScreen", () => {
+describe("ProjectsPanel", () => {
   it("lists projects and shows the materials of an opened project", () => {
-    renderWithHost(<ProjectsScreen />);
+    renderWithHost(<ProjectsPanel workspaceId={makeWorkspace().id} />);
 
-    expect(screen.getByRole("heading", { name: "Проекты" })).toBeInTheDocument();
     expect(screen.getByText("Серьги «Майорка»")).toBeInTheDocument();
     expect(screen.getByText("1 материал")).toBeInTheDocument();
 
@@ -109,7 +98,7 @@ describe("ProjectsScreen", () => {
     const useMaterial = mutation(makeProject());
     useMaterialMock.mockReturnValue(useMaterial as never);
 
-    renderWithHost(<ProjectsScreen />);
+    renderWithHost(<ProjectsPanel workspaceId={makeWorkspace().id} />);
     fireEvent.click(screen.getByRole("button", { name: /Серьги «Майорка»/ }));
     fireEvent.click(screen.getByRole("button", { name: "Использовать: Жемчуг айвори 2 мм" }));
 
@@ -127,7 +116,7 @@ describe("ProjectsScreen", () => {
     const shortage = mutation([makeWish()]);
     shortageMock.mockReturnValue(shortage as never);
 
-    renderWithHost(<ProjectsScreen />);
+    renderWithHost(<ProjectsPanel workspaceId={makeWorkspace().id} />);
     fireEvent.click(screen.getByRole("button", { name: /Серьги «Майорка»/ }));
     fireEvent.click(screen.getByRole("button", { name: "Недостающее в закупки" }));
 
@@ -143,7 +132,7 @@ describe("ProjectsScreen", () => {
     setMaterialMock.mockReturnValue(setMaterial as never);
     catalogMock.mockReturnValue(queryResult({ data: [makeItem({ id: "new-item", name: "Бисер белый" })] }));
 
-    renderWithHost(<ProjectsScreen />);
+    renderWithHost(<ProjectsPanel workspaceId={makeWorkspace().id} />);
     fireEvent.click(screen.getByRole("button", { name: /Серьги «Майорка»/ }));
     fireEvent.click(screen.getByRole("button", { name: "Добавить материал" }));
 
@@ -160,7 +149,7 @@ describe("ProjectsScreen", () => {
     const create = mutation(makeProject());
     createMock.mockReturnValue(create as never);
 
-    renderWithHost(<ProjectsScreen />);
+    renderWithHost(<ProjectsPanel workspaceId={makeWorkspace().id} />);
     fireEvent.click(screen.getByRole("button", { name: "Новый проект" }));
     fireEvent.change(screen.getByLabelText("Название"), { target: { value: "Браслет" } });
     fireEvent.click(screen.getByRole("button", { name: "Создать проект" }));

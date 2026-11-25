@@ -3,11 +3,8 @@ import { useState } from "react";
 import type { ProjectMaterial } from "../../api/client";
 import { describeApiError } from "../../api/errors";
 import { useHost, useHostBackButton } from "../../host/HostContext";
-import { usePageTitle } from "../../router/router";
 import { Button, EmptyState, Notice } from "../../ui/controls";
 import { IconPlus } from "../../ui/icons";
-import { useCurrentWorkspace } from "../workspaces/selection";
-import { WorkspaceSwitcher } from "../workspaces/WorkspaceSwitcher";
 import { useProjects, useProject, useRemoveProjectMaterial, useShortageToWishlist } from "./data";
 import { itemMeta, swatchStyle } from "./format";
 import { AddMaterialDialog, CreateProjectDialog, EditProjectDialog, SetMaterialDialog, UseMaterialDialog } from "./ProjectDialogs";
@@ -209,8 +206,9 @@ function ProjectDetail({ workspaceId, projectId, onBack }: { workspaceId: string
 }
 
 /** The project list of one workspace; opening an entry shows its page. */
-function ProjectsPanel({ workspaceId }: { workspaceId: string }) {
+export default function ProjectsPanel({ workspaceId }: { workspaceId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const query = useProjects(workspaceId);
 
   if (selectedId) {
@@ -221,6 +219,13 @@ function ProjectsPanel({ workspaceId }: { workspaceId: string }) {
 
   return (
     <section className="page__section" aria-label="Проекты">
+      <div className="craft-actions">
+        <Button variant="primary" onClick={() => setCreateOpen(true)}>
+          <IconPlus />
+          Новый проект
+        </Button>
+      </div>
+
       {query.isPending && (
         <p className="page__state" role="status">
           Загрузка…
@@ -253,61 +258,8 @@ function ProjectsPanel({ workspaceId }: { workspaceId: string }) {
           ))}
         </ul>
       )}
+
+      {createOpen && <CreateProjectDialog workspaceId={workspaceId} onClose={() => setCreateOpen(false)} />}
     </section>
-  );
-}
-
-/**
- * «Проекты»: the craft projects of the selected workspace. The list opens one
- * project page with its materials, stock and shortage.
- */
-export default function ProjectsScreen() {
-  usePageTitle("Проекты");
-  const { query, workspaces, current, select } = useCurrentWorkspace();
-  const [createOpen, setCreateOpen] = useState(false);
-
-  return (
-    <div className="page">
-      <header className="page__head">
-        <h1 className="page__title">Проекты</h1>
-        <Button variant="primary" aria-label="Новый проект" disabled={!current} onClick={() => setCreateOpen(true)}>
-          <IconPlus />
-          Новый
-        </Button>
-      </header>
-
-      {query.isPending && (
-        <p className="page__state" role="status">
-          Загрузка…
-        </p>
-      )}
-      {query.isError && (
-        <Notice tone="error">
-          <span>Не удалось загрузить пространства: {query.error?.message ?? "неизвестная ошибка"}</span>
-          <Button size="s" onClick={() => void query.refetch()}>
-            Повторить
-          </Button>
-        </Notice>
-      )}
-      {query.isSuccess && workspaces.length === 0 && (
-        <EmptyState title="Нет пространства">
-          Сначала создайте пространство в разделе «Участники»: проекты живут внутри него.
-        </EmptyState>
-      )}
-
-      {current && (
-        <>
-          <WorkspaceSwitcher workspaces={workspaces} currentId={current.id} onChange={select} />
-          <ProjectsPanel key={current.id} workspaceId={current.id} />
-        </>
-      )}
-
-      {createOpen && current && (
-        <CreateProjectDialog
-          workspaceId={current.id}
-          onClose={() => setCreateOpen(false)}
-        />
-      )}
-    </div>
   );
 }

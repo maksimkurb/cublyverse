@@ -5,7 +5,7 @@ import type { CreatedToken } from "../../api/client";
 import { makeFakeHost } from "../../test/fakeHost";
 import { makeToken } from "../../test/fixtures";
 import { renderWithHost } from "../../test/render";
-import TokensScreen from "./TokensScreen";
+import TokensSection from "./TokensSection";
 import { useCreateToken, useRevokeToken, useTokensQuery } from "./data";
 
 vi.mock("./ConnectionsSection", () => ({ ConnectionsSection: () => null }));
@@ -37,7 +37,7 @@ function queryResult(overrides: Record<string, unknown>) {
 }
 
 function renderScreen(host = makeFakeHost()) {
-  renderWithHost(<TokensScreen />, host);
+  renderWithHost(<TokensSection />, host);
   return host;
 }
 
@@ -53,7 +53,7 @@ beforeEach(() => {
   } as unknown as ReturnType<typeof useCreateToken>);
 });
 
-describe("TokensScreen", () => {
+describe("TokensSection", () => {
   it("lists tokens with prefix, scopes, state and dates", () => {
     queryMock.mockReturnValue(queryResult({ data: [makeToken()] }));
     renderScreen();

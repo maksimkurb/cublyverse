@@ -121,7 +121,8 @@ export function StockEditDialog({ workspaceId, entry, onClose }: StockEditDialog
 export interface CreateCraftItemDialogProps {
   workspaceId: string;
   onClose: () => void;
-  onCreated: () => void;
+  /** Receives the created item. */
+  onCreated: (item: CraftItem) => void;
 }
 
 /** Creates a private catalogue item; the form is shaped by the category. */
@@ -181,7 +182,7 @@ export function CreateCraftItemDialog({ workspaceId, onClose, onCreated }: Creat
     setError(null);
     setBusy(true);
     try {
-      await create.mutateAsync({
+      const created = await create.mutateAsync({
         params: { path: { id: workspaceId } },
         body: {
           category,
@@ -194,8 +195,7 @@ export function CreateCraftItemDialog({ workspaceId, onClose, onCreated }: Creat
         },
       });
       host.haptic("success");
-      onCreated();
-      onClose();
+      onCreated(created);
     } catch (cause) {
       setError(describeApiError(cause));
       host.haptic("error");

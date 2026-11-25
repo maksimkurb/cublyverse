@@ -1,7 +1,6 @@
 import type { FeatureScreen } from "./types";
-import { craftFeature, projectsFeature } from "./craft";
+import { craftFeature } from "./craft";
 import { remindersFeature } from "./reminders";
-import { tokensFeature } from "./tokens";
 import { workspacesFeature } from "./workspaces";
 
 /**
@@ -12,4 +11,4 @@ import { workspacesFeature } from "./workspaces";
  * it and the router renders its `component` on its `route`; no other file
  * changes. The first feature is what a bare `/app/` opens.
  */
-export const features: FeatureScreen[] = [remindersFeature, craftFeature, projectsFeature, tokensFeature, workspacesFeature];
+export const features: FeatureScreen[] = [remindersFeature, craftFeature, workspacesFeature];

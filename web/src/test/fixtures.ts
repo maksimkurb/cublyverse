@@ -1,4 +1,18 @@
-import type { APIToken, Connection, CraftCategory, CraftItem, CraftStockEntry, Reminder, Workspace, WorkspaceCandidate, WorkspaceMember } from "../api/client";
+import type {
+  APIToken,
+  Connection,
+  CraftCategory,
+  CraftItem,
+  CraftStockEntry,
+  Project,
+  ProjectMaterial,
+  Reminder,
+  Wish,
+  WishLink,
+  Workspace,
+  WorkspaceCandidate,
+  WorkspaceMember,
+} from "../api/client";
 
 /** Builds a reminder with sane defaults for tests. */
 export function makeReminder(overrides: Partial<Reminder> = {}): Reminder {
@@ -129,6 +143,64 @@ export function makeStock(overrides: Partial<CraftStockEntry> = {}): CraftStockE
     location: "Ящик 2",
     notes: "Куплено на ярмарке",
     updated_at: "2026-01-16T08:00:00Z",
+    ...overrides,
+  };
+}
+
+/** Builds a shop link of a wish with sane defaults for tests. */
+export function makeWishLink(overrides: Partial<WishLink> = {}): WishLink {
+  return {
+    id: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+    url: "https://shop.example/beads",
+    shop_name: "Магазин бусин",
+    price: 12.5,
+    currency: "RUB",
+    in_stock: true,
+    checked_at: null,
+    created_at: "2026-01-15T09:30:00Z",
+    ...overrides,
+  };
+}
+
+/** Builds a wish list entry with sane defaults for tests. */
+export function makeWish(overrides: Partial<Wish> = {}): Wish {
+  return {
+    id: "3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f",
+    catalog_item_id: makeItem().id,
+    title: "Жемчуг айвори 2 мм",
+    qty_wanted: 3,
+    priority: 2,
+    note: "на подарок",
+    status: "wanted",
+    created_by: "6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c",
+    created_at: "2026-01-15T09:30:00Z",
+    updated_at: "2026-01-16T08:00:00Z",
+    item: makeItem(),
+    links: [makeWishLink()],
+    ...overrides,
+  };
+}
+
+/** Builds one planned material of a project for tests. */
+export function makeMaterial(overrides: Partial<ProjectMaterial> = {}): ProjectMaterial {
+  return {
+    item: makeItem(),
+    qty_planned: 20,
+    qty_used: 5,
+    shortage: 8,
+    ...overrides,
+  };
+}
+
+/** Builds a craft project with sane defaults for tests. */
+export function makeProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: "5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f",
+    name: "Серьги «Майорка»",
+    notes: "Подарок на день рождения",
+    created_at: "2026-01-15T09:30:00Z",
+    material_count: 1,
+    materials: [makeMaterial()],
     ...overrides,
   };
 }

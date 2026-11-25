@@ -82,6 +82,23 @@ export function IconBox(props: IconProps) {
   );
 }
 
+export function IconHeart(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 20S4.5 15.3 4.5 10A4.2 4.2 0 0 1 12 7.2 4.2 4.2 0 0 1 19.5 10c0 5.3-7.5 10-7.5 10Z" />
+    </Icon>
+  );
+}
+
+export function IconLayers(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3 3 7.5 12 12l9-4.5Z" />
+      <path d="m3 12.5 9 4.5 9-4.5M3 17l9 4.5L21 17" />
+    </Icon>
+  );
+}
+
 export function IconPlus(props: IconProps) {
   return (
     <Icon strokeWidth={2.5} {...props}>

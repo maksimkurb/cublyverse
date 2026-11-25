@@ -143,6 +143,51 @@ func (e TelegramAuthResponseStatus) Valid() bool {
 	}
 }
 
+// Defines values for WishStatus.
+const (
+	WishStatusBought  WishStatus = "bought"
+	WishStatusOrdered WishStatus = "ordered"
+	WishStatusWanted  WishStatus = "wanted"
+)
+
+// Valid indicates whether the value is a known member of the WishStatus enum.
+func (e WishStatus) Valid() bool {
+	switch e {
+	case WishStatusBought:
+		return true
+	case WishStatusOrdered:
+		return true
+	case WishStatusWanted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListWishesParamsStatus.
+const (
+	ListWishesParamsStatusAll     ListWishesParamsStatus = "all"
+	ListWishesParamsStatusBought  ListWishesParamsStatus = "bought"
+	ListWishesParamsStatusOrdered ListWishesParamsStatus = "ordered"
+	ListWishesParamsStatusWanted  ListWishesParamsStatus = "wanted"
+)
+
+// Valid indicates whether the value is a known member of the ListWishesParamsStatus enum.
+func (e ListWishesParamsStatus) Valid() bool {
+	switch e {
+	case ListWishesParamsStatusAll:
+		return true
+	case ListWishesParamsStatusBought:
+		return true
+	case ListWishesParamsStatusOrdered:
+		return true
+	case ListWishesParamsStatusWanted:
+		return true
+	default:
+		return false
+	}
+}
+
 // APIToken A personal access token as stored by the server. The plaintext secret is
 // never part of it: only the visible prefix is returned, which is enough
 // to recognise the token the user is holding.
@@ -714,6 +759,16 @@ type LinkCraftItemRequest struct {
 	TargetItemId string `json:"target_item_id"`
 }
 
+// MarkWishBoughtRequest How to mark a wish list entry as bought.
+type MarkWishBoughtRequest struct {
+	// AddToStock Add the wanted quantity of a catalogue item to the stock. A free-text
+	// entry is only marked bought.
+	//
+	//
+	// Example: true
+	AddToStock bool `json:"add_to_stock"`
+}
+
 // Me The authenticated user together with the messenger accounts bound to
 // them. Bindings are verified: an account only appears here after the user
 // confirmed the link, and a Telegram binding additionally requires the
@@ -748,6 +803,82 @@ type Me struct {
 	//
 	// Example: Europe/Moscow
 	Timezone string `json:"timezone"`
+}
+
+// Project A craft project: what is being made and which materials it needs.
+// `material_count` is the number of planned materials; the list endpoint
+// returns it without the materials themselves.
+type Project struct {
+	// CreatedAt When the project was created.
+	//
+	// Example: 2026-01-15T09:30:00Z
+	CreatedAt time.Time `json:"created_at"`
+
+	// Id Project id (UUID).
+	//
+	// Example: 5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f
+	Id string `json:"id"`
+
+	// MaterialCount Number of materials planned for the project.
+	//
+	// Example: 2
+	MaterialCount int `json:"material_count"`
+
+	// Materials Planned materials with their stock and shortage; empty in the list
+	// response.
+	Materials []ProjectMaterial `json:"materials"`
+
+	// Name Project name.
+	//
+	// Example: Серьги «Майорка»
+	Name string `json:"name"`
+
+	// Notes Free-form notes about the project; empty when none.
+	//
+	// Example: Подарок на день рождения
+	Notes string `json:"notes"`
+}
+
+// ProjectInput Name and notes of a craft project.
+type ProjectInput struct {
+	// Name Project name, 1..200 characters. Leading and trailing whitespace is
+	// trimmed.
+	//
+	//
+	// Example: Серьги «Майорка»
+	Name string `json:"name"`
+
+	// Notes Free-form notes about the project.
+	//
+	// Example: Подарок на день рождения
+	Notes *string `json:"notes,omitempty"`
+}
+
+// ProjectMaterial One material planned for a project. `shortage` is
+// `max(0, qty_planned - qty_used - stock)` and is zero when nothing is
+// missing or no quantity is planned.
+type ProjectMaterial struct {
+	// Item A catalogue entry: either a global item shared by every workspace or a
+	// private item of one workspace. `stock_qty` and `in_inventory` describe
+	// what the requested workspace holds.
+	Item CraftItem `json:"item"`
+
+	// QtyPlanned Planned quantity, or `null` when the plan was cleared.
+	//
+	// Example: 20
+	QtyPlanned *float64 `json:"qty_planned"`
+
+	// QtyUsed Quantity already withdrawn from the stock for the project.
+	//
+	// Example: 5
+	QtyUsed float64 `json:"qty_used"`
+
+	// Shortage Quantity still to buy: planned minus used minus stock, never below
+	// zero.
+	//
+	//
+	// Example: 10
+	Shortage float64 `json:"shortage"`
 }
 
 // Reminder A reminder rule together with the occurrence that waits for
@@ -938,6 +1069,15 @@ type SetCraftStockRequest struct {
 	Reason *string `json:"reason,omitempty"`
 }
 
+// SetProjectMaterialRequest Planned quantity of one material.
+type SetProjectMaterialRequest struct {
+	// QtyPlanned Planned quantity, zero or more; `null` clears the plan.
+	//
+	//
+	// Example: 20
+	QtyPlanned *float64 `json:"qty_planned"`
+}
+
 // TelegramAuthResponse Result of the Mini App sign-in. `status` decides which fields are set:
 // `ok` carries a session and the profile, `link_required` carries the
 // sign-in link.
@@ -1067,6 +1207,228 @@ type UpdateReminderRequest struct {
 	Timezone string `json:"timezone"`
 }
 
+// UseProjectMaterialRequest Quantity of a planned material to withdraw from the stock.
+type UseProjectMaterialRequest struct {
+	// Qty Quantity to withdraw; must be positive. A withdrawal larger than the
+	// stock is a conflict.
+	//
+	//
+	// Example: 5
+	Qty float64 `json:"qty"`
+}
+
+// Wish One entry of the wish list: either a catalogue item or free text,
+// together with its shop links. `item` and `stock_qty` are present only
+// when the entry points at a catalogue item.
+type Wish struct {
+	// CatalogItemId Catalogue item the entry points at, or an empty string for free
+	// text.
+	//
+	//
+	// Example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+	CatalogItemId string `json:"catalog_item_id"`
+
+	// CreatedAt When the entry was added.
+	//
+	// Example: 2026-01-15T09:30:00Z
+	CreatedAt time.Time `json:"created_at"`
+
+	// CreatedBy Principal id of the member who added the entry.
+	//
+	// Example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+	CreatedBy string `json:"created_by"`
+
+	// Id Wish list entry id (UUID).
+	//
+	// Example: 3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f
+	Id string `json:"id"`
+
+	// Item A catalogue entry: either a global item shared by every workspace or a
+	// private item of one workspace. `stock_qty` and `in_inventory` describe
+	// what the requested workspace holds.
+	Item *CraftItem `json:"item,omitempty"`
+
+	// Links Shop pages where the item can be bought; empty when none.
+	Links []WishLink `json:"links"`
+
+	// Note Free-form note, for example for whom it is; empty when none.
+	//
+	// Example: на подарок
+	Note string `json:"note"`
+
+	// Priority How much it is wanted: 0 is normal, 1 is important, 2 is the most
+	// important. The list is sorted by it.
+	//
+	//
+	// Example: 2
+	Priority int `json:"priority"`
+
+	// QtyWanted Wanted quantity, or `null` while undecided.
+	//
+	// Example: 3
+	QtyWanted *float64 `json:"qty_wanted"`
+
+	// Status State of a wish list entry: `wanted` is still to buy, `ordered` is on its
+	// way, `bought` is done.
+	//
+	//
+	// Example: wanted
+	Status WishStatus `json:"status"`
+
+	// Title Name of the wanted item.
+	//
+	// Example: Жемчуг айвори 2 мм
+	Title string `json:"title"`
+
+	// UpdatedAt When the entry last changed.
+	//
+	// Example: 2026-01-16T08:00:00Z
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// WishInput A new wish list entry. Send either `catalog_item_id` or a free text
+// `title`; when a catalogue item is named, the title defaults to its name.
+type WishInput struct {
+	// CatalogItemId Catalogue item to want. It must be visible to the workspace and is
+	// accepted only once at a time.
+	//
+	//
+	// Example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+	CatalogItemId *string `json:"catalog_item_id,omitempty"`
+
+	// Note Free-form note.
+	//
+	// Example: на подарок
+	Note *string `json:"note,omitempty"`
+
+	// Priority How much it is wanted: 0, 1 or 2.
+	//
+	// Example: 2
+	Priority *int `json:"priority,omitempty"`
+
+	// QtyWanted Wanted quantity; must be positive when sent.
+	//
+	// Example: 3
+	QtyWanted *float64 `json:"qty_wanted,omitempty"`
+
+	// Title Name of the wanted item, up to 200 characters. Required when there is
+	// no catalogue item.
+	//
+	//
+	// Example: Жемчуг айвори 2 мм
+	Title *string `json:"title,omitempty"`
+}
+
+// WishLink One shop page where a wish can be bought, with the optional price and
+// availability reported by the shop.
+type WishLink struct {
+	// CheckedAt When the availability was checked, or `null`.
+	//
+	// Example: 2026-01-16T08:00:00Z
+	CheckedAt *time.Time `json:"checked_at"`
+
+	// CreatedAt When the link was added.
+	//
+	// Example: 2026-01-15T09:30:00Z
+	CreatedAt time.Time `json:"created_at"`
+
+	// Currency ISO 4217 currency code in upper case; empty when unknown.
+	//
+	//
+	// Example: RUB
+	Currency string `json:"currency"`
+
+	// Id Link id (UUID), used to remove the link.
+	//
+	// Example: 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+	Id string `json:"id"`
+
+	// InStock Whether the shop had the item in stock when it was checked, or `null`
+	// when unknown.
+	//
+	//
+	// Example: true
+	InStock *bool `json:"in_stock"`
+
+	// Price Price of the item as reported, or `null` when unknown.
+	//
+	// Example: 12.5
+	Price *float64 `json:"price"`
+
+	// ShopName Shop name shown as a chip; empty when unknown.
+	//
+	// Example: Магазин бусин
+	ShopName string `json:"shop_name"`
+
+	// Url Absolute `http://` or `https://` address of the shop page.
+	//
+	// Example: https://shop.example/beads
+	Url string `json:"url"`
+}
+
+// WishLinkInput A shop page where a wish can be bought.
+type WishLinkInput struct {
+	// Currency ISO 4217 currency code; it is stored in upper case. Empty when
+	// unknown.
+	//
+	//
+	// Example: RUB
+	Currency *string `json:"currency,omitempty"`
+
+	// InStock Whether the shop has the item in stock.
+	//
+	// Example: true
+	InStock *bool `json:"in_stock,omitempty"`
+
+	// Price Price of the item; must not be negative.
+	//
+	// Example: 12.5
+	Price *float64 `json:"price,omitempty"`
+
+	// ShopName Shop name shown as a chip; defaults to the host name.
+	//
+	// Example: Магазин бусин
+	ShopName *string `json:"shop_name,omitempty"`
+
+	// Url Absolute `http://` or `https://` address of the shop page.
+	//
+	// Example: https://shop.example/beads
+	Url string `json:"url"`
+}
+
+// WishStatus State of a wish list entry: `wanted` is still to buy, `ordered` is on its
+// way, `bought` is done.
+//
+// Example: wanted
+type WishStatus string
+
+// WishUpdateRequest The editable fields of a wish list entry. Quantity, priority and note are
+// replaced; an omitted status keeps the current one.
+type WishUpdateRequest struct {
+	// Note Free-form note; an empty string clears it.
+	//
+	// Example:
+	Note string `json:"note"`
+
+	// Priority How much it is wanted: 0, 1 or 2.
+	//
+	// Example: 1
+	Priority int `json:"priority"`
+
+	// QtyWanted New wanted quantity; must be positive when sent. `null` clears it.
+	//
+	//
+	// Example: 5
+	QtyWanted *float64 `json:"qty_wanted,omitempty"`
+
+	// Status State of a wish list entry: `wanted` is still to buy, `ordered` is on its
+	// way, `bought` is done.
+	//
+	//
+	// Example: wanted
+	Status *WishStatus `json:"status,omitempty"`
+}
+
 // Workspace A shared workspace. Every member has the same rights; data of a
 // workspace is visible to its members only.
 type Workspace struct {
@@ -1144,11 +1506,20 @@ type WorkspaceMember struct {
 // CraftItemID Example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
 type CraftItemID = string
 
+// ProjectID Example: 5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f
+type ProjectID = string
+
 // ReminderID Example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
 type ReminderID = string
 
 // TokenID Example: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
 type TokenID = string
+
+// WishID Example: 3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f
+type WishID = string
+
+// WishLinkID Example: 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+type WishLinkID = string
 
 // WorkspaceID Example: 44444444-4444-4444-8444-444444444444
 type WorkspaceID = string
@@ -1216,6 +1587,16 @@ type ListWorkspaceMemberCandidatesParams struct {
 	Query *string `form:"query,omitempty" json:"query,omitempty"`
 }
 
+// ListWishesParams defines parameters for ListWishes.
+type ListWishesParams struct {
+	// Status Which entries to return: `wanted` (the default), `ordered`, `bought`
+	// or `all` for every status.
+	Status *ListWishesParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// ListWishesParamsStatus defines parameters for ListWishes.
+type ListWishesParamsStatus string
+
 // AuthTelegramJSONRequestBody defines body for AuthTelegram for application/json ContentType.
 type AuthTelegramJSONRequestBody = TelegramInitData
 
@@ -1257,6 +1638,30 @@ type AdjustCraftInventoryQtyJSONRequestBody = AdjustCraftStockRequest
 
 // AddWorkspaceMemberJSONRequestBody defines body for AddWorkspaceMember for application/json ContentType.
 type AddWorkspaceMemberJSONRequestBody = AddWorkspaceMemberRequest
+
+// CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
+type CreateProjectJSONRequestBody = ProjectInput
+
+// UpdateProjectJSONRequestBody defines body for UpdateProject for application/json ContentType.
+type UpdateProjectJSONRequestBody = ProjectInput
+
+// SetProjectMaterialJSONRequestBody defines body for SetProjectMaterial for application/json ContentType.
+type SetProjectMaterialJSONRequestBody = SetProjectMaterialRequest
+
+// UseProjectMaterialJSONRequestBody defines body for UseProjectMaterial for application/json ContentType.
+type UseProjectMaterialJSONRequestBody = UseProjectMaterialRequest
+
+// CreateWishJSONRequestBody defines body for CreateWish for application/json ContentType.
+type CreateWishJSONRequestBody = WishInput
+
+// UpdateWishJSONRequestBody defines body for UpdateWish for application/json ContentType.
+type UpdateWishJSONRequestBody = WishUpdateRequest
+
+// MarkWishBoughtJSONRequestBody defines body for MarkWishBought for application/json ContentType.
+type MarkWishBoughtJSONRequestBody = MarkWishBoughtRequest
+
+// AddWishLinkJSONRequestBody defines body for AddWishLink for application/json ContentType.
+type AddWishLinkJSONRequestBody = WishLinkInput
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -1371,6 +1776,54 @@ type ServerInterface interface {
 	// RemoveWorkspaceMember Remove a member from a workspace
 	// (DELETE /workspaces/{id}/members/{user_id})
 	RemoveWorkspaceMember(w http.ResponseWriter, r *http.Request, id WorkspaceID, userId WorkspaceUserID)
+	// ListProjects List craft projects
+	// (GET /workspaces/{id}/projects)
+	ListProjects(w http.ResponseWriter, r *http.Request, id WorkspaceID)
+	// CreateProject Create a project
+	// (POST /workspaces/{id}/projects)
+	CreateProject(w http.ResponseWriter, r *http.Request, id WorkspaceID)
+	// DeleteProject Delete a project
+	// (DELETE /workspaces/{id}/projects/{project_id})
+	DeleteProject(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID)
+	// GetProject Get a project with its materials
+	// (GET /workspaces/{id}/projects/{project_id})
+	GetProject(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID)
+	// UpdateProject Change the name and notes of a project
+	// (PATCH /workspaces/{id}/projects/{project_id})
+	UpdateProject(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID)
+	// RemoveProjectMaterial Drop a material from the project plan
+	// (DELETE /workspaces/{id}/projects/{project_id}/materials/{item_id})
+	RemoveProjectMaterial(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID, itemId CraftItemID)
+	// SetProjectMaterial Plan a material for a project
+	// (PUT /workspaces/{id}/projects/{project_id}/materials/{item_id})
+	SetProjectMaterial(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID, itemId CraftItemID)
+	// UseProjectMaterial Use material for a project
+	// (POST /workspaces/{id}/projects/{project_id}/materials/{item_id}/use)
+	UseProjectMaterial(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID, itemId CraftItemID)
+	// ShortageToWishlist Add the project shortage to the wish list
+	// (POST /workspaces/{id}/projects/{project_id}/shortage-to-wishlist)
+	ShortageToWishlist(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID)
+	// ListWishes List the wish list
+	// (GET /workspaces/{id}/wishlist)
+	ListWishes(w http.ResponseWriter, r *http.Request, id WorkspaceID, params ListWishesParams)
+	// CreateWish Add an entry to the wish list
+	// (POST /workspaces/{id}/wishlist)
+	CreateWish(w http.ResponseWriter, r *http.Request, id WorkspaceID)
+	// DeleteWish Remove a wish list entry
+	// (DELETE /workspaces/{id}/wishlist/{wish_id})
+	DeleteWish(w http.ResponseWriter, r *http.Request, id WorkspaceID, wishId WishID)
+	// UpdateWish Change a wish list entry
+	// (PATCH /workspaces/{id}/wishlist/{wish_id})
+	UpdateWish(w http.ResponseWriter, r *http.Request, id WorkspaceID, wishId WishID)
+	// MarkWishBought Mark a wish as bought
+	// (POST /workspaces/{id}/wishlist/{wish_id}/bought)
+	MarkWishBought(w http.ResponseWriter, r *http.Request, id WorkspaceID, wishId WishID)
+	// AddWishLink Add a shop link to a wish
+	// (POST /workspaces/{id}/wishlist/{wish_id}/links)
+	AddWishLink(w http.ResponseWriter, r *http.Request, id WorkspaceID, wishId WishID)
+	// RemoveWishLink Remove a shop link from a wish
+	// (DELETE /workspaces/{id}/wishlist/{wish_id}/links/{link_id})
+	RemoveWishLink(w http.ResponseWriter, r *http.Request, id WorkspaceID, wishId WishID, linkId WishLinkID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -2435,6 +2888,582 @@ func (siw *ServerInterfaceWrapper) RemoveWorkspaceMember(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// ListProjects operation middleware
+func (siw *ServerInterfaceWrapper) ListProjects(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProjects(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateProject operation middleware
+func (siw *ServerInterfaceWrapper) CreateProject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateProject(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteProject operation middleware
+func (siw *ServerInterfaceWrapper) DeleteProject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", r.PathValue("project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteProject(w, r, id, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProject operation middleware
+func (siw *ServerInterfaceWrapper) GetProject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", r.PathValue("project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProject(w, r, id, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateProject operation middleware
+func (siw *ServerInterfaceWrapper) UpdateProject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", r.PathValue("project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateProject(w, r, id, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveProjectMaterial operation middleware
+func (siw *ServerInterfaceWrapper) RemoveProjectMaterial(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", r.PathValue("project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item_id" -------------
+	var itemId CraftItemID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item_id", r.PathValue("item_id"), &itemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveProjectMaterial(w, r, id, projectId, itemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetProjectMaterial operation middleware
+func (siw *ServerInterfaceWrapper) SetProjectMaterial(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", r.PathValue("project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item_id" -------------
+	var itemId CraftItemID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item_id", r.PathValue("item_id"), &itemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetProjectMaterial(w, r, id, projectId, itemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UseProjectMaterial operation middleware
+func (siw *ServerInterfaceWrapper) UseProjectMaterial(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", r.PathValue("project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item_id" -------------
+	var itemId CraftItemID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item_id", r.PathValue("item_id"), &itemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UseProjectMaterial(w, r, id, projectId, itemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ShortageToWishlist operation middleware
+func (siw *ServerInterfaceWrapper) ShortageToWishlist(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", r.PathValue("project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ShortageToWishlist(w, r, id, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWishes operation middleware
+func (siw *ServerInterfaceWrapper) ListWishes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWishesParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWishes(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWish operation middleware
+func (siw *ServerInterfaceWrapper) CreateWish(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWish(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteWish operation middleware
+func (siw *ServerInterfaceWrapper) DeleteWish(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "wish_id" -------------
+	var wishId WishID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "wish_id", r.PathValue("wish_id"), &wishId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "wish_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteWish(w, r, id, wishId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateWish operation middleware
+func (siw *ServerInterfaceWrapper) UpdateWish(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "wish_id" -------------
+	var wishId WishID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "wish_id", r.PathValue("wish_id"), &wishId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "wish_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateWish(w, r, id, wishId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkWishBought operation middleware
+func (siw *ServerInterfaceWrapper) MarkWishBought(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "wish_id" -------------
+	var wishId WishID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "wish_id", r.PathValue("wish_id"), &wishId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "wish_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkWishBought(w, r, id, wishId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddWishLink operation middleware
+func (siw *ServerInterfaceWrapper) AddWishLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "wish_id" -------------
+	var wishId WishID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "wish_id", r.PathValue("wish_id"), &wishId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "wish_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddWishLink(w, r, id, wishId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveWishLink operation middleware
+func (siw *ServerInterfaceWrapper) RemoveWishLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "wish_id" -------------
+	var wishId WishID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "wish_id", r.PathValue("wish_id"), &wishId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "wish_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "link_id" -------------
+	var linkId WishLinkID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "link_id", r.PathValue("link_id"), &linkId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "link_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveWishLink(w, r, id, wishId, linkId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -2592,6 +3621,22 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/workspaces/{id}/inventory/{item_id}", wrapper.UpdateCraftInventoryMeta)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workspaces/{id}/inventory/{item_id}", wrapper.SetCraftInventoryQty)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/inventory/{item_id}/adjust", wrapper.AdjustCraftInventoryQty)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workspaces/{id}/wishlist", wrapper.ListWishes)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/wishlist", wrapper.CreateWish)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workspaces/{id}/wishlist/{wish_id}", wrapper.DeleteWish)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/workspaces/{id}/wishlist/{wish_id}", wrapper.UpdateWish)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/wishlist/{wish_id}/links", wrapper.AddWishLink)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workspaces/{id}/wishlist/{wish_id}/links/{link_id}", wrapper.RemoveWishLink)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/wishlist/{wish_id}/bought", wrapper.MarkWishBought)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workspaces/{id}/projects", wrapper.ListProjects)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/projects", wrapper.CreateProject)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workspaces/{id}/projects/{project_id}", wrapper.DeleteProject)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workspaces/{id}/projects/{project_id}", wrapper.GetProject)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/workspaces/{id}/projects/{project_id}", wrapper.UpdateProject)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workspaces/{id}/projects/{project_id}/materials/{item_id}", wrapper.RemoveProjectMaterial)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workspaces/{id}/projects/{project_id}/materials/{item_id}", wrapper.SetProjectMaterial)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/projects/{project_id}/materials/{item_id}/use", wrapper.UseProjectMaterial)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/projects/{project_id}/shortage-to-wishlist", wrapper.ShortageToWishlist)
 
 	return m
 }
@@ -4890,6 +5935,1185 @@ func (response RemoveWorkspaceMember409JSONResponse) VisitRemoveWorkspaceMemberR
 	return err
 }
 
+type ListProjectsRequestObject struct {
+	Id WorkspaceID `json:"id"`
+}
+
+type ListProjectsResponseObject interface {
+	VisitListProjectsResponse(w http.ResponseWriter) error
+}
+
+type ListProjects200JSONResponse []Project
+
+func (response ListProjects200JSONResponse) VisitListProjectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProjects401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListProjects401JSONResponse) VisitListProjectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProjects403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListProjects403JSONResponse) VisitListProjectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProjects404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListProjects404JSONResponse) VisitListProjectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProjectRequestObject struct {
+	Id   WorkspaceID `json:"id"`
+	Body *CreateProjectJSONRequestBody
+}
+
+type CreateProjectResponseObject interface {
+	VisitCreateProjectResponse(w http.ResponseWriter) error
+}
+
+type CreateProject201JSONResponse Project
+
+func (response CreateProject201JSONResponse) VisitCreateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProject400JSONResponse Error
+
+func (response CreateProject400JSONResponse) VisitCreateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProject401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateProject401JSONResponse) VisitCreateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProject403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateProject403JSONResponse) VisitCreateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProject404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateProject404JSONResponse) VisitCreateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteProjectRequestObject struct {
+	Id        WorkspaceID `json:"id"`
+	ProjectId ProjectID   `json:"project_id"`
+}
+
+type DeleteProjectResponseObject interface {
+	VisitDeleteProjectResponse(w http.ResponseWriter) error
+}
+
+type DeleteProject204Response struct {
+}
+
+func (response DeleteProject204Response) VisitDeleteProjectResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteProject401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteProject401JSONResponse) VisitDeleteProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteProject403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteProject403JSONResponse) VisitDeleteProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteProject404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteProject404JSONResponse) VisitDeleteProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProjectRequestObject struct {
+	Id        WorkspaceID `json:"id"`
+	ProjectId ProjectID   `json:"project_id"`
+}
+
+type GetProjectResponseObject interface {
+	VisitGetProjectResponse(w http.ResponseWriter) error
+}
+
+type GetProject200JSONResponse Project
+
+func (response GetProject200JSONResponse) VisitGetProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProject401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetProject401JSONResponse) VisitGetProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProject403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetProject403JSONResponse) VisitGetProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProject404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetProject404JSONResponse) VisitGetProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateProjectRequestObject struct {
+	Id        WorkspaceID `json:"id"`
+	ProjectId ProjectID   `json:"project_id"`
+	Body      *UpdateProjectJSONRequestBody
+}
+
+type UpdateProjectResponseObject interface {
+	VisitUpdateProjectResponse(w http.ResponseWriter) error
+}
+
+type UpdateProject200JSONResponse Project
+
+func (response UpdateProject200JSONResponse) VisitUpdateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateProject400JSONResponse Error
+
+func (response UpdateProject400JSONResponse) VisitUpdateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateProject401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateProject401JSONResponse) VisitUpdateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateProject403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateProject403JSONResponse) VisitUpdateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateProject404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateProject404JSONResponse) VisitUpdateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveProjectMaterialRequestObject struct {
+	Id        WorkspaceID `json:"id"`
+	ProjectId ProjectID   `json:"project_id"`
+	ItemId    CraftItemID `json:"item_id"`
+}
+
+type RemoveProjectMaterialResponseObject interface {
+	VisitRemoveProjectMaterialResponse(w http.ResponseWriter) error
+}
+
+type RemoveProjectMaterial204Response struct {
+}
+
+func (response RemoveProjectMaterial204Response) VisitRemoveProjectMaterialResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveProjectMaterial401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response RemoveProjectMaterial401JSONResponse) VisitRemoveProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveProjectMaterial403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RemoveProjectMaterial403JSONResponse) VisitRemoveProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveProjectMaterial404JSONResponse Error
+
+func (response RemoveProjectMaterial404JSONResponse) VisitRemoveProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetProjectMaterialRequestObject struct {
+	Id        WorkspaceID `json:"id"`
+	ProjectId ProjectID   `json:"project_id"`
+	ItemId    CraftItemID `json:"item_id"`
+	Body      *SetProjectMaterialJSONRequestBody
+}
+
+type SetProjectMaterialResponseObject interface {
+	VisitSetProjectMaterialResponse(w http.ResponseWriter) error
+}
+
+type SetProjectMaterial200JSONResponse Project
+
+func (response SetProjectMaterial200JSONResponse) VisitSetProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetProjectMaterial400JSONResponse Error
+
+func (response SetProjectMaterial400JSONResponse) VisitSetProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetProjectMaterial401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response SetProjectMaterial401JSONResponse) VisitSetProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetProjectMaterial403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response SetProjectMaterial403JSONResponse) VisitSetProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetProjectMaterial404JSONResponse Error
+
+func (response SetProjectMaterial404JSONResponse) VisitSetProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UseProjectMaterialRequestObject struct {
+	Id        WorkspaceID `json:"id"`
+	ProjectId ProjectID   `json:"project_id"`
+	ItemId    CraftItemID `json:"item_id"`
+	Body      *UseProjectMaterialJSONRequestBody
+}
+
+type UseProjectMaterialResponseObject interface {
+	VisitUseProjectMaterialResponse(w http.ResponseWriter) error
+}
+
+type UseProjectMaterial200JSONResponse Project
+
+func (response UseProjectMaterial200JSONResponse) VisitUseProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UseProjectMaterial400JSONResponse Error
+
+func (response UseProjectMaterial400JSONResponse) VisitUseProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UseProjectMaterial401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UseProjectMaterial401JSONResponse) VisitUseProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UseProjectMaterial403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UseProjectMaterial403JSONResponse) VisitUseProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UseProjectMaterial404JSONResponse Error
+
+func (response UseProjectMaterial404JSONResponse) VisitUseProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UseProjectMaterial409JSONResponse Error
+
+func (response UseProjectMaterial409JSONResponse) VisitUseProjectMaterialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ShortageToWishlistRequestObject struct {
+	Id        WorkspaceID `json:"id"`
+	ProjectId ProjectID   `json:"project_id"`
+}
+
+type ShortageToWishlistResponseObject interface {
+	VisitShortageToWishlistResponse(w http.ResponseWriter) error
+}
+
+type ShortageToWishlist200JSONResponse []Wish
+
+func (response ShortageToWishlist200JSONResponse) VisitShortageToWishlistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ShortageToWishlist400JSONResponse Error
+
+func (response ShortageToWishlist400JSONResponse) VisitShortageToWishlistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ShortageToWishlist401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ShortageToWishlist401JSONResponse) VisitShortageToWishlistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ShortageToWishlist403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ShortageToWishlist403JSONResponse) VisitShortageToWishlistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ShortageToWishlist404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ShortageToWishlist404JSONResponse) VisitShortageToWishlistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWishesRequestObject struct {
+	Id     WorkspaceID `json:"id"`
+	Params ListWishesParams
+}
+
+type ListWishesResponseObject interface {
+	VisitListWishesResponse(w http.ResponseWriter) error
+}
+
+type ListWishes200JSONResponse []Wish
+
+func (response ListWishes200JSONResponse) VisitListWishesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWishes400JSONResponse Error
+
+func (response ListWishes400JSONResponse) VisitListWishesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWishes401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListWishes401JSONResponse) VisitListWishesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWishes403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListWishes403JSONResponse) VisitListWishesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWishes404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListWishes404JSONResponse) VisitListWishesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWishRequestObject struct {
+	Id   WorkspaceID `json:"id"`
+	Body *CreateWishJSONRequestBody
+}
+
+type CreateWishResponseObject interface {
+	VisitCreateWishResponse(w http.ResponseWriter) error
+}
+
+type CreateWish201JSONResponse Wish
+
+func (response CreateWish201JSONResponse) VisitCreateWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWish400JSONResponse Error
+
+func (response CreateWish400JSONResponse) VisitCreateWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWish401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateWish401JSONResponse) VisitCreateWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWish403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateWish403JSONResponse) VisitCreateWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWish404JSONResponse Error
+
+func (response CreateWish404JSONResponse) VisitCreateWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWishRequestObject struct {
+	Id     WorkspaceID `json:"id"`
+	WishId WishID      `json:"wish_id"`
+}
+
+type DeleteWishResponseObject interface {
+	VisitDeleteWishResponse(w http.ResponseWriter) error
+}
+
+type DeleteWish204Response struct {
+}
+
+func (response DeleteWish204Response) VisitDeleteWishResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteWish401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteWish401JSONResponse) VisitDeleteWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWish403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteWish403JSONResponse) VisitDeleteWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWish404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteWish404JSONResponse) VisitDeleteWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWishRequestObject struct {
+	Id     WorkspaceID `json:"id"`
+	WishId WishID      `json:"wish_id"`
+	Body   *UpdateWishJSONRequestBody
+}
+
+type UpdateWishResponseObject interface {
+	VisitUpdateWishResponse(w http.ResponseWriter) error
+}
+
+type UpdateWish200JSONResponse Wish
+
+func (response UpdateWish200JSONResponse) VisitUpdateWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWish400JSONResponse Error
+
+func (response UpdateWish400JSONResponse) VisitUpdateWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWish401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateWish401JSONResponse) VisitUpdateWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWish403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateWish403JSONResponse) VisitUpdateWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWish404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateWish404JSONResponse) VisitUpdateWishResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkWishBoughtRequestObject struct {
+	Id     WorkspaceID `json:"id"`
+	WishId WishID      `json:"wish_id"`
+	Body   *MarkWishBoughtJSONRequestBody
+}
+
+type MarkWishBoughtResponseObject interface {
+	VisitMarkWishBoughtResponse(w http.ResponseWriter) error
+}
+
+type MarkWishBought200JSONResponse Wish
+
+func (response MarkWishBought200JSONResponse) VisitMarkWishBoughtResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkWishBought400JSONResponse Error
+
+func (response MarkWishBought400JSONResponse) VisitMarkWishBoughtResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkWishBought401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response MarkWishBought401JSONResponse) VisitMarkWishBoughtResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkWishBought403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response MarkWishBought403JSONResponse) VisitMarkWishBoughtResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkWishBought404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response MarkWishBought404JSONResponse) VisitMarkWishBoughtResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddWishLinkRequestObject struct {
+	Id     WorkspaceID `json:"id"`
+	WishId WishID      `json:"wish_id"`
+	Body   *AddWishLinkJSONRequestBody
+}
+
+type AddWishLinkResponseObject interface {
+	VisitAddWishLinkResponse(w http.ResponseWriter) error
+}
+
+type AddWishLink201JSONResponse WishLink
+
+func (response AddWishLink201JSONResponse) VisitAddWishLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddWishLink400JSONResponse Error
+
+func (response AddWishLink400JSONResponse) VisitAddWishLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddWishLink401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response AddWishLink401JSONResponse) VisitAddWishLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddWishLink403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AddWishLink403JSONResponse) VisitAddWishLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddWishLink404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AddWishLink404JSONResponse) VisitAddWishLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveWishLinkRequestObject struct {
+	Id     WorkspaceID `json:"id"`
+	WishId WishID      `json:"wish_id"`
+	LinkId WishLinkID  `json:"link_id"`
+}
+
+type RemoveWishLinkResponseObject interface {
+	VisitRemoveWishLinkResponse(w http.ResponseWriter) error
+}
+
+type RemoveWishLink204Response struct {
+}
+
+func (response RemoveWishLink204Response) VisitRemoveWishLinkResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveWishLink401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response RemoveWishLink401JSONResponse) VisitRemoveWishLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveWishLink403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RemoveWishLink403JSONResponse) VisitRemoveWishLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveWishLink404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response RemoveWishLink404JSONResponse) VisitRemoveWishLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Logout Revoke the current session
@@ -5003,6 +7227,54 @@ type StrictServerInterface interface {
 	// RemoveWorkspaceMember Remove a member from a workspace
 	// (DELETE /workspaces/{id}/members/{user_id})
 	RemoveWorkspaceMember(ctx context.Context, request RemoveWorkspaceMemberRequestObject) (RemoveWorkspaceMemberResponseObject, error)
+	// ListProjects List craft projects
+	// (GET /workspaces/{id}/projects)
+	ListProjects(ctx context.Context, request ListProjectsRequestObject) (ListProjectsResponseObject, error)
+	// CreateProject Create a project
+	// (POST /workspaces/{id}/projects)
+	CreateProject(ctx context.Context, request CreateProjectRequestObject) (CreateProjectResponseObject, error)
+	// DeleteProject Delete a project
+	// (DELETE /workspaces/{id}/projects/{project_id})
+	DeleteProject(ctx context.Context, request DeleteProjectRequestObject) (DeleteProjectResponseObject, error)
+	// GetProject Get a project with its materials
+	// (GET /workspaces/{id}/projects/{project_id})
+	GetProject(ctx context.Context, request GetProjectRequestObject) (GetProjectResponseObject, error)
+	// UpdateProject Change the name and notes of a project
+	// (PATCH /workspaces/{id}/projects/{project_id})
+	UpdateProject(ctx context.Context, request UpdateProjectRequestObject) (UpdateProjectResponseObject, error)
+	// RemoveProjectMaterial Drop a material from the project plan
+	// (DELETE /workspaces/{id}/projects/{project_id}/materials/{item_id})
+	RemoveProjectMaterial(ctx context.Context, request RemoveProjectMaterialRequestObject) (RemoveProjectMaterialResponseObject, error)
+	// SetProjectMaterial Plan a material for a project
+	// (PUT /workspaces/{id}/projects/{project_id}/materials/{item_id})
+	SetProjectMaterial(ctx context.Context, request SetProjectMaterialRequestObject) (SetProjectMaterialResponseObject, error)
+	// UseProjectMaterial Use material for a project
+	// (POST /workspaces/{id}/projects/{project_id}/materials/{item_id}/use)
+	UseProjectMaterial(ctx context.Context, request UseProjectMaterialRequestObject) (UseProjectMaterialResponseObject, error)
+	// ShortageToWishlist Add the project shortage to the wish list
+	// (POST /workspaces/{id}/projects/{project_id}/shortage-to-wishlist)
+	ShortageToWishlist(ctx context.Context, request ShortageToWishlistRequestObject) (ShortageToWishlistResponseObject, error)
+	// ListWishes List the wish list
+	// (GET /workspaces/{id}/wishlist)
+	ListWishes(ctx context.Context, request ListWishesRequestObject) (ListWishesResponseObject, error)
+	// CreateWish Add an entry to the wish list
+	// (POST /workspaces/{id}/wishlist)
+	CreateWish(ctx context.Context, request CreateWishRequestObject) (CreateWishResponseObject, error)
+	// DeleteWish Remove a wish list entry
+	// (DELETE /workspaces/{id}/wishlist/{wish_id})
+	DeleteWish(ctx context.Context, request DeleteWishRequestObject) (DeleteWishResponseObject, error)
+	// UpdateWish Change a wish list entry
+	// (PATCH /workspaces/{id}/wishlist/{wish_id})
+	UpdateWish(ctx context.Context, request UpdateWishRequestObject) (UpdateWishResponseObject, error)
+	// MarkWishBought Mark a wish as bought
+	// (POST /workspaces/{id}/wishlist/{wish_id}/bought)
+	MarkWishBought(ctx context.Context, request MarkWishBoughtRequestObject) (MarkWishBoughtResponseObject, error)
+	// AddWishLink Add a shop link to a wish
+	// (POST /workspaces/{id}/wishlist/{wish_id}/links)
+	AddWishLink(ctx context.Context, request AddWishLinkRequestObject) (AddWishLinkResponseObject, error)
+	// RemoveWishLink Remove a shop link from a wish
+	// (DELETE /workspaces/{id}/wishlist/{wish_id}/links/{link_id})
+	RemoveWishLink(ctx context.Context, request RemoveWishLinkRequestObject) (RemoveWishLinkResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -6088,263 +8360,820 @@ func (sh *strictHandler) RemoveWorkspaceMember(w http.ResponseWriter, r *http.Re
 	}
 }
 
+// ListProjects operation middleware
+func (sh *strictHandler) ListProjects(w http.ResponseWriter, r *http.Request, id WorkspaceID) {
+	var request ListProjectsRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListProjects(ctx, request.(ListProjectsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListProjects")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListProjectsResponseObject); ok {
+		if err := validResponse.VisitListProjectsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateProject operation middleware
+func (sh *strictHandler) CreateProject(w http.ResponseWriter, r *http.Request, id WorkspaceID) {
+	var request CreateProjectRequestObject
+
+	request.Id = id
+
+	var body CreateProjectJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateProject(ctx, request.(CreateProjectRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateProject")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateProjectResponseObject); ok {
+		if err := validResponse.VisitCreateProjectResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteProject operation middleware
+func (sh *strictHandler) DeleteProject(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID) {
+	var request DeleteProjectRequestObject
+
+	request.Id = id
+	request.ProjectId = projectId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteProject(ctx, request.(DeleteProjectRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteProject")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteProjectResponseObject); ok {
+		if err := validResponse.VisitDeleteProjectResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetProject operation middleware
+func (sh *strictHandler) GetProject(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID) {
+	var request GetProjectRequestObject
+
+	request.Id = id
+	request.ProjectId = projectId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetProject(ctx, request.(GetProjectRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetProject")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetProjectResponseObject); ok {
+		if err := validResponse.VisitGetProjectResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateProject operation middleware
+func (sh *strictHandler) UpdateProject(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID) {
+	var request UpdateProjectRequestObject
+
+	request.Id = id
+	request.ProjectId = projectId
+
+	var body UpdateProjectJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateProject(ctx, request.(UpdateProjectRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateProject")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateProjectResponseObject); ok {
+		if err := validResponse.VisitUpdateProjectResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveProjectMaterial operation middleware
+func (sh *strictHandler) RemoveProjectMaterial(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID, itemId CraftItemID) {
+	var request RemoveProjectMaterialRequestObject
+
+	request.Id = id
+	request.ProjectId = projectId
+	request.ItemId = itemId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveProjectMaterial(ctx, request.(RemoveProjectMaterialRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveProjectMaterial")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveProjectMaterialResponseObject); ok {
+		if err := validResponse.VisitRemoveProjectMaterialResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetProjectMaterial operation middleware
+func (sh *strictHandler) SetProjectMaterial(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID, itemId CraftItemID) {
+	var request SetProjectMaterialRequestObject
+
+	request.Id = id
+	request.ProjectId = projectId
+	request.ItemId = itemId
+
+	var body SetProjectMaterialJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetProjectMaterial(ctx, request.(SetProjectMaterialRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetProjectMaterial")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetProjectMaterialResponseObject); ok {
+		if err := validResponse.VisitSetProjectMaterialResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UseProjectMaterial operation middleware
+func (sh *strictHandler) UseProjectMaterial(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID, itemId CraftItemID) {
+	var request UseProjectMaterialRequestObject
+
+	request.Id = id
+	request.ProjectId = projectId
+	request.ItemId = itemId
+
+	var body UseProjectMaterialJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UseProjectMaterial(ctx, request.(UseProjectMaterialRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UseProjectMaterial")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UseProjectMaterialResponseObject); ok {
+		if err := validResponse.VisitUseProjectMaterialResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ShortageToWishlist operation middleware
+func (sh *strictHandler) ShortageToWishlist(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID) {
+	var request ShortageToWishlistRequestObject
+
+	request.Id = id
+	request.ProjectId = projectId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ShortageToWishlist(ctx, request.(ShortageToWishlistRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ShortageToWishlist")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ShortageToWishlistResponseObject); ok {
+		if err := validResponse.VisitShortageToWishlistResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWishes operation middleware
+func (sh *strictHandler) ListWishes(w http.ResponseWriter, r *http.Request, id WorkspaceID, params ListWishesParams) {
+	var request ListWishesRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWishes(ctx, request.(ListWishesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWishes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWishesResponseObject); ok {
+		if err := validResponse.VisitListWishesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateWish operation middleware
+func (sh *strictHandler) CreateWish(w http.ResponseWriter, r *http.Request, id WorkspaceID) {
+	var request CreateWishRequestObject
+
+	request.Id = id
+
+	var body CreateWishJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateWish(ctx, request.(CreateWishRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateWish")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateWishResponseObject); ok {
+		if err := validResponse.VisitCreateWishResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteWish operation middleware
+func (sh *strictHandler) DeleteWish(w http.ResponseWriter, r *http.Request, id WorkspaceID, wishId WishID) {
+	var request DeleteWishRequestObject
+
+	request.Id = id
+	request.WishId = wishId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteWish(ctx, request.(DeleteWishRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteWish")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteWishResponseObject); ok {
+		if err := validResponse.VisitDeleteWishResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateWish operation middleware
+func (sh *strictHandler) UpdateWish(w http.ResponseWriter, r *http.Request, id WorkspaceID, wishId WishID) {
+	var request UpdateWishRequestObject
+
+	request.Id = id
+	request.WishId = wishId
+
+	var body UpdateWishJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateWish(ctx, request.(UpdateWishRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateWish")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateWishResponseObject); ok {
+		if err := validResponse.VisitUpdateWishResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MarkWishBought operation middleware
+func (sh *strictHandler) MarkWishBought(w http.ResponseWriter, r *http.Request, id WorkspaceID, wishId WishID) {
+	var request MarkWishBoughtRequestObject
+
+	request.Id = id
+	request.WishId = wishId
+
+	var body MarkWishBoughtJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MarkWishBought(ctx, request.(MarkWishBoughtRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MarkWishBought")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MarkWishBoughtResponseObject); ok {
+		if err := validResponse.VisitMarkWishBoughtResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddWishLink operation middleware
+func (sh *strictHandler) AddWishLink(w http.ResponseWriter, r *http.Request, id WorkspaceID, wishId WishID) {
+	var request AddWishLinkRequestObject
+
+	request.Id = id
+	request.WishId = wishId
+
+	var body AddWishLinkJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddWishLink(ctx, request.(AddWishLinkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddWishLink")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddWishLinkResponseObject); ok {
+		if err := validResponse.VisitAddWishLinkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveWishLink operation middleware
+func (sh *strictHandler) RemoveWishLink(w http.ResponseWriter, r *http.Request, id WorkspaceID, wishId WishID, linkId WishLinkID) {
+	var request RemoveWishLinkRequestObject
+
+	request.Id = id
+	request.WishId = wishId
+	request.LinkId = linkId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveWishLink(ctx, request.(RemoveWishLinkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveWishLink")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveWishLinkResponseObject); ok {
+		if err := validResponse.VisitRemoveWishLinkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"YzxqAK+/fP0/BgA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

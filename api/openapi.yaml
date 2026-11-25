@@ -1451,6 +1451,606 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /workspaces/{id}/wishlist:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    get:
+      operationId: listWishes
+      tags:
+        - craft
+      summary: List the wish list
+      description: |
+        Returns what the workspace wants to buy. The default `status` is `wanted`;
+        `ordered` and `bought` show the other states and `all` shows every entry.
+        Each entry carries its shop links and, when it points at a catalogue
+        item, the item summary with the current stock of the workspace.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: |
+            Which entries to return: `wanted` (the default), `ordered`, `bought`
+            or `all` for every status.
+          schema:
+            type: string
+            enum:
+              - wanted
+              - ordered
+              - bought
+              - all
+            default: wanted
+            example: wanted
+      responses:
+        "200":
+          description: Wish list entries in priority and creation order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Wish"
+        "400":
+          description: The `status` filter is not one of the allowed values.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createWish
+      tags:
+        - craft
+      summary: Add an entry to the wish list
+      description: |
+        Adds what the workspace wants to buy. Either point at a catalogue item
+        with `catalog_item_id` — the title defaults to its name — or send a free
+        text `title` for something that is not in any catalogue yet. A catalogue
+        item can be wanted only once at a time: adding it again is a `400`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WishInput"
+      responses:
+        "201":
+          description: The created wish list entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wish"
+        "400":
+          description: |
+            The title is empty, too long, the quantity is not positive, the
+            priority is outside 0..2, or the catalogue item is already wanted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The workspace or the catalogue item is unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /workspaces/{id}/wishlist/{wish_id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/WishID"
+    patch:
+      operationId: updateWish
+      tags:
+        - craft
+      summary: Change a wish list entry
+      description: |
+        Replaces the editable fields of an entry: wanted quantity, priority, note
+        and status. Send `qty_wanted: null` to clear the quantity. An omitted
+        `status` keeps the current one, so a repeated request does not move a
+        bought entry back to `wanted`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WishUpdateRequest"
+      responses:
+        "200":
+          description: The updated entry with its links.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wish"
+        "400":
+          description: |
+            The quantity is not positive, the priority is outside 0..2 or the
+            status is unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteWish
+      tags:
+        - craft
+      summary: Remove a wish list entry
+      description: |
+        Deletes an entry together with its shop links. The stock does not change.
+        A request authenticated with the browser cookie must declare
+        `Content-Type: application/json` even though there is no body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The entry is deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/wishlist/{wish_id}/links:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/WishID"
+    post:
+      operationId: addWishLink
+      tags:
+        - craft
+      summary: Add a shop link to a wish
+      description: |
+        Attaches one shop page where the wished item can be bought. The URL must
+        start with `http://` or `https://`; the price, currency and availability
+        are optional.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WishLinkInput"
+      responses:
+        "201":
+          description: The created shop link.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WishLink"
+        "400":
+          description: |
+            The URL is not http(s), the price is negative or the shop name is too
+            long.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/wishlist/{wish_id}/links/{link_id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/WishID"
+      - $ref: "#/components/parameters/WishLinkID"
+    delete:
+      operationId: removeWishLink
+      tags:
+        - craft
+      summary: Remove a shop link from a wish
+      description: |
+        Deletes one shop link of an entry; the entry itself stays. A request
+        authenticated with the browser cookie must declare
+        `Content-Type: application/json` even though there is no body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The link is deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/wishlist/{wish_id}/bought:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/WishID"
+    post:
+      operationId: markWishBought
+      tags:
+        - craft
+      summary: Mark a wish as bought
+      description: |
+        Marks an entry as bought. With `add_to_stock` set and a catalogue item,
+        the wanted quantity is added to the stock in the same transaction, as a
+        stock adjustment; a free-text entry is only marked bought. Calling it
+        again on an already bought entry changes no stock.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkWishBoughtRequest"
+      responses:
+        "200":
+          description: The entry after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wish"
+        "400":
+          description: |
+            `add_to_stock` is set but the entry has no wanted quantity to add.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/projects:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    get:
+      operationId: listProjects
+      tags:
+        - craft
+      summary: List craft projects
+      description: |
+        Returns the projects of the workspace with the number of planned
+        materials in each. Materials themselves come from `GET
+        /workspaces/{id}/projects/{project_id}`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Projects of the workspace, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createProject
+      tags:
+        - craft
+      summary: Create a project
+      description: |
+        Creates an empty project. Materials are planned with `PUT
+        /workspaces/{id}/projects/{project_id}/materials/{item_id}`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "201":
+          description: The created project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: The name is empty or longer than 200 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/projects/{project_id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      operationId: getProject
+      tags:
+        - craft
+      summary: Get a project with its materials
+      description: |
+        Returns one project and every material planned for it: the planned and
+        already used quantity, the current stock and the shortage. `shortage` is
+        `max(0, qty_planned - qty_used - stock)`, the quantity still to buy; a
+        material without a plan has no shortage.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: The project with its materials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateProject
+      tags:
+        - craft
+      summary: Change the name and notes of a project
+      description: |
+        Replaces the name and notes of a project. Both are sent in full; an
+        omitted `notes` is stored as empty.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "200":
+          description: The updated project with its materials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: The name is empty or longer than 200 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteProject
+      tags:
+        - craft
+      summary: Delete a project
+      description: |
+        Deletes a project with its material plan. The stock does not change: the
+        inventory log keeps the reason of every withdrawal. A request
+        authenticated with the browser cookie must declare
+        `Content-Type: application/json` even though there is no body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The project is deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/projects/{project_id}/materials/{item_id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/ProjectID"
+      - $ref: "#/components/parameters/CraftItemID"
+    put:
+      operationId: setProjectMaterial
+      tags:
+        - craft
+      summary: Plan a material for a project
+      description: |
+        Adds a catalogue item to the project plan or changes its planned
+        quantity. `qty_planned: null` clears the plan; the used quantity and the
+        stock are untouched. The item must be visible to the workspace.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetProjectMaterialRequest"
+      responses:
+        "200":
+          description: The project after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: The planned quantity is negative or not a finite number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The project or the catalogue item is unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: removeProjectMaterial
+      tags:
+        - craft
+      summary: Drop a material from the project plan
+      description: |
+        Removes a material from the plan of a project; its stock is untouched. A
+        request authenticated with the browser cookie must declare
+        `Content-Type: application/json` even though there is no body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The material is no longer planned for the project.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The project is unknown or the item is not planned in it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /workspaces/{id}/projects/{project_id}/materials/{item_id}/use:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/ProjectID"
+      - $ref: "#/components/parameters/CraftItemID"
+    post:
+      operationId: useProjectMaterial
+      tags:
+        - craft
+      summary: Use material for a project
+      description: |
+        Withdraws material from the stock for a project: the stock decreases and
+        the used quantity of the material grows in one transaction. The
+        inventory log records the project name as the reason. The item must be
+        planned in the project.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UseProjectMaterialRequest"
+      responses:
+        "200":
+          description: The project after the withdrawal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: The quantity is zero, negative or not a finite number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The project is unknown or the item is not planned in it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The withdrawal exceeds the quantity in stock.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /workspaces/{id}/projects/{project_id}/shortage-to-wishlist:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/ProjectID"
+    post:
+      operationId: shortageToWishlist
+      tags:
+        - craft
+      summary: Add the project shortage to the wish list
+      description: |
+        Adds every material of the project with a positive shortage to the wish
+        list, using the shortage as the wanted quantity. Materials already wanted
+        are skipped, so a repeated call adds nothing. Returns the entries added
+        by this call.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: The wish list entries added by this call; empty when all are already wanted.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Wish"
+        "400":
+          description: An entry could not be added, for example a concurrent duplicate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1524,6 +2124,39 @@ components:
       schema:
         type: string
         example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+
+    WishID:
+      name: wish_id
+      in: path
+      required: true
+      description: |
+        Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+        like an entry that does not exist or belongs to another workspace.
+      schema:
+        type: string
+        example: 3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f
+
+    WishLinkID:
+      name: link_id
+      in: path
+      required: true
+      description: |
+        Shop link id (UUID) of a wish list entry. A malformed id is reported as
+        `404`, exactly like a link that does not exist.
+      schema:
+        type: string
+        example: 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+
+    ProjectID:
+      name: project_id
+      in: path
+      required: true
+      description: |
+        Project id (UUID). A malformed id is reported as `404`, exactly like a
+        project that does not exist or belongs to another workspace.
+      schema:
+        type: string
+        example: 5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f
 
   schemas:
     APITokenScope:
@@ -2720,6 +3353,402 @@ components:
             Catalogue item that receives the stock of the private item. Its unit
             must match the unit of the private item.
           example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+
+    WishStatus:
+      type: string
+      description: |
+        State of a wish list entry: `wanted` is still to buy, `ordered` is on its
+        way, `bought` is done.
+      enum:
+        - wanted
+        - ordered
+        - bought
+      example: wanted
+
+    WishLink:
+      type: object
+      additionalProperties: false
+      description: |
+        One shop page where a wish can be bought, with the optional price and
+        availability reported by the shop.
+      required:
+        - id
+        - url
+        - shop_name
+        - price
+        - currency
+        - in_stock
+        - checked_at
+        - created_at
+      properties:
+        id:
+          type: string
+          description: Link id (UUID), used to remove the link.
+          example: 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+        url:
+          type: string
+          format: uri
+          description: Absolute `http://` or `https://` address of the shop page.
+          example: https://shop.example/beads
+        shop_name:
+          type: string
+          description: Shop name shown as a chip; empty when unknown.
+          example: Магазин бусин
+        price:
+          type: number
+          format: double
+          nullable: true
+          description: Price of the item as reported, or `null` when unknown.
+          example: 12.5
+        currency:
+          type: string
+          description: |
+            ISO 4217 currency code in upper case; empty when unknown.
+          example: RUB
+        in_stock:
+          type: boolean
+          nullable: true
+          description: |
+            Whether the shop had the item in stock when it was checked, or `null`
+            when unknown.
+          example: true
+        checked_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the availability was checked, or `null`.
+          example: "2026-01-16T08:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          description: When the link was added.
+          example: "2026-01-15T09:30:00Z"
+
+    Wish:
+      type: object
+      additionalProperties: false
+      description: |
+        One entry of the wish list: either a catalogue item or free text,
+        together with its shop links. `item` and `stock_qty` are present only
+        when the entry points at a catalogue item.
+      required:
+        - id
+        - catalog_item_id
+        - title
+        - qty_wanted
+        - priority
+        - note
+        - status
+        - created_by
+        - created_at
+        - updated_at
+        - links
+      properties:
+        id:
+          type: string
+          description: Wish list entry id (UUID).
+          example: 3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f
+        catalog_item_id:
+          type: string
+          description: |
+            Catalogue item the entry points at, or an empty string for free
+            text.
+          example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+        title:
+          type: string
+          maxLength: 200
+          description: Name of the wanted item.
+          example: Жемчуг айвори 2 мм
+        qty_wanted:
+          type: number
+          format: double
+          nullable: true
+          description: Wanted quantity, or `null` while undecided.
+          example: 3
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 2
+          description: |
+            How much it is wanted: 0 is normal, 1 is important, 2 is the most
+            important. The list is sorted by it.
+          example: 2
+        note:
+          type: string
+          description: Free-form note, for example for whom it is; empty when none.
+          example: на подарок
+        status:
+          $ref: "#/components/schemas/WishStatus"
+        created_by:
+          type: string
+          description: Principal id of the member who added the entry.
+          example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+        created_at:
+          type: string
+          format: date-time
+          description: When the entry was added.
+          example: "2026-01-15T09:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: When the entry last changed.
+          example: "2026-01-16T08:00:00Z"
+        item:
+          $ref: "#/components/schemas/CraftItem"
+        links:
+          type: array
+          description: Shop pages where the item can be bought; empty when none.
+          items:
+            $ref: "#/components/schemas/WishLink"
+
+    WishInput:
+      type: object
+      additionalProperties: false
+      description: |
+        A new wish list entry. Send either `catalog_item_id` or a free text
+        `title`; when a catalogue item is named, the title defaults to its name.
+      properties:
+        catalog_item_id:
+          type: string
+          description: |
+            Catalogue item to want. It must be visible to the workspace and is
+            accepted only once at a time.
+          example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+        title:
+          type: string
+          maxLength: 200
+          description: |
+            Name of the wanted item, up to 200 characters. Required when there is
+            no catalogue item.
+          example: Жемчуг айвори 2 мм
+        qty_wanted:
+          type: number
+          format: double
+          nullable: true
+          description: Wanted quantity; must be positive when sent.
+          example: 3
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 2
+          default: 0
+          description: "How much it is wanted: 0, 1 or 2."
+          example: 2
+        note:
+          type: string
+          description: Free-form note.
+          example: на подарок
+
+    WishUpdateRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        The editable fields of a wish list entry. Quantity, priority and note are
+        replaced; an omitted status keeps the current one.
+      required:
+        - priority
+        - note
+      properties:
+        qty_wanted:
+          type: number
+          format: double
+          nullable: true
+          description: |
+            New wanted quantity; must be positive when sent. `null` clears it.
+          example: 5
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 2
+          description: "How much it is wanted: 0, 1 or 2."
+          example: 1
+        note:
+          type: string
+          description: Free-form note; an empty string clears it.
+          example: ""
+        status:
+          $ref: "#/components/schemas/WishStatus"
+
+    WishLinkInput:
+      type: object
+      additionalProperties: false
+      description: A shop page where a wish can be bought.
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Absolute `http://` or `https://` address of the shop page.
+          example: https://shop.example/beads
+        shop_name:
+          type: string
+          maxLength: 120
+          description: Shop name shown as a chip; defaults to the host name.
+          example: Магазин бусин
+        price:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          description: Price of the item; must not be negative.
+          example: 12.5
+        currency:
+          type: string
+          description: |
+            ISO 4217 currency code; it is stored in upper case. Empty when
+            unknown.
+          example: RUB
+        in_stock:
+          type: boolean
+          nullable: true
+          description: Whether the shop has the item in stock.
+          example: true
+
+    MarkWishBoughtRequest:
+      type: object
+      additionalProperties: false
+      description: How to mark a wish list entry as bought.
+      required:
+        - add_to_stock
+      properties:
+        add_to_stock:
+          type: boolean
+          description: |
+            Add the wanted quantity of a catalogue item to the stock. A free-text
+            entry is only marked bought.
+          example: true
+
+    ProjectMaterial:
+      type: object
+      additionalProperties: false
+      description: |
+        One material planned for a project. `shortage` is
+        `max(0, qty_planned - qty_used - stock)` and is zero when nothing is
+        missing or no quantity is planned.
+      required:
+        - item
+        - qty_planned
+        - qty_used
+        - shortage
+      properties:
+        item:
+          $ref: "#/components/schemas/CraftItem"
+        qty_planned:
+          type: number
+          format: double
+          nullable: true
+          description: Planned quantity, or `null` when the plan was cleared.
+          example: 20
+        qty_used:
+          type: number
+          format: double
+          description: Quantity already withdrawn from the stock for the project.
+          example: 5
+        shortage:
+          type: number
+          format: double
+          description: |
+            Quantity still to buy: planned minus used minus stock, never below
+            zero.
+          example: 10
+
+    Project:
+      type: object
+      additionalProperties: false
+      description: |
+        A craft project: what is being made and which materials it needs.
+        `material_count` is the number of planned materials; the list endpoint
+        returns it without the materials themselves.
+      required:
+        - id
+        - name
+        - notes
+        - created_at
+        - material_count
+        - materials
+      properties:
+        id:
+          type: string
+          description: Project id (UUID).
+          example: 5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f
+        name:
+          type: string
+          maxLength: 200
+          description: Project name.
+          example: Серьги «Майорка»
+        notes:
+          type: string
+          description: Free-form notes about the project; empty when none.
+          example: Подарок на день рождения
+        created_at:
+          type: string
+          format: date-time
+          description: When the project was created.
+          example: "2026-01-15T09:30:00Z"
+        material_count:
+          type: integer
+          minimum: 0
+          description: Number of materials planned for the project.
+          example: 2
+        materials:
+          type: array
+          description: |
+            Planned materials with their stock and shortage; empty in the list
+            response.
+          items:
+            $ref: "#/components/schemas/ProjectMaterial"
+
+    ProjectInput:
+      type: object
+      additionalProperties: false
+      description: Name and notes of a craft project.
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: |
+            Project name, 1..200 characters. Leading and trailing whitespace is
+            trimmed.
+          example: Серьги «Майорка»
+        notes:
+          type: string
+          description: Free-form notes about the project.
+          example: Подарок на день рождения
+
+    SetProjectMaterialRequest:
+      type: object
+      additionalProperties: false
+      description: Planned quantity of one material.
+      required:
+        - qty_planned
+      properties:
+        qty_planned:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          description: |
+            Planned quantity, zero or more; `null` clears the plan.
+          example: 20
+
+    UseProjectMaterialRequest:
+      type: object
+      additionalProperties: false
+      description: Quantity of a planned material to withdraw from the stock.
+      required:
+        - qty
+      properties:
+        qty:
+          type: number
+          format: double
+          description: |
+            Quantity to withdraw; must be positive. A withdrawal larger than the
+            stock is a conflict.
+          example: 5
 
   responses:
     Error:

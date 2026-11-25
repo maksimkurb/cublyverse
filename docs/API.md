@@ -53,7 +53,7 @@ api/openapi.yaml ──┬─ oapi-codegen ───────→ internal/htt
 | `tokens` | `GET/POST /tokens`, `DELETE /tokens/{id}` | персональные токены для MCP и скриптов; только сессия. |
 | `connections` | `GET /connections`, `DELETE /connections/{id}` | приложения, подключённые через OAuth (MCP-клиенты); только сессия. Протокольные адреса `/oauth/*` и `/.well-known/*` в OpenAPI не входят: они описаны в `docs/MCP.md`. |
 | `workspaces` | `GET/POST /workspaces`, `PATCH/DELETE /workspaces/{id}`, `GET/POST /workspaces/{id}/members`, `DELETE /workspaces/{id}/members/{user_id}`, `GET /workspaces/{id}/member-candidates` | общие пространства и их участники; только сессия. |
-| `craft` | `GET /craft/categories`, `GET /craft/manufacturers`, `GET/POST /workspaces/{id}/catalog`, `GET/PUT/DELETE /workspaces/{id}/catalog/{item_id}`, `POST /workspaces/{id}/catalog/{item_id}/link`, `GET /workspaces/{id}/inventory`, `PUT/PATCH/DELETE /workspaces/{id}/inventory/{item_id}`, `POST /workspaces/{id}/inventory/{item_id}/adjust` | каталог материалов и запасы пространства; только сессия. |
+| `craft` | `GET /craft/categories`, `GET /craft/manufacturers`, `GET/POST /workspaces/{id}/catalog`, `GET/PUT/DELETE /workspaces/{id}/catalog/{item_id}`, `POST /workspaces/{id}/catalog/{item_id}/link`, `GET /workspaces/{id}/inventory`, `PUT/PATCH/DELETE /workspaces/{id}/inventory/{item_id}`, `POST /workspaces/{id}/inventory/{item_id}/adjust`, `GET/POST /workspaces/{id}/wishlist`, `PATCH/DELETE /workspaces/{id}/wishlist/{wish_id}`, `POST /workspaces/{id}/wishlist/{wish_id}/links`, `DELETE /workspaces/{id}/wishlist/{wish_id}/links/{link_id}`, `POST /workspaces/{id}/wishlist/{wish_id}/bought`, `GET/POST /workspaces/{id}/projects`, `GET/PATCH/DELETE /workspaces/{id}/projects/{project_id}`, `PUT/DELETE /workspaces/{id}/projects/{project_id}/materials/{item_id}`, `POST /workspaces/{id}/projects/{project_id}/materials/{item_id}/use`, `POST /workspaces/{id}/projects/{project_id}/shortage-to-wishlist` | каталог, запасы, wishlist и проекты пространства; только сессия. |
 
 Все операции, кроме `GET /health` и `POST /auth/telegram`, требуют
 `bearerAuth` или `cookieAuth`; `POST /auth/logout` тоже работает без сессии,
@@ -392,6 +392,53 @@ POST /auth/confirm (form: state, token)
 изменении, поэтому «добавить на склад» — это `adjust` с положительной дельтой.
 Единицы частной и целевой позиции при связывании должны совпадать, иначе
 `400 bad_request`.
+
+## Wishlist и проекты
+
+Операции тега `craft` поверх тех же запасов. Wishlist — список покупок
+пространства: позиция каталога или свободный текст, желаемое количество,
+приоритет 0..2, статус `wanted`/`ordered`/`bought` и несколько ссылок на
+магазины. Проект — план материалов: для каждой позиции хранятся плановое и
+использованное количество, остаток и дефицит.
+
+| Метод и путь | Назначение |
+|---|---|
+| `GET /workspaces/{id}/wishlist?status=wanted\|ordered\|bought\|all` | список покупок; по умолчанию `wanted`; у позиции каталога виден остаток |
+| `POST /workspaces/{id}/wishlist` | добавить позицию каталога (`catalog_item_id`) или свободный текст (`title`) |
+| `PATCH /workspaces/{id}/wishlist/{wish_id}` | заменить количество, приоритет, заметку и статус |
+| `DELETE /workspaces/{id}/wishlist/{wish_id}` | удалить запись вместе со ссылками |
+| `POST /workspaces/{id}/wishlist/{wish_id}/links` | добавить ссылку на магазин: `url`, `shop_name`, `price`, `currency`, `in_stock` |
+| `DELETE /workspaces/{id}/wishlist/{wish_id}/links/{link_id}` | убрать ссылку |
+| `POST /workspaces/{id}/wishlist/{wish_id}/bought` | отметить купленным; `add_to_stock` добавляет количество в запасы |
+| `GET/POST /workspaces/{id}/projects` | список проектов и создание |
+| `GET /workspaces/{id}/projects/{project_id}` | проект с материалами: `qty_planned`, `qty_used`, остаток и `shortage` |
+| `PATCH/DELETE /workspaces/{id}/projects/{project_id}` | переименовать/изменить заметки; удалить вместе с планом |
+| `PUT /workspaces/{id}/projects/{project_id}/materials/{item_id}` | задать или очистить (`qty_planned: null`) план материала |
+| `DELETE /workspaces/{id}/projects/{project_id}/materials/{item_id}` | убрать материал из плана |
+| `POST /workspaces/{id}/projects/{project_id}/materials/{item_id}/use` | списать `qty` со склада и увеличить использованное |
+| `POST /workspaces/{id}/projects/{project_id}/shortage-to-wishlist` | добавить положительные дефициты в wishlist |
+
+Правила:
+
+- позиция каталога может быть в статусе `wanted` только одна: повторное
+  добавление — `400 bad_request` («Позиция уже в wishlist»);
+- ссылка должна начинаться с `http://` или `https://`, цена не может быть
+  отрицательной; валюта хранится в верхнем регистре;
+- `bought` с `add_to_stock` добавляет желаемое количество в запасы в той же
+  транзакции; повторный вызов на уже купленной записи остаток не меняет, а
+  свободный текст в запасы не попадает;
+- `shortage = max(0, qty_planned - qty_used - stock)`; материал без плана
+  дефицита не имеет;
+- `use` списывает остаток и увеличивает `qty_used` одной транзакцией: если
+  запаса не хватает — `409 conflict` и ничего не меняется;
+- `shortage-to-wishlist` возвращает только добавленные этой операцией записи;
+  уже находящиеся в `wanted` материалы пропускаются, поэтому повторный вызов
+  возвращает пустой массив;
+- чужое пространство и чужая запись неотличимы от несуществующих: `404`.
+
+Ошибки те же, что у каталога: `ValidationError` → `400 bad_request` с русским
+текстом, `craft.ErrNotFound` и `workspace.ErrNotFound` → `404 not_found`,
+`craft.ErrInsufficientStock` → `409 conflict`.
 
 ## TypeScript-клиент
 

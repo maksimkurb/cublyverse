@@ -13,6 +13,9 @@ type Principal struct {
 	ID string
 	// Scopes are the scopes of the token.
 	Scopes []string
+	// WorkspaceID is the workspace of the endpoint the request arrived at
+	// (/mcp/w/{id}), already checked for membership; empty on /mcp.
+	WorkspaceID string
 	// TokenID is the api_tokens.id of the token, for audit messages.
 	TokenID string
 }

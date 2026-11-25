@@ -6,6 +6,7 @@ import { useHost } from "../../host/HostContext";
 import { usePageTitle } from "../../router/router";
 import { Button, EmptyState, Notice } from "../../ui/controls";
 import { IconCopy, IconPlus } from "../../ui/icons";
+import { ConnectionsSection } from "./ConnectionsSection";
 import { TokenCreateDialog } from "./TokenCreateDialog";
 import { TokenRevealDialog } from "./TokenRevealDialog";
 import { useRevokeToken, useTokensQuery } from "./data";
@@ -149,6 +150,8 @@ export default function TokensScreen() {
           })}
         </ul>
       )}
+
+      <ConnectionsSection />
 
       {createOpen && (
         <TokenCreateDialog

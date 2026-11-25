@@ -51,6 +51,7 @@ api/openapi.yaml ──┬─ oapi-codegen ───────→ internal/htt
 | `auth` | `POST /auth/logout`, `POST /auth/telegram` | сессия браузера/Mini App; HTML-страницы входа живут вне спецификации. |
 | `reminders` | `GET/POST /reminders`, `GET/PUT/DELETE /reminders/{id}`, `POST /reminders/{id}/complete` | правила напоминаний и подтверждение активного срабатывания. |
 | `tokens` | `GET/POST /tokens`, `DELETE /tokens/{id}` | персональные токены для MCP и скриптов; только сессия. |
+| `connections` | `GET /connections`, `DELETE /connections/{id}` | приложения, подключённые через OAuth (MCP-клиенты); только сессия. Протокольные адреса `/oauth/*` и `/.well-known/*` в OpenAPI не входят: они описаны в `docs/MCP.md`. |
 
 Все операции, кроме `GET /health` и `POST /auth/telegram`, требуют
 `bearerAuth` или `cookieAuth`; `POST /auth/logout` тоже работает без сессии,

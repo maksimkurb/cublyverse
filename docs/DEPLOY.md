@@ -18,7 +18,7 @@ client secret) живут только в окружении и никогда �
 |---|---|---|---|
 | `DATABASE_URL` | да | — | `postgres://…` или `postgresql://…` |
 | `HTTP_ADDR` | нет | `:8080` | адрес HTTP-сервера |
-| `PUBLIC_BASE_URL` | для бота | — | внешний адрес без слэша на конце; из него строятся ссылки в мессенджерах, `OIDC_REDIRECT_URL` и флаг `Secure` у cookie |
+| `PUBLIC_BASE_URL` | для бота | — | внешний адрес без слэша на конце; из него строятся ссылки в мессенджерах, `OIDC_REDIRECT_URL` и флаг `Secure` у cookie; с ним же включается OAuth-вход MCP-клиентов (issuer и адреса ресурсов; см. `docs/MCP.md`), без него MCP принимает только PAT |
 | `LOG_FORMAT` | нет | `text` | `text` или `json` (в проде — `json`) |
 | `OIDC_ISSUER` | для входа | — | issuer провайдера; при старте выполняется discovery |
 | `OIDC_CLIENT_ID` | при `OIDC_ISSUER` | — | id клиента |

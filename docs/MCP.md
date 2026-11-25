@@ -55,6 +55,47 @@ sha256 токена, поэтому показанный один раз сек�
 - Один токен — один клиент: в списке токенов видно, какой из них используется
   (`last_used_at`), и отзыв одного не мешает остальным.
 
+### OAuth 2.1 (вход без ручного токена)
+
+Если задан `PUBLIC_BASE_URL`, Cublyverse сам работает как OAuth authorization
+server для MCP-клиентов (`internal/oauthserver`). Пользователя он узнаёт по
+обычной SSO-сессии, поэтому провайдеру (Authelia и т. п.) не нужна динамическая
+регистрация клиентов. Клиент находит всё сам:
+
+```text
+POST /mcp/w/{workspace_id}                              → 401 + WWW-Authenticate: Bearer resource_metadata="…"
+GET  /.well-known/oauth-protected-resource/mcp/w/{id}   (RFC 9728)
+GET  /.well-known/oauth-authorization-server            (RFC 8414)
+POST /oauth/register                                    (RFC 7591, динамическая регистрация)
+GET  /oauth/authorize → вход через SSO → экран согласия → redirect с кодом
+POST /oauth/token     (authorization_code + PKCE S256, refresh_token)
+POST /oauth/revoke    (RFC 7009)
+```
+
+- **Регистрация клиента:** динамическая (`/oauth/register`) или по URL
+  документа метаданных клиента (CIMD): `client_id` — это `https://…`, сервер
+  скачивает документ (только с публичных адресов, без редиректов, до 32 КБ) и
+  кэширует его на сутки. Клиенты только публичные, защита — PKCE (S256) и
+  точное совпадение `redirect_uri` (для `http://localhost` порт любой).
+- **Токены:** непрозрачные, `cv_oat_…` (access, 1 час) и `cv_ort_…` (refresh,
+  30 дней, ротация; повторное использование погашенного refresh-токена или кода
+  отзывает всю цепочку). В БД хранятся только sha256.
+- **Привязка к ресурсу (RFC 8707):** токен выдаётся для конкретного
+  `resource` — `/mcp` или `/mcp/w/{workspace_id}` — и на другом ресурсе
+  отвергается. На экране согласия пользователь выбирает workspace; без
+  workspace области `craft:*` не выдаются.
+- Токены PAT продолжают работать на тех же адресах.
+- Отозвать доступ приложения можно в WebApp («Токены» → «Подключённые приложения»), через `DELETE /api/v1/connections/{id}` или `POST /oauth/revoke`.
+- Раз в час фоновая задача `oauth.cleanup` удаляет просроченные коды и токены и динамически зарегистрированных клиентов, которые за неделю так и не получили доступ.
+
+## Эндпоинты
+
+`/mcp` — напоминания пользователя (`whoami`, `reminders_*`);
+`/mcp/w/{workspace_id}` — один workspace («Бусинки»: `whoami`, `craft_*`).
+На каждом адресе виден только свой набор инструментов. Чужой или
+несуществующий workspace отвечает `404`; рабочие инструменты требуют scope
+`craft:read` / `craft:write`.
+
 ### Области доступа
 
 | Scope | Что разрешает |
@@ -62,6 +103,8 @@ sha256 токена, поэтому показанный один раз сек�
 | `profile:read` | `whoami`; выдается неявно, если у токена есть любой другой scope |
 | `reminders:read` | `reminders_list`, `reminders_get` |
 | `reminders:write` | `reminders_create`, `reminders_update`, `reminders_delete`, `reminders_complete` |
+| `craft:read` | чтение каталога, запасов и wishlist workspace (инструменты `craft_*` на `/mcp/w/{id}`) |
+| `craft:write` | изменение каталога, запасов и wishlist workspace |
 
 Неизвестный, просроченный или отозванный токен → `401` (тот же ответ для всех
 трёх случаев, чтобы нельзя было перебором отличить причину). Недостаточная

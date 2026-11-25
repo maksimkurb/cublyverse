@@ -46,6 +46,8 @@ func newMCPTestApp(t *testing.T) *mcpTestApp {
 		HTTPAddr:    freeAddr(t),
 		DatabaseURL: databaseURL,
 		LogFormat:   config.LogFormatText,
+		// Enables the OAuth authorization server of the MCP endpoint.
+		PublicBaseURL: "https://cv.example",
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate: %v", err)

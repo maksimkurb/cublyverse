@@ -1251,3 +1251,9 @@ ul {
     transition: none !important;
   }
 }
+
+.page__subtitle {
+  margin: 20px 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}

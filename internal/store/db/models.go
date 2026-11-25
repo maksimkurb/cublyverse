@@ -42,6 +42,113 @@ type AuthPending struct {
 	UpdatedAt          time.Time          `json:"updated_at"`
 }
 
+type CraftCatalogItem struct {
+	ID             pgtype.UUID        `json:"id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	CategoryID     pgtype.UUID        `json:"category_id"`
+	ManufacturerID pgtype.UUID        `json:"manufacturer_id"`
+	Article        string             `json:"article"`
+	Series         string             `json:"series"`
+	Name           string             `json:"name"`
+	ColorName      string             `json:"color_name"`
+	ColorHex       string             `json:"color_hex"`
+	ColorSource    string             `json:"color_source"`
+	Size           string             `json:"size"`
+	Finish         string             `json:"finish"`
+	Unit           string             `json:"unit"`
+	PackSize       pgtype.Numeric     `json:"pack_size"`
+	Attrs          []byte             `json:"attrs"`
+	Source         string             `json:"source"`
+	SourceUrl      string             `json:"source_url"`
+	ImageUrl       string             `json:"image_url"`
+	ExternalID     string             `json:"external_id"`
+	FetchedAt      pgtype.Timestamptz `json:"fetched_at"`
+	ManualOverride []byte             `json:"manual_override"`
+	DeprecatedAt   pgtype.Timestamptz `json:"deprecated_at"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+}
+
+type CraftCategory struct {
+	ID          pgtype.UUID `json:"id"`
+	Slug        string      `json:"slug"`
+	Name        string      `json:"name"`
+	DefaultUnit string      `json:"default_unit"`
+	AttrSchema  []byte      `json:"attr_schema"`
+	SortOrder   int32       `json:"sort_order"`
+}
+
+type CraftInventory struct {
+	WorkspaceID   pgtype.UUID    `json:"workspace_id"`
+	CatalogItemID pgtype.UUID    `json:"catalog_item_id"`
+	Qty           pgtype.Numeric `json:"qty"`
+	Location      string         `json:"location"`
+	Notes         string         `json:"notes"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+}
+
+type CraftInventoryLog struct {
+	ID            int64          `json:"id"`
+	WorkspaceID   pgtype.UUID    `json:"workspace_id"`
+	CatalogItemID pgtype.UUID    `json:"catalog_item_id"`
+	UserID        pgtype.UUID    `json:"user_id"`
+	ProjectID     pgtype.UUID    `json:"project_id"`
+	Delta         pgtype.Numeric `json:"delta"`
+	QtyAfter      pgtype.Numeric `json:"qty_after"`
+	Reason        string         `json:"reason"`
+	CreatedAt     time.Time      `json:"created_at"`
+}
+
+type CraftManufacturer struct {
+	ID        pgtype.UUID `json:"id"`
+	Name      string      `json:"name"`
+	Website   string      `json:"website"`
+	Notes     string      `json:"notes"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
+type CraftProject struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Name        string      `json:"name"`
+	Notes       string      `json:"notes"`
+	CreatedAt   time.Time   `json:"created_at"`
+}
+
+type CraftProjectMaterial struct {
+	ProjectID     pgtype.UUID    `json:"project_id"`
+	CatalogItemID pgtype.UUID    `json:"catalog_item_id"`
+	QtyPlanned    pgtype.Numeric `json:"qty_planned"`
+	QtyUsed       pgtype.Numeric `json:"qty_used"`
+}
+
+type CraftWishlistItem struct {
+	ID            pgtype.UUID    `json:"id"`
+	WorkspaceID   pgtype.UUID    `json:"workspace_id"`
+	CatalogItemID pgtype.UUID    `json:"catalog_item_id"`
+	Title         string         `json:"title"`
+	QtyWanted     pgtype.Numeric `json:"qty_wanted"`
+	Priority      int16          `json:"priority"`
+	Note          string         `json:"note"`
+	Status        string         `json:"status"`
+	CreatedBy     pgtype.UUID    `json:"created_by"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+}
+
+type CraftWishlistLink struct {
+	ID             pgtype.UUID        `json:"id"`
+	WishlistItemID pgtype.UUID        `json:"wishlist_item_id"`
+	Url            string             `json:"url"`
+	ShopName       string             `json:"shop_name"`
+	Price          pgtype.Numeric     `json:"price"`
+	Currency       string             `json:"currency"`
+	InStock        *bool              `json:"in_stock"`
+	CheckedAt      pgtype.Timestamptz `json:"checked_at"`
+	CreatedAt      time.Time          `json:"created_at"`
+}
+
 type Interaction struct {
 	ID             pgtype.UUID `json:"id"`
 	TokenHash      []byte      `json:"token_hash"`
@@ -85,6 +192,48 @@ type MessengerBinding struct {
 	Metadata       []byte      `json:"metadata"`
 	CreatedAt      time.Time   `json:"created_at"`
 	UpdatedAt      time.Time   `json:"updated_at"`
+}
+
+type OauthClient struct {
+	ClientID     string             `json:"client_id"`
+	Kind         string             `json:"kind"`
+	Name         string             `json:"name"`
+	RedirectUris []string           `json:"redirect_uris"`
+	FetchedAt    pgtype.Timestamptz `json:"fetched_at"`
+	CreatedAt    time.Time          `json:"created_at"`
+}
+
+type OauthCode struct {
+	CodeHash      []byte             `json:"code_hash"`
+	FamilyID      pgtype.UUID        `json:"family_id"`
+	ClientID      string             `json:"client_id"`
+	UserID        pgtype.UUID        `json:"user_id"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	Scopes        []string           `json:"scopes"`
+	Resource      string             `json:"resource"`
+	RedirectUri   string             `json:"redirect_uri"`
+	CodeChallenge string             `json:"code_challenge"`
+	ExpiresAt     time.Time          `json:"expires_at"`
+	UsedAt        pgtype.Timestamptz `json:"used_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+}
+
+type OauthToken struct {
+	ID               pgtype.UUID        `json:"id"`
+	FamilyID         pgtype.UUID        `json:"family_id"`
+	ClientID         string             `json:"client_id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
+	Scopes           []string           `json:"scopes"`
+	Resource         string             `json:"resource"`
+	AccessHash       []byte             `json:"access_hash"`
+	AccessExpiresAt  time.Time          `json:"access_expires_at"`
+	RefreshHash      []byte             `json:"refresh_hash"`
+	RefreshExpiresAt time.Time          `json:"refresh_expires_at"`
+	RefreshUsedAt    pgtype.Timestamptz `json:"refresh_used_at"`
+	RevokedAt        pgtype.Timestamptz `json:"revoked_at"`
+	LastUsedAt       pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt        time.Time          `json:"created_at"`
 }
 
 type Reminder struct {
@@ -138,4 +287,19 @@ type User struct {
 	Timezone    string      `json:"timezone"`
 	CreatedAt   time.Time   `json:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type Workspace struct {
+	ID        pgtype.UUID `json:"id"`
+	Name      string      `json:"name"`
+	CreatedBy pgtype.UUID `json:"created_by"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
+}
+
+type WorkspaceMember struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	UserID      pgtype.UUID `json:"user_id"`
+	AddedBy     pgtype.UUID `json:"added_by"`
+	CreatedAt   time.Time   `json:"created_at"`
 }

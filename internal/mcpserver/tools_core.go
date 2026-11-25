@@ -27,7 +27,7 @@ type whoAmIOutput struct {
 // registerCore adds the tools that belong to the server itself rather than to a
 // feature.
 func (s *Server) registerCore() {
-	AddTool(s, &mcp.Tool{
+	tool := &mcp.Tool{
 		Name:  "whoami",
 		Title: "Who am I",
 		Description: "Return the Cublyverse user behind the personal access token: " +
@@ -39,7 +39,10 @@ func (s *Server) registerCore() {
 			ReadOnlyHint:  true,
 			OpenWorldHint: boolPtr(false),
 		},
-	}, s.whoAmI)
+	}
+	AddTool(s, tool, s.whoAmI)
+	// The workspace endpoint has it too, without a second documentation entry.
+	mcp.AddTool(s.wsSDK, tool, s.whoAmI)
 }
 
 func (s *Server) whoAmI(ctx context.Context, _ *mcp.CallToolRequest, _ whoAmIInput) (*mcp.CallToolResult, whoAmIOutput, error) {

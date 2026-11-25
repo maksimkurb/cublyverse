@@ -8,6 +8,8 @@ import { renderWithHost } from "../../test/render";
 import TokensScreen from "./TokensScreen";
 import { useCreateToken, useRevokeToken, useTokensQuery } from "./data";
 
+vi.mock("./ConnectionsSection", () => ({ ConnectionsSection: () => null }));
+
 vi.mock("./data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./data")>();
   return {

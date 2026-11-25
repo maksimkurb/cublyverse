@@ -27,6 +27,16 @@ export const SCOPE_OPTIONS: ScopeOption[] = [
     label: "Изменение напоминаний",
     description: "Создавать, менять, подтверждать и удалять напоминания",
   },
+  {
+    value: "craft:read",
+    label: "Чтение «Бусинок»",
+    description: "Смотреть каталог, запасы и wishlist workspace (адрес /mcp/w/…)",
+  },
+  {
+    value: "craft:write",
+    label: "Изменение «Бусинок»",
+    description: "Менять запасы, каталог и wishlist workspace",
+  },
 ];
 
 /** Lifetimes the create dialog offers; `""` means no expiry. */

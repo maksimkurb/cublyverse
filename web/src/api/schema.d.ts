@@ -307,6 +307,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List connected applications
+         * @description Returns the live OAuth authorizations of the signed-in user: applications
+         *     that were allowed access through the consent page and whose refresh token
+         *     has not expired or been revoked, newest first. Only an interactive
+         *     session may call it; a token answers `403`.
+         */
+        get: operations["listConnections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Connection id (UUID). A malformed id is reported as `404`, exactly like
+                 *     a connection that does not exist or belongs to another user.
+                 */
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect an application
+         * @description Revokes every access and refresh token of the authorization at once; the
+         *     application has to ask for consent again.
+         *
+         *     A request authenticated with the browser cookie must declare
+         *     `Content-Type: application/json` even though there is no body.
+         */
+        delete: operations["revokeConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -318,13 +371,62 @@ export interface components {
          *       implied by any other granted scope.
          *     * `reminders:read` — read reminders.
          *     * `reminders:write` — create, replace, complete and delete reminders.
+         *     * `craft:read` — read the catalogue, stock and wish list of a workspace
+         *       through its MCP endpoint `/mcp/w/{id}`.
+         *     * `craft:write` — change them.
          *
          *     The registry is extensible: new operations document the scope they
          *     require.
          * @example reminders:write
          * @enum {string}
          */
-        APITokenScope: "profile:read" | "reminders:read" | "reminders:write";
+        APITokenScope: "profile:read" | "reminders:read" | "reminders:write" | "craft:read" | "craft:write";
+        /**
+         * @description One OAuth authorization: an application the user allowed to use MCP on
+         *     their behalf.
+         */
+        Connection: {
+            /**
+             * @description Connection id (UUID), used to disconnect the application.
+             * @example 9c1b7a52-3d4e-4f60-8a1b-2c3d4e5f6a7b
+             */
+            id: string;
+            /**
+             * @description Name the application gave itself at registration.
+             * @example Claude
+             */
+            client_name: string;
+            /**
+             * @description Workspace the application may use, or `null` when none.
+             * @example 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+             */
+            workspace_id: string | null;
+            /**
+             * @description Name of that workspace, or `null` when there is none.
+             * @example Дом
+             */
+            workspace_name: string | null;
+            /**
+             * @description Permissions the user approved.
+             * @example [
+             *       "craft:read",
+             *       "craft:write"
+             *     ]
+             */
+            scopes: string[];
+            /**
+             * Format: date-time
+             * @description When the user approved the connection.
+             * @example 2026-01-15T09:30:00Z
+             */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When the application last used its token, or `null`.
+             * @example 2026-01-16T08:00:00Z
+             */
+            last_used_at: string | null;
+        };
         /**
          * @description A personal access token as stored by the server. The plaintext secret is
          *     never part of it: only the visible prefix is returned, which is enough
@@ -1305,6 +1407,55 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description The token is revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connected applications. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    revokeConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Connection id (UUID). A malformed id is reported as `404`, exactly like
+                 *     a connection that does not exist or belongs to another user.
+                 */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The application is disconnected. */
             204: {
                 headers: {
                     [name: string]: unknown;

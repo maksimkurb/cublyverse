@@ -56,6 +56,11 @@ const (
 	// ScopeRemindersWrite grants creating, changing, completing and deleting
 	// reminders.
 	ScopeRemindersWrite = "reminders:write"
+	// ScopeCraftRead grants reading the catalogue, stock, projects and wish
+	// list of a workspace.
+	ScopeCraftRead = "craft:read"
+	// ScopeCraftWrite grants changing them.
+	ScopeCraftWrite = "craft:write"
 )
 
 // Scope describes one grantable permission.
@@ -72,6 +77,8 @@ var Scopes = []Scope{
 	{Name: ScopeProfileRead, Description: "Чтение профиля"},
 	{Name: ScopeRemindersRead, Description: "Чтение напоминаний"},
 	{Name: ScopeRemindersWrite, Description: "Изменение напоминаний"},
+	{Name: ScopeCraftRead, Description: "Чтение запасов и каталога («Бусинки»)"},
+	{Name: ScopeCraftWrite, Description: "Изменение запасов, каталога и wishlist («Бусинки»)"},
 }
 
 // ErrAPITokenNotFound means the token does not exist or belongs to another

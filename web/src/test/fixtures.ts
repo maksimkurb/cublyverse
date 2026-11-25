@@ -1,4 +1,4 @@
-import type { APIToken, Reminder } from "../api/client";
+import type { APIToken, Connection, Reminder } from "../api/client";
 
 /** Builds a reminder with sane defaults for tests. */
 export function makeReminder(overrides: Partial<Reminder> = {}): Reminder {
@@ -30,6 +30,20 @@ export function makeToken(overrides: Partial<APIToken> = {}): APIToken {
     last_used_at: "2026-01-16T08:00:00Z",
     revoked_at: null,
     created_at: "2026-01-15T09:30:00Z",
+    ...overrides,
+  };
+}
+
+/** Builds a connected OAuth application for tests. */
+export function makeConnection(overrides: Partial<Connection> = {}): Connection {
+  return {
+    id: "33333333-3333-4333-8333-333333333333",
+    client_name: "Claude",
+    workspace_id: "44444444-4444-4444-8444-444444444444",
+    workspace_name: "Дом",
+    scopes: ["craft:read", "craft:write"],
+    created_at: "2026-01-15T09:30:00Z",
+    last_used_at: "2026-01-16T08:00:00Z",
     ...overrides,
   };
 }

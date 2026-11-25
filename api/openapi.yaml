@@ -69,6 +69,12 @@ tags:
       Tokens are managed only from an interactive session: a token can never
       create, list or revoke tokens.
 
+  - name: connections
+    description: |
+      Applications connected through OAuth (MCP clients such as Claude). Each
+      connection is one authorization the user approved on the consent page. The
+      list and revocation are available only from an interactive session.
+
 paths:
   /health:
     get:
@@ -550,6 +556,69 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /connections:
+    get:
+      operationId: listConnections
+      tags:
+        - connections
+      summary: List connected applications
+      description: |
+        Returns the live OAuth authorizations of the signed-in user: applications
+        that were allowed access through the consent page and whose refresh token
+        has not expired or been revoked, newest first. Only an interactive
+        session may call it; a token answers `403`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Connected applications.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Connection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /connections/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: |
+          Connection id (UUID). A malformed id is reported as `404`, exactly like
+          a connection that does not exist or belongs to another user.
+        schema:
+          type: string
+          example: 9c1b7a52-3d4e-4f60-8a1b-2c3d4e5f6a7b
+    delete:
+      operationId: revokeConnection
+      tags:
+        - connections
+      summary: Disconnect an application
+      description: |
+        Revokes every access and refresh token of the authorization at once; the
+        application has to ask for consent again.
+
+        A request authenticated with the browser cookie must declare
+        `Content-Type: application/json` even though there is no body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The application is disconnected.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -601,6 +670,9 @@ components:
           implied by any other granted scope.
         * `reminders:read` — read reminders.
         * `reminders:write` — create, replace, complete and delete reminders.
+        * `craft:read` — read the catalogue, stock and wish list of a workspace
+          through its MCP endpoint `/mcp/w/{id}`.
+        * `craft:write` — change them.
 
         The registry is extensible: new operations document the scope they
         require.
@@ -608,7 +680,61 @@ components:
         - profile:read
         - reminders:read
         - reminders:write
+        - craft:read
+        - craft:write
       example: reminders:write
+
+    Connection:
+      type: object
+      additionalProperties: false
+      description: |
+        One OAuth authorization: an application the user allowed to use MCP on
+        their behalf.
+      required:
+        - id
+        - client_name
+        - workspace_id
+        - workspace_name
+        - scopes
+        - created_at
+        - last_used_at
+      properties:
+        id:
+          type: string
+          description: Connection id (UUID), used to disconnect the application.
+          example: 9c1b7a52-3d4e-4f60-8a1b-2c3d4e5f6a7b
+        client_name:
+          type: string
+          description: Name the application gave itself at registration.
+          example: Claude
+        workspace_id:
+          type: string
+          nullable: true
+          description: Workspace the application may use, or `null` when none.
+          example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+        workspace_name:
+          type: string
+          nullable: true
+          description: Name of that workspace, or `null` when there is none.
+          example: Дом
+        scopes:
+          type: array
+          description: Permissions the user approved.
+          items:
+            type: string
+            description: One approved scope, for example `craft:read`.
+          example: [craft:read, craft:write]
+        created_at:
+          type: string
+          format: date-time
+          description: When the user approved the connection.
+          example: "2026-01-15T09:30:00Z"
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the application last used its token, or `null`.
+          example: "2026-01-16T08:00:00Z"
 
     APIToken:
       type: object

@@ -12,7 +12,7 @@ with acceptance criteria) before changing anything.
   (`internal/httpapi/gen`, `internal/store/db`, `web/src/api/schema.d.ts`).
 - Business logic lives in `internal/features/<feature>` services. HTTP
   handlers, bot handlers and MCP tools are thin adapters over the same service.
-- Every data access is scoped by the authenticated user (`PrincipalID`).
+- Every data access is scoped by the authenticated user (`PrincipalID`). Data shared in a workspace is scoped by membership: call `workspace.Service.Require` before touching it (a foreign workspace looks unknown).
 - SQL goes through sqlc queries; schema changes go through new goose
   migrations (never edit an applied migration).
 - `unibot/` is our own framework code: modify it in place when a story says

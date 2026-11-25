@@ -11,6 +11,7 @@ export type CreateReminderRequest = components["schemas"]["CreateReminderRequest
 export type UpdateReminderRequest = components["schemas"]["UpdateReminderRequest"];
 export type TelegramAuthResponse = components["schemas"]["TelegramAuthResponse"];
 export type APIToken = components["schemas"]["APIToken"];
+export type Connection = components["schemas"]["Connection"];
 export type APITokenScope = components["schemas"]["APITokenScope"];
 export type CreateTokenRequest = components["schemas"]["CreateTokenRequest"];
 export type CreatedToken = components["schemas"]["CreatedToken"];

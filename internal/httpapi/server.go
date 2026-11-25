@@ -14,6 +14,7 @@ import (
 	"github.com/maksimkurb/cublyverse/internal/auth"
 	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/httpapi/gen"
+	"github.com/maksimkurb/cublyverse/internal/oauthserver"
 )
 
 const (
@@ -60,6 +61,15 @@ type AuthService interface {
 	RevokeAPIToken(ctx context.Context, principalID, id string) error
 }
 
+// ConnectionService lists and revokes OAuth authorizations of a user. The real
+// implementation is *oauthserver.Service.
+type ConnectionService interface {
+	// Grants lists the live authorizations of a user.
+	Grants(ctx context.Context, userID string) ([]oauthserver.Grant, error)
+	// RevokeGrant revokes one; false means unknown or foreign.
+	RevokeGrant(ctx context.Context, userID, grantID string) (bool, error)
+}
+
 // Deps are the collaborators the HTTP layer needs.
 type Deps struct {
 	// Version is reported by GET /api/v1/health.
@@ -87,6 +97,13 @@ type Deps struct {
 	// own personal access token authentication, so it is mounted outside the
 	// session middleware.
 	MCP http.Handler
+	// OAuth serves the authorization server of the MCP endpoint: /oauth/* and
+	// the /.well-known/ discovery documents. Nil when PUBLIC_BASE_URL is not
+	// set, in which case MCP accepts personal access tokens only.
+	OAuth http.Handler
+	// Connections backs the list of connected applications. Nil (OAuth
+	// disabled) makes the list empty.
+	Connections ConnectionService
 }
 
 // New builds the root HTTP handler: API, probes, documentation and the WebApp.
@@ -144,6 +161,11 @@ func New(deps Deps) http.Handler {
 	if deps.MCP != nil {
 		mux.Handle("/mcp", deps.MCP)
 		mux.Handle("/mcp/", deps.MCP)
+	}
+
+	if deps.OAuth != nil {
+		mux.Handle("/oauth/", deps.OAuth)
+		mux.Handle("/.well-known/", deps.OAuth)
 	}
 
 	mux.HandleFunc("GET /healthz", h.healthz)

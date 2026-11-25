@@ -16,12 +16,15 @@ import (
 	"github.com/maksimkurb/cublyverse/internal/auth"
 	"github.com/maksimkurb/cublyverse/internal/bot"
 	"github.com/maksimkurb/cublyverse/internal/config"
+	"github.com/maksimkurb/cublyverse/internal/features/craft"
 	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/httpapi"
 	"github.com/maksimkurb/cublyverse/internal/interaction/postgres"
 	"github.com/maksimkurb/cublyverse/internal/mcpserver"
+	"github.com/maksimkurb/cublyverse/internal/oauthserver"
 	"github.com/maksimkurb/cublyverse/internal/store"
 	"github.com/maksimkurb/cublyverse/internal/version"
+	"github.com/maksimkurb/cublyverse/internal/workspace"
 	unibot "github.com/maksimkurb/cublyverse/unibot"
 	matrixtransport "github.com/maksimkurb/cublyverse/unibot/platform/matrix"
 	telegramtransport "github.com/maksimkurb/cublyverse/unibot/platform/telegram"
@@ -106,7 +109,10 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	// problem never blocks a sign-in.
 	authService.Legacy = reminderService
 
-	registry := NewRegistry(reminders.NewFeature(reminderService, logger,
+	workspaces := workspace.New(st)
+	craftService := craft.New(st, workspaces)
+
+	registry := NewRegistry(craft.NewFeature(craftService), reminders.NewFeature(reminderService, logger,
 		reminders.WithTickInterval(cfg.RemindersTickIntervalOr()),
 		reminders.WithTimezoneLookup(func(ctx context.Context, principalID string) (string, error) {
 			profile, err := authService.Profile(ctx, principalID)
@@ -121,14 +127,28 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	// The MCP endpoint is PAT only: the token resolves to the same principal the
 	// HTTP API and the bot use, and the features register their tools through
 	// the registry.
-	mcpServer := mcpserver.New(mcpserver.Deps{
+	// OAuth for MCP clients needs the public URL: it is the issuer and the root
+	// of every resource identifier. Without it only personal tokens work.
+	var oauth *oauthserver.Service
+	mcpDeps := mcpserver.Deps{
 		Version: version.String(),
 		Logger:  logger,
 		Profile: authService.Profile,
 		Authenticate: func(ctx context.Context, r *http.Request) (auth.Session, bool) {
 			return authService.ResolveAPIToken(ctx, auth.BearerToken(r), r)
 		},
-	})
+		WorkspaceAccess: func(ctx context.Context, userID, workspaceID string) bool {
+			_, err := workspaces.Require(ctx, userID, workspaceID)
+			return err == nil
+		},
+	}
+	if cfg.PublicBaseURL != "" {
+		oauth = oauthserver.New(oauthserver.Config{Issuer: cfg.PublicBaseURL, Logger: logger}, st, authService, workspaces)
+		mcpDeps.OAuth = oauth
+	} else {
+		logger.Warn("PUBLIC_BASE_URL is empty: MCP OAuth is disabled, personal access tokens only")
+	}
+	mcpServer := mcpserver.New(mcpDeps)
 	registry.RegisterMCP(mcpServer)
 
 	interactions := postgres.New(st)
@@ -144,16 +164,24 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		delivery: delivery,
 	}
 
+	var oauthHandler http.Handler
+	var connections httpapi.ConnectionService
+	if oauth != nil {
+		oauthHandler = oauth.Handler()
+		connections = oauth
+	}
 	handler := httpapi.New(httpapi.Deps{
-		Version:   version.String(),
-		Logger:    logger,
-		Ready:     st.Ping,
-		Web:       webassets.Handler(),
-		Spec:      api.OpenAPISpec,
-		Auth:      authService,
-		AuthPages: authService.Handler(),
-		Reminders: reminderService,
-		MCP:       mcpServer.Handler(),
+		OAuth:       oauthHandler,
+		Connections: connections,
+		Version:     version.String(),
+		Logger:      logger,
+		Ready:       st.Ping,
+		Web:         webassets.Handler(),
+		Spec:        api.OpenAPISpec,
+		Auth:        authService,
+		AuthPages:   authService.Handler(),
+		Reminders:   reminderService,
+		MCP:         mcpServer.Handler(),
 	})
 
 	application.server = &http.Server{
@@ -173,6 +201,9 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	application.extraJobs = []Job{
 		authService.CleanupJob(),
 		interactions.CleanupJob(logger),
+	}
+	if oauth != nil {
+		application.extraJobs = append(application.extraJobs, oauth.CleanupJob())
 	}
 
 	return application, nil

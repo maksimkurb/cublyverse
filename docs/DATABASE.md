@@ -36,6 +36,9 @@ cublyverse migrate status
 | 00007 | `00007_reminders.sql` | `reminders` и `reminder_occurrences`, индексы и `CHECK`-и. |
 | 00008 | `00008_api_tokens.sql` | `api_tokens` — персональные токены. |
 | 00009 | `00009_legacy_reminders_import.sql` | `legacy_reminders_import` — комната ожидания импорта n8n. |
+| 00010 | `00010_workspaces.sql` | `workspaces`, `workspace_members` — общие пространства без ролей: участник имеет полный доступ. |
+| 00011 | `00011_craft.sql` | «Бусинки»: `craft_manufacturers`, `craft_categories` (13 типов материалов), `craft_catalog_items` (глобальные и частные позиции каталога), `craft_inventory` и `craft_inventory_log` (остатки workspace и их история), `craft_projects`, `craft_project_materials`, `craft_wishlist_items`, `craft_wishlist_links`. |
+| 00012 | `00012_oauth.sql` | `oauth_clients`, `oauth_codes`, `oauth_tokens` — собственный OAuth 2.1 сервер для MCP: клиенты (DCR и CIMD), одноразовые коды с PKCE, пары access/refresh с ротацией. |
 
 Нумерация не переиспользуется: следующая миграция — `00010_<тема>.sql`.
 `make check` сверяет, что каждый файл из `internal/store/migrations/*.sql`

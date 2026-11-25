@@ -11,6 +11,16 @@ ALTER TABLE workspaces
     ADD CONSTRAINT workspaces_app_check CHECK (app IN ('warehouse', 'reminders'));
 CREATE UNIQUE INDEX workspaces_personal_uidx ON workspaces (created_by, app) WHERE personal;
 
+-- The oldest existing warehouse of every creator becomes their personal one.
+UPDATE workspaces w
+SET personal = true
+WHERE w.id IN (
+    SELECT DISTINCT ON (created_by) id
+    FROM workspaces
+    WHERE created_by IS NOT NULL
+    ORDER BY created_by, created_at, id
+);
+
 -- Existing reminders move into a personal space of their author.
 INSERT INTO workspaces (name, created_by, app, personal)
 SELECT 'Личное', r.user_id, 'reminders', true

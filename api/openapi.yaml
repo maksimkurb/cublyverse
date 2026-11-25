@@ -919,57 +919,393 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /craft/categories:
+  /workspaces/{id}/reference:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
     get:
-      operationId: listCraftCategories
+      operationId: getCraftReference
       tags:
         - craft
-      summary: List material categories
+      summary: Warehouse reference data
       description: |
-        Returns the reference categories of the craft catalogue with their slug,
-        Russian name and default unit. They are the same for every workspace.
+        Categories with their extra fields, manufacturers, units and the official
+        catalogues of one warehouse.
       security:
         - bearerAuth: []
         - cookieAuth: []
       responses:
         "200":
-          description: Material categories.
+          description: The configuration of the warehouse.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/CraftCategory"
+                $ref: "#/components/schemas/CraftReference"
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
-  /craft/manufacturers:
-    get:
-      operationId: listCraftManufacturers
+  /workspaces/{id}/catalog-sources:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    put:
+      operationId: setCraftCatalogSources
       tags:
         - craft
-      summary: List manufacturers
+      summary: Connect official catalogues
       description: |
-        Returns the known manufacturers of craft materials. A workspace may also
-        create a manufacturer implicitly by naming it in a private item.
+        Replaces the set of official catalogues the warehouse searches. Connecting
+        one adds the category and unit its items need.
       security:
         - bearerAuth: []
         - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CraftCatalogSourcesInput"
       responses:
         "200":
-          description: Known manufacturers.
+          description: The official catalogues after the change.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/CraftManufacturer"
+                  $ref: "#/components/schemas/CraftCatalogSource"
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/categories:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    post:
+      operationId: createCraftCategory
+      tags:
+        - craft
+      summary: Create a category
+      description: |
+        Adds a category to the warehouse.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CraftCategoryInput"
+      responses:
+        "201":
+          description: The new category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftCategory"
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/categories/{ref_id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/CraftReferenceID"
+    put:
+      operationId: updateCraftCategory
+      tags:
+        - craft
+      summary: Change a category
+      description: |
+        Replaces the data of a category of the warehouse.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CraftCategoryInput"
+      responses:
+        "200":
+          description: The changed category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftCategory"
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteCraftCategory
+      tags:
+        - craft
+      summary: Delete a category
+      description: |
+        Removes a category that nothing uses; otherwise the answer is 400 and says why.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The category was deleted.
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/manufacturers:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    post:
+      operationId: createCraftManufacturer
+      tags:
+        - craft
+      summary: Create a manufacturer
+      description: |
+        Adds a manufacturer to the warehouse.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CraftManufacturerInput"
+      responses:
+        "201":
+          description: The new manufacturer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftManufacturer"
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/manufacturers/{ref_id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/CraftReferenceID"
+    put:
+      operationId: updateCraftManufacturer
+      tags:
+        - craft
+      summary: Change a manufacturer
+      description: |
+        Replaces the data of a manufacturer of the warehouse.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CraftManufacturerInput"
+      responses:
+        "200":
+          description: The changed manufacturer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftManufacturer"
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteCraftManufacturer
+      tags:
+        - craft
+      summary: Delete a manufacturer
+      description: |
+        Removes a manufacturer that nothing uses; otherwise the answer is 400 and says why.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The manufacturer was deleted.
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/units:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    post:
+      operationId: createCraftUnit
+      tags:
+        - craft
+      summary: Create a unit
+      description: |
+        Adds a unit to the warehouse.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CraftUnitInput"
+      responses:
+        "201":
+          description: The new unit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftUnit"
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{id}/units/{ref_id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+      - $ref: "#/components/parameters/CraftReferenceID"
+    put:
+      operationId: updateCraftUnit
+      tags:
+        - craft
+      summary: Change a unit
+      description: |
+        Replaces the data of a unit of the warehouse.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CraftUnitInput"
+      responses:
+        "200":
+          description: The changed unit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CraftUnit"
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteCraftUnit
+      tags:
+        - craft
+      summary: Delete a unit
+      description: |
+        Removes a unit that nothing uses; otherwise the answer is 400 and says why.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: The unit was deleted.
+        "400":
+          description: The data is invalid or the entry is still in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /workspaces/{id}/catalog:
     parameters:
@@ -2128,6 +2464,15 @@ components:
         type: string
         example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
 
+    CraftReferenceID:
+      name: ref_id
+      in: path
+      required: true
+      description: Id of a category, manufacturer or unit of the warehouse.
+      schema:
+        type: string
+        example: 8a3b1c2d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+
     CraftItemID:
       name: item_id
       in: path
@@ -3236,6 +3581,16 @@ components:
         - name
         - app
       properties:
+        template:
+          type: string
+          enum:
+            - craft
+            - empty
+          description: |
+            Starting content of a new warehouse: `craft` (default) has the
+            needlework categories, units and official catalogues, `empty` has
+            one unit. Ignored for other mini-apps.
+          example: craft
         app:
           $ref: "#/components/schemas/SpaceApp"
         name:
@@ -3277,15 +3632,51 @@ components:
             current member again succeeds without a change.
           example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
 
+    CraftField:
+      type: object
+      additionalProperties: false
+      description: An extra field of the items of a category.
+      required:
+        - label
+        - type
+      properties:
+        key:
+          type: string
+          description: Name of the value in item `attrs`; omit for a new field.
+          example: f-1a2b3c4d5e
+        label:
+          type: string
+          description: Label shown to people.
+          example: Длина мотка, м
+        type:
+          type: string
+          enum:
+            - text
+            - number
+            - bool
+            - select
+          description: Kind of the value.
+          example: number
+        options:
+          type: array
+          description: Allowed values of a `select` field.
+          items:
+            type: string
+            description: One option.
+          example: [матовый, глянцевый]
+
     CraftCategory:
       type: object
       additionalProperties: false
-      description: A kind of craft material.
+      description: A kind of material of one warehouse.
       required:
         - id
         - slug
         - name
         - default_unit
+        - fields
+        - catalog_slug
+        - own_items
       properties:
         id:
           type: string
@@ -3297,7 +3688,7 @@ components:
           example: pearls
         name:
           type: string
-          description: Russian name shown to the user.
+          description: Name shown to the user.
           example: Жемчуг
         default_unit:
           type: string
@@ -3305,15 +3696,56 @@ components:
             Unit an item of this category is counted in when it does not name
             one.
           example: шт
+        fields:
+          type: array
+          description: Extra fields of the items.
+          items:
+            $ref: "#/components/schemas/CraftField"
+        catalog_slug:
+          type: string
+          description: Set when items of an official catalogue are shown under this category.
+          example: ""
+        own_items:
+          type: integer
+          description: Number of the warehouse's own items in the category.
+          example: 3
+
+    CraftCategoryInput:
+      type: object
+      additionalProperties: false
+      description: Editable data of a category.
+      required:
+        - name
+        - default_unit
+        - fields
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Name, unique in the warehouse.
+          example: Лента
+        default_unit:
+          type: string
+          description: A unit of the warehouse.
+          example: м
+        fields:
+          type: array
+          maxItems: 20
+          description: All extra fields of the category.
+          items:
+            $ref: "#/components/schemas/CraftField"
 
     CraftManufacturer:
       type: object
       additionalProperties: false
-      description: A producer of craft material.
+      description: A producer of materials.
       required:
         - id
         - name
         - website
+        - official
+        - own_items
       properties:
         id:
           type: string
@@ -3327,6 +3759,137 @@ components:
           type: string
           description: Manufacturer website; empty when unknown.
           example: https://www.preciosa.com
+        official:
+          type: boolean
+          description: From a connected official catalogue, read-only.
+          example: false
+        own_items:
+          type: integer
+          description: Number of the warehouse's own items of the manufacturer.
+          example: 2
+
+    CraftManufacturerInput:
+      type: object
+      additionalProperties: false
+      description: Editable data of a manufacturer.
+      required:
+        - name
+        - website
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Name, unique among own manufacturers.
+          example: Gamma
+        website:
+          type: string
+          description: An http(s) address, or empty.
+          example: https://www.example.com
+
+    CraftUnit:
+      type: object
+      additionalProperties: false
+      description: A unit stock can be counted in.
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          description: Unit id (UUID).
+          example: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+        name:
+          type: string
+          description: Unit name.
+          example: моток
+
+    CraftUnitInput:
+      type: object
+      additionalProperties: false
+      description: Editable data of a unit.
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 24
+          description: Name, unique in the warehouse. A rename follows into own items.
+          example: катушка
+
+    CraftCatalogSource:
+      type: object
+      additionalProperties: false
+      description: An official catalogue a warehouse can connect.
+      required:
+        - source
+        - name
+        - enabled
+        - items
+      properties:
+        source:
+          type: string
+          description: Key of the catalogue.
+          example: dmc
+        name:
+          type: string
+          description: Name shown to the user.
+          example: DMC (мулине)
+        enabled:
+          type: boolean
+          description: Connected to this warehouse.
+          example: true
+        items:
+          type: integer
+          description: Number of positions in the catalogue.
+          example: 508
+
+    CraftCatalogSourcesInput:
+      type: object
+      additionalProperties: false
+      description: The official catalogues to keep connected.
+      required:
+        - sources
+      properties:
+        sources:
+          type: array
+          description: Catalogue keys; an empty list disconnects all.
+          items:
+            type: string
+            description: One catalogue key.
+          example: [dmc, preciosa]
+
+    CraftReference:
+      type: object
+      additionalProperties: false
+      description: The configuration of one warehouse.
+      required:
+        - categories
+        - manufacturers
+        - units
+        - catalogs
+      properties:
+        categories:
+          type: array
+          description: Categories of the warehouse.
+          items:
+            $ref: "#/components/schemas/CraftCategory"
+        manufacturers:
+          type: array
+          description: Own and connected official manufacturers.
+          items:
+            $ref: "#/components/schemas/CraftManufacturer"
+        units:
+          type: array
+          description: Units of the warehouse.
+          items:
+            $ref: "#/components/schemas/CraftUnit"
+        catalogs:
+          type: array
+          description: Official catalogues.
+          items:
+            $ref: "#/components/schemas/CraftCatalogSource"
 
     CraftItem:
       type: object
@@ -3474,7 +4037,7 @@ components:
       properties:
         category:
           type: string
-          description: Category slug, see `/craft/categories`.
+          description: Category slug (or name) of the warehouse.
           example: pearls
         manufacturer:
           type: string

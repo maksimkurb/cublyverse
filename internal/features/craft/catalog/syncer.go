@@ -157,7 +157,7 @@ func (s *Syncer) Run(ctx context.Context, source Source) (Result, error) {
 		for _, entry := range entries {
 			category, ok := categories[entry.Category]
 			if !ok {
-				row, err := q.GetCraftCategoryBySlug(ctx, entry.Category)
+				row, err := q.GetReferenceCraftCategoryBySlug(ctx, entry.Category)
 				if errors.Is(err, pgx.ErrNoRows) {
 					return fmt.Errorf("unknown category %q", entry.Category)
 				}

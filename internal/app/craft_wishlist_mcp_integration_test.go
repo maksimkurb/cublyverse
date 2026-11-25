@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/maksimkurb/cublyverse/internal/auth"
-	"github.com/maksimkurb/cublyverse/internal/store/db"
+	"github.com/maksimkurb/cublyverse/internal/features/craft"
 	"github.com/maksimkurb/cublyverse/internal/workspace"
 )
 
@@ -15,14 +15,10 @@ import (
 func TestCraftWishlistAndProjectsMCP(t *testing.T) {
 	env := newMCPTestApp(t)
 	ctx := context.Background()
-	q := env.app.Store().Queries()
 
-	owner, _ := workspace.ParseID(env.user.ID)
-	ws, err := q.CreateWorkspace(ctx, db.CreateWorkspaceParams{Name: "Дом", CreatedBy: owner, App: workspace.AppWarehouse})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := q.AddWorkspaceMember(ctx, db.AddWorkspaceMemberParams{WorkspaceID: ws.ID, UserID: owner, AddedBy: owner}); err != nil {
+	spaces := workspace.New(env.app.Store())
+	craft.New(env.app.Store(), spaces) // new warehouses start from a template
+	if _, err := spaces.Create(ctx, env.user.ID, workspace.AppWarehouse, "Дом"); err != nil {
 		t.Fatal(err)
 	}
 	const path = "/mcp"

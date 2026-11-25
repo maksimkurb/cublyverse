@@ -79,11 +79,11 @@ func mustIdentity(t *testing.T, st *store.Store, article string) db.GetGlobalCra
 	t.Helper()
 	ctx := context.Background()
 	q := st.Queries()
-	category, err := q.GetCraftCategoryBySlug(ctx, catalog.CategorySeedBeads)
+	category, err := q.GetReferenceCraftCategoryBySlug(ctx, catalog.CategorySeedBeads)
 	if err != nil {
 		t.Fatalf("get category: %v", err)
 	}
-	manufacturer, err := q.GetCraftManufacturerByName(ctx, catalog.ManufacturerPreciosa)
+	manufacturer, err := q.UpsertCraftManufacturer(ctx, db.UpsertCraftManufacturerParams{Name: catalog.ManufacturerPreciosa})
 	if err != nil {
 		t.Fatalf("get manufacturer: %v", err)
 	}

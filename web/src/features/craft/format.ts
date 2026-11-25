@@ -1,8 +1,5 @@
 import type { CraftItem, CraftStockEntry } from "../../api/client";
 
-/** Units the server accepts; the same list as `craft.Units`. */
-export const UNITS = ["шт", "г", "моток", "м", "см", "упаковка", "набор"] as const;
-
 /** Formats a quantity without trailing zeros, in the Russian locale. */
 export function formatQty(value: number): string {
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 3 }).format(value);

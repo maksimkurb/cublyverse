@@ -43,13 +43,7 @@ func writeAnnotations(title string, destructive, idempotent bool) *mcp.ToolAnnot
 // registerMCP adds the warehouse tools. Each takes an optional space argument
 // naming the warehouse it works with.
 func (f *Feature) registerMCP(server *mcpserver.Server) {
-	mcpserver.AddTool(server, &mcp.Tool{
-		Name: toolReference, Title: "Craft reference data",
-		Description: "List the material categories (slug, name, default unit) and the known " +
-			"manufacturers of the craft supplies catalogue. Call it first to learn the valid " +
-			"category slugs and units before searching or creating items.",
-		Annotations: readAnnotations("Craft reference data"),
-	}, f.mcpReference)
+	f.registerReferenceMCP(server)
 
 	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolSearch, Title: "Search the catalogue",
@@ -176,19 +170,9 @@ type mcpSpace struct {
 	Space string `json:"space,omitempty" jsonschema:"warehouse space id or name (see spaces_list); may be omitted when the user has exactly one"`
 }
 
-type mcpReferenceOutput struct {
-	Categories []struct {
-		Slug        string `json:"slug" jsonschema:"category slug to use in filters and item data"`
-		Name        string `json:"name" jsonschema:"category name in Russian"`
-		DefaultUnit string `json:"default_unit" jsonschema:"unit used when an item does not name one"`
-	} `json:"categories" jsonschema:"all material categories"`
-	Manufacturers []string `json:"manufacturers" jsonschema:"known manufacturer names"`
-	Units         []string `json:"units" jsonschema:"every valid unit"`
-}
-
 type mcpFilter struct {
 	mcpSpace
-	Category     string `json:"category,omitempty" jsonschema:"category slug, see craft_reference"`
+	Category     string `json:"category,omitempty" jsonschema:"category slug or name, see craft_reference"`
 	Manufacturer string `json:"manufacturer,omitempty" jsonschema:"manufacturer name, case-insensitive exact match"`
 	Query        string `json:"query,omitempty" jsonschema:"article prefix or part of the name or colour name"`
 	Limit        int    `json:"limit,omitempty" jsonschema:"page size 1..200, default 50"`
@@ -240,8 +224,8 @@ type mcpRemoveOutput struct {
 }
 
 type mcpItemData struct {
-	Category     string         `json:"category" jsonschema:"category slug, see craft_reference"`
-	Manufacturer string         `json:"manufacturer,omitempty" jsonschema:"manufacturer name; created when unknown"`
+	Category     string         `json:"category" jsonschema:"category slug or name, see craft_reference"`
+	Manufacturer string         `json:"manufacturer,omitempty" jsonschema:"manufacturer name; created in the warehouse when unknown"`
 	Article      string         `json:"article,omitempty" jsonschema:"article number"`
 	Series       string         `json:"series,omitempty" jsonschema:"series or variety"`
 	Name         string         `json:"name,omitempty" jsonschema:"item name; defaults to manufacturer + article"`
@@ -252,7 +236,7 @@ type mcpItemData struct {
 	Finish       string         `json:"finish,omitempty" jsonschema:"finish or coating, free text"`
 	Unit         string         `json:"unit,omitempty" jsonschema:"unit; the category default when omitted"`
 	PackSize     *float64       `json:"pack_size,omitempty" jsonschema:"how many base units one pack holds"`
-	Attrs        map[string]any `json:"attrs,omitempty" jsonschema:"category specific attributes"`
+	Attrs        map[string]any `json:"attrs,omitempty" jsonschema:"values of the category's extra fields by key, see craft_reference"`
 }
 
 func (d mcpItemData) input() ItemInput {
@@ -302,34 +286,6 @@ func (f *Feature) access(ctx context.Context, scope, space string) (userID, work
 		return "", "", mcpError(err)
 	}
 	return principal.ID, resolved, nil
-}
-
-func (f *Feature) mcpReference(ctx context.Context, _ *mcp.CallToolRequest, in mcpSpace) (*mcp.CallToolResult, mcpReferenceOutput, error) {
-	if _, _, err := f.access(ctx, auth.ScopeCraftRead, in.Space); err != nil {
-		return nil, mcpReferenceOutput{}, err
-	}
-	var out mcpReferenceOutput
-	cats, err := f.service.Categories(ctx)
-	if err != nil {
-		return nil, out, mcpError(err)
-	}
-	for _, c := range cats {
-		out.Categories = append(out.Categories, struct {
-			Slug        string `json:"slug" jsonschema:"category slug to use in filters and item data"`
-			Name        string `json:"name" jsonschema:"category name in Russian"`
-			DefaultUnit string `json:"default_unit" jsonschema:"unit used when an item does not name one"`
-		}{c.Slug, c.Name, c.DefaultUnit})
-	}
-	ms, err := f.service.Manufacturers(ctx)
-	if err != nil {
-		return nil, out, mcpError(err)
-	}
-	out.Manufacturers = make([]string, 0, len(ms))
-	for _, m := range ms {
-		out.Manufacturers = append(out.Manufacturers, m.Name)
-	}
-	out.Units = Units
-	return nil, out, nil
 }
 
 func (f *Feature) mcpSearch(ctx context.Context, _ *mcp.CallToolRequest, in mcpSearchInput) (*mcp.CallToolResult, mcpItemsOutput, error) {

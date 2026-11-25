@@ -143,18 +143,20 @@ func (q *Queries) IncrementCraftProjectMaterialUsed(ctx context.Context, arg Inc
 const listCraftProjectMaterials = `-- name: ListCraftProjectMaterials :many
 SELECT pm.project_id, pm.catalog_item_id, pm.qty_planned, pm.qty_used,
        i.id, i.workspace_id, i.category_id, i.manufacturer_id, i.article, i.series, i.name, i.color_name, i.color_hex, i.color_source, i.size, i.finish, i.unit, i.pack_size, i.attrs, i.source, i.source_url, i.image_url, i.external_id, i.fetched_at, i.manual_override, i.deprecated_at, i.created_at, i.updated_at,
-       c.slug  AS category_slug,
-       c.name  AS category_name,
+       COALESCE(sc.slug, rc.slug)::text AS category_slug,
+       COALESCE(sc.name, rc.name)::text AS category_name,
        m.name  AS manufacturer_name,
        COALESCE(inv.qty, 0)::numeric(12,3) AS stock_qty,
        (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory
 FROM craft_project_materials pm
 JOIN craft_catalog_items i ON i.id = pm.catalog_item_id
-JOIN craft_categories c ON c.id = i.category_id
+JOIN craft_categories rc ON rc.id = i.category_id
+LEFT JOIN craft_categories sc
+       ON sc.workspace_id = $1::uuid AND i.workspace_id IS NULL AND sc.catalog_slug = rc.slug
 LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 LEFT JOIN craft_inventory inv ON inv.catalog_item_id = i.id AND inv.workspace_id = $1::uuid
 WHERE pm.project_id = $2
-ORDER BY c.sort_order, m.name NULLS LAST, i.article, i.name
+ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 `
 
 type ListCraftProjectMaterialsParams struct {

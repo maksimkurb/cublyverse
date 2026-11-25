@@ -86,8 +86,10 @@ type CraftCategory struct {
 	Slug        string      `json:"slug"`
 	Name        string      `json:"name"`
 	DefaultUnit string      `json:"default_unit"`
-	AttrSchema  []byte      `json:"attr_schema"`
 	SortOrder   int32       `json:"sort_order"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	CatalogSlug string      `json:"catalog_slug"`
+	Fields      []byte      `json:"fields"`
 }
 
 type CraftInventory struct {
@@ -113,11 +115,12 @@ type CraftInventoryLog struct {
 }
 
 type CraftManufacturer struct {
-	ID        pgtype.UUID `json:"id"`
-	Name      string      `json:"name"`
-	Website   string      `json:"website"`
-	Notes     string      `json:"notes"`
-	CreatedAt time.Time   `json:"created_at"`
+	ID          pgtype.UUID `json:"id"`
+	Name        string      `json:"name"`
+	Website     string      `json:"website"`
+	Notes       string      `json:"notes"`
+	CreatedAt   time.Time   `json:"created_at"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
 }
 
 type CraftProject struct {
@@ -133,6 +136,18 @@ type CraftProjectMaterial struct {
 	CatalogItemID pgtype.UUID    `json:"catalog_item_id"`
 	QtyPlanned    pgtype.Numeric `json:"qty_planned"`
 	QtyUsed       pgtype.Numeric `json:"qty_used"`
+}
+
+type CraftSpaceCatalog struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Source      string      `json:"source"`
+}
+
+type CraftUnit struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Name        string      `json:"name"`
+	SortOrder   int32       `json:"sort_order"`
 }
 
 type CraftWishlistItem struct {

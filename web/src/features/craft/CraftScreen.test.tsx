@@ -7,9 +7,10 @@ import CraftScreen from "./CraftScreen";
 import {
   useAdjustCraftStock,
   useCraftCatalog,
-  useCraftCategories,
+  useCraftReference,
   useCraftInventory,
-  useCraftManufacturers,
+  useDeleteCraftItem,
+  useUpdateCraftItem,
   useCreateCraftItem,
   useLinkCraftItem,
   useRemoveCraftStock,
@@ -29,13 +30,15 @@ vi.mock("../workspaces/selection", () => ({
 }));
 
 vi.mock("../workspaces/SpaceBar", () => ({ SpaceBar: () => null }));
+vi.mock("./WarehouseSettings", () => ({ WarehouseSettings: () => null }));
 
 vi.mock("./data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./data")>();
   return {
     ...actual,
-    useCraftCategories: vi.fn(),
-    useCraftManufacturers: vi.fn(),
+    useCraftReference: vi.fn(),
+    useDeleteCraftItem: vi.fn(),
+    useUpdateCraftItem: vi.fn(),
     useCraftCatalog: vi.fn(),
     useCraftInventory: vi.fn(),
     useAdjustCraftStock: vi.fn(),
@@ -48,8 +51,7 @@ vi.mock("./data", async (importOriginal) => {
   };
 });
 
-const categoriesMock = vi.mocked(useCraftCategories);
-const manufacturersMock = vi.mocked(useCraftManufacturers);
+const referenceMock = vi.mocked(useCraftReference);
 const inventoryMock = vi.mocked(useCraftInventory);
 const catalogMock = vi.mocked(useCraftCatalog);
 const adjustMock = vi.mocked(useAdjustCraftStock);
@@ -80,8 +82,18 @@ function mutation(result: unknown = undefined): MutationStub {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(useWishes).mockReturnValue(queryResult({ data: [] }));
-  categoriesMock.mockReturnValue(queryResult({ data: [makeCategory()] }));
-  manufacturersMock.mockReturnValue(queryResult({ data: [] }));
+  referenceMock.mockReturnValue(
+    queryResult({
+      data: {
+        categories: [makeCategory({ fields: [{ key: "f-len", label: "Длина, мм", type: "number" }] })],
+        manufacturers: [],
+        units: [{ id: "u1", name: "шт" }],
+        catalogs: [],
+      },
+    }),
+  );
+  vi.mocked(useDeleteCraftItem).mockReturnValue(mutation() as never);
+  vi.mocked(useUpdateCraftItem).mockReturnValue(mutation() as never);
   inventoryMock.mockReturnValue(queryResult({ data: [] }));
   catalogMock.mockReturnValue(queryResult({ data: [] }));
   adjustMock.mockReturnValue(mutation() as never);
@@ -168,12 +180,13 @@ describe("CraftScreen", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Новая позиция" }));
     fireEvent.change(screen.getByLabelText("Название"), { target: { value: "Жемчуг розовый" } });
     fireEvent.change(screen.getByLabelText("Цвет"), { target: { value: "#ff00aa" } });
+    fireEvent.change(screen.getByLabelText("Длина, мм"), { target: { value: "2,5" } });
     fireEvent.click(screen.getByRole("button", { name: "Создать позицию" }));
 
     await waitFor(() => expect(create.mutateAsync).toHaveBeenCalledTimes(1));
     expect(create.mutateAsync.mock.calls[0][0]).toMatchObject({
       params: { path: { id: makeWorkspace().id } },
-      body: { category: "pearls", name: "Жемчуг розовый", color_hex: "#FF00AA", unit: "шт" },
+      body: { category: "pearls", name: "Жемчуг розовый", color_hex: "#FF00AA", unit: "шт", attrs: { "f-len": 2.5 } },
     });
   });
 

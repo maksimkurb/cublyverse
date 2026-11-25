@@ -1,19 +1,14 @@
--- name: ListCraftCategories :many
+-- name: GetReferenceCraftCategoryBySlug :one
+-- A category of the official catalogues.
 SELECT * FROM craft_categories
-ORDER BY sort_order, name;
-
--- name: GetCraftCategoryBySlug :one
-SELECT * FROM craft_categories
-WHERE slug = $1;
-
--- name: ListCraftManufacturers :many
-SELECT * FROM craft_manufacturers
-ORDER BY name;
+WHERE workspace_id IS NULL
+  AND slug = $1;
 
 -- name: UpsertCraftManufacturer :one
+-- A manufacturer of the official catalogues.
 INSERT INTO craft_manufacturers (name, website, notes)
 VALUES ($1, $2, $3)
-ON CONFLICT (name) DO UPDATE
+ON CONFLICT (COALESCE(workspace_id, '00000000-0000-0000-0000-000000000000'), lower(name)) DO UPDATE
 SET website = CASE WHEN EXCLUDED.website <> '' THEN EXCLUDED.website ELSE craft_manufacturers.website END,
     notes   = CASE WHEN EXCLUDED.notes <> '' THEN EXCLUDED.notes ELSE craft_manufacturers.notes END
 RETURNING *;
@@ -67,41 +62,52 @@ WHERE id = $1
 -- Catalogue search over the global catalogue plus the workspace's own items.
 -- Empty text filters mean "any". only_in_stock limits the result to items that are in stock.
 SELECT i.*,
-       c.slug  AS category_slug,
-       c.name  AS category_name,
+       COALESCE(sc.slug, rc.slug)::text AS category_slug,
+       COALESCE(sc.name, rc.name)::text AS category_name,
        m.name  AS manufacturer_name,
        COALESCE(inv.qty, 0)::numeric(12,3) AS stock_qty,
        (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory
 FROM craft_catalog_items i
-JOIN craft_categories c ON c.id = i.category_id
+JOIN craft_categories rc ON rc.id = i.category_id
+LEFT JOIN craft_categories sc
+       ON sc.workspace_id = sqlc.arg(workspace_id)::uuid AND i.workspace_id IS NULL AND sc.catalog_slug = rc.slug
 LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 LEFT JOIN craft_inventory inv
        ON inv.catalog_item_id = i.id AND inv.workspace_id = sqlc.arg(workspace_id)::uuid
-WHERE (i.workspace_id IS NULL OR i.workspace_id = sqlc.arg(workspace_id)::uuid)
+WHERE (
+        i.workspace_id = sqlc.arg(workspace_id)::uuid
+        OR (i.workspace_id IS NULL AND EXISTS (
+                SELECT 1 FROM craft_space_catalogs sources
+                WHERE sources.workspace_id = sqlc.arg(workspace_id)::uuid AND sources.source = i.source
+            ))
+      )
   AND i.deprecated_at IS NULL
-  AND (sqlc.arg(category)::text = '' OR c.slug = sqlc.arg(category))
+  AND (sqlc.arg(category)::text = '' OR COALESCE(sc.slug, rc.slug) = sqlc.arg(category))
   AND (sqlc.arg(manufacturer)::text = '' OR m.name ILIKE sqlc.arg(manufacturer))
   AND (sqlc.arg(query)::text = '' OR i.article ILIKE sqlc.arg(query) || '%' OR i.name ILIKE '%' || sqlc.arg(query) || '%' OR i.color_name ILIKE '%' || sqlc.arg(query) || '%')
   AND (sqlc.arg(only_in_stock)::boolean = false OR inv.catalog_item_id IS NOT NULL)
-ORDER BY c.sort_order, m.name NULLS LAST, i.article, i.name
+ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: ListCraftInventory :many
 SELECT inv.workspace_id, inv.catalog_item_id, inv.qty, inv.location, inv.notes, inv.updated_at,
        i.name, i.article, i.series, i.color_name, i.color_hex, i.color_source,
        i.size, i.finish, i.unit, i.pack_size, i.workspace_id AS item_workspace_id,
-       c.slug AS category_slug, c.name AS category_name,
+       COALESCE(sc.slug, rc.slug)::text AS category_slug,
+       COALESCE(sc.name, rc.name)::text AS category_name,
        m.name AS manufacturer_name
 FROM craft_inventory inv
 JOIN craft_catalog_items i ON i.id = inv.catalog_item_id
-JOIN craft_categories c ON c.id = i.category_id
+JOIN craft_categories rc ON rc.id = i.category_id
+LEFT JOIN craft_categories sc
+       ON sc.workspace_id = inv.workspace_id AND i.workspace_id IS NULL AND sc.catalog_slug = rc.slug
 LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 WHERE inv.workspace_id = sqlc.arg(workspace_id)::uuid
-  AND (sqlc.arg(category)::text = '' OR c.slug = sqlc.arg(category))
+  AND (sqlc.arg(category)::text = '' OR COALESCE(sc.slug, rc.slug) = sqlc.arg(category))
   AND (sqlc.arg(manufacturer)::text = '' OR m.name ILIKE sqlc.arg(manufacturer))
   AND (sqlc.arg(query)::text = '' OR i.article ILIKE sqlc.arg(query) || '%' OR i.name ILIKE '%' || sqlc.arg(query) || '%' OR i.color_name ILIKE '%' || sqlc.arg(query) || '%')
   AND (sqlc.narg(max_qty)::numeric IS NULL OR inv.qty <= sqlc.narg(max_qty))
-ORDER BY c.sort_order, m.name NULLS LAST, i.article, i.name
+ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: LockCraftInventoryRow :one
@@ -181,10 +187,14 @@ SELECT * FROM craft_inventory
 WHERE workspace_id = $1
   AND catalog_item_id = $2;
 
--- name: GetCraftCategory :one
-SELECT * FROM craft_categories
-WHERE id = $1;
-
--- name: GetCraftManufacturerByName :one
-SELECT * FROM craft_manufacturers
-WHERE lower(name) = lower($1);
+-- name: GetCraftItemLabels :one
+-- How a warehouse names the category and manufacturer of an item.
+SELECT COALESCE(sc.slug, rc.slug)::text AS category_slug,
+       COALESCE(sc.name, rc.name)::text AS category_name,
+       m.name AS manufacturer_name
+FROM craft_catalog_items i
+JOIN craft_categories rc ON rc.id = i.category_id
+LEFT JOIN craft_categories sc
+       ON sc.workspace_id = sqlc.arg(workspace_id)::uuid AND i.workspace_id IS NULL AND sc.catalog_slug = rc.slug
+LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
+WHERE i.id = sqlc.arg(id)::uuid;

@@ -1486,6 +1486,22 @@ ul {
   margin: 0 0 16px;
 }
 
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+}
+
 .space-onboarding {
   padding: 16px;
 }

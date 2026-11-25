@@ -1,5 +1,6 @@
-// Package craft implements the craft supplies feature ("Бусинки"): a catalogue
-// of materials, the stock a workspace holds, its projects and a wish list.
+// Package craft implements the warehouse mini-app: configurable reference data,
+// a catalogue of materials, the stock a space holds, its projects and a wish
+// list.
 //
 // Authorisation is by workspace membership: every method takes the id of the
 // acting user and the workspace and first calls workspace.Service.Require, so a
@@ -29,9 +30,6 @@ import (
 	"github.com/maksimkurb/cublyverse/internal/workspace"
 )
 
-// Units are the measurement units an item can be counted in.
-var Units = []string{"шт", "г", "моток", "м", "см", "упаковка", "набор"}
-
 // Page size bounds for list endpoints.
 const (
 	DefaultLimit = 50
@@ -59,22 +57,6 @@ func invalid(format string, args ...any) error {
 }
 
 var hexColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
-
-// Category is a kind of material.
-type Category struct {
-	ID          string
-	Slug        string
-	Name        string
-	DefaultUnit string
-	AttrSchema  json.RawMessage
-}
-
-// Manufacturer is a producer of materials.
-type Manufacturer struct {
-	ID      string
-	Name    string
-	Website string
-}
 
 // Item is a catalogue entry.
 type Item struct {
@@ -163,35 +145,10 @@ type Service struct {
 	workspaces *workspace.Service
 }
 
-// New returns the service.
+// New returns the service and makes new warehouses start from a template.
 func New(st *store.Store, workspaces *workspace.Service) *Service {
+	workspaces.OnCreate(workspace.AppWarehouse, seedWarehouse)
 	return &Service{st: st, workspaces: workspaces}
-}
-
-// Categories lists the material categories.
-func (s *Service) Categories(ctx context.Context) ([]Category, error) {
-	rows, err := s.st.Queries().ListCraftCategories(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list categories: %w", err)
-	}
-	out := make([]Category, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, toCategory(r))
-	}
-	return out, nil
-}
-
-// Manufacturers lists the known manufacturers.
-func (s *Service) Manufacturers(ctx context.Context) ([]Manufacturer, error) {
-	rows, err := s.st.Queries().ListCraftManufacturers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list manufacturers: %w", err)
-	}
-	out := make([]Manufacturer, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, Manufacturer{ID: workspace.FormatID(r.ID), Name: r.Name, Website: r.Website})
-	}
-	return out, nil
 }
 
 // SearchCatalog searches the global catalogue and the workspace's own items.
@@ -245,7 +202,7 @@ func (s *Service) CreateItem(ctx context.Context, userID, workspaceID string, in
 	}
 	var created db.CraftCatalogItem
 	err = s.st.InTx(ctx, func(q *db.Queries) error {
-		params, err := s.itemParams(ctx, q, in)
+		params, err := s.itemParams(ctx, q, wid, in)
 		if err != nil {
 			return err
 		}
@@ -283,7 +240,7 @@ func (s *Service) UpdateItem(ctx context.Context, userID, workspaceID, itemID st
 		if !existing.WorkspaceID.Valid {
 			return ErrReadOnly
 		}
-		params, err := s.itemParams(ctx, q, in)
+		params, err := s.itemParams(ctx, q, wid, in)
 		if err != nil {
 			return err
 		}
@@ -550,23 +507,11 @@ func (s *Service) loadItem(ctx context.Context, q *db.Queries, wid pgtype.UUID, 
 	if err != nil {
 		return Item{}, err
 	}
-	category, err := q.GetCraftCategory(ctx, row.CategoryID)
+	labels, err := q.GetCraftItemLabels(ctx, db.GetCraftItemLabelsParams{ID: iid, WorkspaceID: wid})
 	if err != nil {
-		return Item{}, fmt.Errorf("get category: %w", err)
+		return Item{}, fmt.Errorf("get item labels: %w", err)
 	}
-	manufacturer := ""
-	if row.ManufacturerID.Valid {
-		all, err := q.ListCraftManufacturers(ctx)
-		if err != nil {
-			return Item{}, fmt.Errorf("list manufacturers: %w", err)
-		}
-		for _, m := range all {
-			if m.ID == row.ManufacturerID {
-				manufacturer = m.Name
-			}
-		}
-	}
-	item := itemFromRow(row, category.Slug, category.Name, manufacturer)
+	item := itemFromRow(row, labels.CategorySlug, labels.CategoryName, deref(labels.ManufacturerName))
 	if stock, err := q.GetCraftInventory(ctx, db.GetCraftInventoryParams{WorkspaceID: wid, CatalogItemID: iid}); err == nil {
 		item.StockQty = numFloat(stock.Qty)
 		item.InInventory = true
@@ -587,11 +532,11 @@ type itemParamsResult struct {
 	source         string
 }
 
-// itemParams validates an item input and resolves the category and
-// manufacturer.
-func (s *Service) itemParams(ctx context.Context, q *db.Queries, in ItemInput) (itemParamsResult, error) {
+// itemParams validates an item input and resolves the category, manufacturer
+// and unit among those of the warehouse.
+func (s *Service) itemParams(ctx context.Context, q *db.Queries, wid pgtype.UUID, in ItemInput) (itemParamsResult, error) {
 	var out itemParamsResult
-	category, err := q.GetCraftCategoryBySlug(ctx, strings.TrimSpace(in.Category))
+	category, err := q.FindCraftCategory(ctx, db.FindCraftCategoryParams{WorkspaceID: wid, Ref: strings.TrimSpace(in.Category)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, invalid("Неизвестная категория «%s».", in.Category)
 	}
@@ -601,9 +546,16 @@ func (s *Service) itemParams(ctx context.Context, q *db.Queries, in ItemInput) (
 	out.category = category
 
 	if m := strings.TrimSpace(in.Manufacturer); m != "" {
-		row, err := q.UpsertCraftManufacturer(ctx, db.UpsertCraftManufacturerParams{Name: m})
+		// An own or official manufacturer of the name, else a new own one.
+		row, err := q.FindCraftManufacturer(ctx, db.FindCraftManufacturerParams{WorkspaceID: wid, Name: m})
+		if errors.Is(err, pgx.ErrNoRows) {
+			if utf8.RuneCountInString(m) > maxNameRunes {
+				return out, invalid("Название производителя слишком длинное.")
+			}
+			row, err = q.CreateCraftManufacturer(ctx, db.CreateCraftManufacturerParams{WorkspaceID: wid, Name: m})
+		}
 		if err != nil {
-			return out, fmt.Errorf("upsert manufacturer: %w", err)
+			return out, fmt.Errorf("resolve manufacturer: %w", err)
 		}
 		out.manufacturerID = row.ID
 	}
@@ -635,8 +587,8 @@ func (s *Service) itemParams(ctx context.Context, q *db.Queries, in ItemInput) (
 	if out.unit == "" {
 		out.unit = category.DefaultUnit
 	}
-	if !validUnit(out.unit) {
-		return out, invalid("Неизвестная единица «%s».", out.unit)
+	if out.unit, err = s.unitName(ctx, q, wid, out.unit); err != nil {
+		return out, err
 	}
 	if in.PackSize != nil {
 		if *in.PackSize <= 0 {
@@ -647,6 +599,9 @@ func (s *Service) itemParams(ctx context.Context, q *db.Queries, in ItemInput) (
 	attrs := in.Attrs
 	if attrs == nil {
 		attrs = map[string]any{}
+	}
+	if err := checkAttrs(toCategory(category).Fields, attrs); err != nil {
+		return out, err
 	}
 	if out.attrs, err = json.Marshal(attrs); err != nil {
 		return out, invalid("Некорректные атрибуты.")
@@ -757,15 +712,6 @@ func (s *Service) stockEntry(ctx context.Context, wid, iid pgtype.UUID) (StockEn
 	return StockEntry{Item: item, Qty: numFloat(row.Qty), Location: row.Location, Notes: row.Notes, UpdatedAt: row.UpdatedAt}, nil
 }
 
-func validUnit(unit string) bool {
-	for _, u := range Units {
-		if u == unit {
-			return true
-		}
-	}
-	return false
-}
-
 func page(limit, offset int) (int32, int32) {
 	if limit <= 0 {
 		limit = DefaultLimit
@@ -777,13 +723,6 @@ func page(limit, offset int) (int32, int32) {
 		offset = 0
 	}
 	return int32(limit), int32(offset)
-}
-
-func toCategory(r db.CraftCategory) Category {
-	return Category{
-		ID: workspace.FormatID(r.ID), Slug: r.Slug, Name: r.Name,
-		DefaultUnit: r.DefaultUnit, AttrSchema: json.RawMessage(r.AttrSchema),
-	}
 }
 
 func itemFromRow(r db.CraftCatalogItem, categorySlug, categoryName, manufacturer string) Item {

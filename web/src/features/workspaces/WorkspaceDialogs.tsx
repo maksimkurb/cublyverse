@@ -5,6 +5,7 @@ import { describeApiError } from "../../api/errors";
 import { useHost, useHostBackButton } from "../../host/HostContext";
 import { Button, Notice, Sheet, TextField } from "../../ui/controls";
 import { SPACE_APPS, type SpaceApp } from "./apps";
+import { TemplatePicker, type WarehouseTemplate } from "./TemplatePicker";
 import { useCreateWorkspace, useRenameWorkspace } from "./data";
 
 /** Props of the create dialog. */
@@ -20,6 +21,7 @@ export function CreateWorkspaceDialog({ app, onClose, onCreated }: CreateWorkspa
   const host = useHost();
   const create = useCreateWorkspace();
   const [name, setName] = useState("");
+  const [template, setTemplate] = useState<WarehouseTemplate>("craft");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -34,7 +36,7 @@ export function CreateWorkspaceDialog({ app, onClose, onCreated }: CreateWorkspa
     setError(null);
     setBusy(true);
     try {
-      const workspace = await create.mutateAsync({ body: { app, name: trimmed } });
+      const workspace = await create.mutateAsync({ body: { app, name: trimmed, ...(app === "warehouse" ? { template } : {}) } });
       host.haptic("success");
       onCreated(workspace);
     } catch (cause) {
@@ -60,6 +62,7 @@ export function CreateWorkspaceDialog({ app, onClose, onCreated }: CreateWorkspa
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
+        {app === "warehouse" && <TemplatePicker value={template} onChange={setTemplate} />}
         <p className="page__state">{SPACE_APPS[app].sharing}</p>
         <Button type="submit" variant="primary" block loading={busy}>
           Создать пространство

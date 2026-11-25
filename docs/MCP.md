@@ -138,21 +138,28 @@ reverse proxy (в бэклоге — `docs/PLAN.md` §7).
 | Инструмент | Название | Доступ |
 |---|---|---|
 | `craft_catalog_search` | Search the catalogue | только чтение |
+| `craft_catalogs_set` | Connect official catalogues | изменяет |
+| `craft_category_delete` | Delete a category | изменяет и удаляет |
+| `craft_category_save` | Create or change a category | изменяет |
 | `craft_inventory_list` | List stock | только чтение |
 | `craft_item_create` | Create a private item | изменяет |
 | `craft_item_delete` | Delete a private item | изменяет и удаляет |
 | `craft_item_link` | Link a private item to the catalogue | изменяет и удаляет |
 | `craft_item_update` | Update a private item | изменяет |
+| `craft_manufacturer_delete` | Delete a manufacturer | изменяет и удаляет |
+| `craft_manufacturer_save` | Create or change a manufacturer | изменяет |
 | `craft_project_create` | Create a project | изменяет |
 | `craft_project_get` | Get a project | только чтение |
 | `craft_project_list` | List projects | только чтение |
 | `craft_project_set_material` | Plan a material for a project | изменяет |
 | `craft_project_shortage_to_wishlist` | Add the project shortage to the wish list | изменяет |
 | `craft_project_use_material` | Use material for a project | изменяет |
-| `craft_reference` | Craft reference data | только чтение |
+| `craft_reference` | Warehouse reference data | только чтение |
 | `craft_stock_adjust` | Change stock by a delta | изменяет |
 | `craft_stock_remove` | Remove an item from stock | изменяет и удаляет |
 | `craft_stock_set` | Set stock to a value | изменяет |
+| `craft_unit_delete` | Delete a unit | изменяет и удаляет |
+| `craft_unit_save` | Create or rename a unit | изменяет |
 | `craft_wishlist_add` | Add a wish | изменяет |
 | `craft_wishlist_link_add` | Add a shop link to a wish | изменяет |
 | `craft_wishlist_link_remove` | Remove a shop link from a wish | изменяет и удаляет |
@@ -184,7 +191,7 @@ Search the shared catalogue (manufacturer catalogues such as PRECIOSA or DMC) an
   "additionalProperties": false,
   "properties": {
     "category": {
-      "description": "category slug, see craft_reference",
+      "description": "category slug or name, see craft_reference",
       "type": "string"
     },
     "limit": {
@@ -329,6 +336,296 @@ Search the shared catalogue (manufacturer catalogues such as PRECIOSA or DMC) an
 }
 ```
 
+### `craft_catalogs_set`
+
+Connect official catalogues
+
+Replace the set of official catalogues the warehouse searches (see craft_reference for the available sources). Stock already held stays when a catalogue is disconnected.
+
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "sources": {
+      "description": "catalogue keys to keep connected; empty disconnects all",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    }
+  },
+  "required": [
+    "sources"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "catalogs": {
+      "description": "official catalogues",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "connected to this warehouse",
+            "type": "boolean"
+          },
+          "items": {
+            "description": "number of positions",
+            "type": "integer"
+          },
+          "name": {
+            "description": "catalogue name",
+            "type": "string"
+          },
+          "source": {
+            "description": "catalogue key for craft_catalogs_set",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "name",
+          "enabled",
+          "items"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "catalogs"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_category_delete`
+
+Delete a category
+
+Delete a category that none of the warehouse's own items use.
+
+**Доступ:** изменяет и удаляет. Вызов может удалить данные; клиент должен подтверждать его у пользователя.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "id from craft_reference",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "deleted": {
+      "description": "always true on success",
+      "type": "boolean"
+    },
+    "id": {
+      "description": "deleted id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "deleted"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_category_save`
+
+Create or change a category
+
+Create a category (omit id) or change one. default_unit must be a unit of the warehouse. fields defines extra values items of the category carry in attrs; on a change, omitted name, default_unit or fields keep their current values.
+
+**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "default_unit": {
+      "description": "a unit of the warehouse",
+      "type": "string"
+    },
+    "fields": {
+      "description": "all extra fields of the category; replaces the current list",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "description": "name of the value in item attrs; omit for a new field",
+            "type": "string"
+          },
+          "label": {
+            "description": "label shown to people",
+            "type": "string"
+          },
+          "options": {
+            "description": "allowed values of a select field",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "type": {
+            "description": "text, number, bool or select",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "type"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "id": {
+      "description": "category to change; omit to create",
+      "type": "string"
+    },
+    "name": {
+      "description": "category name",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "default_unit": {
+      "description": "unit used when an item does not name one",
+      "type": "string"
+    },
+    "fields": {
+      "description": "extra fields; their values go to item attrs under key",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "description": "name of the value in item attrs; omit for a new field",
+            "type": "string"
+          },
+          "label": {
+            "description": "label shown to people",
+            "type": "string"
+          },
+          "options": {
+            "description": "allowed values of a select field",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "type": {
+            "description": "text, number, bool or select",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "type"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "id": {
+      "description": "category id",
+      "type": "string"
+    },
+    "name": {
+      "description": "category name",
+      "type": "string"
+    },
+    "own_items": {
+      "description": "how many of the warehouse's own items use it",
+      "type": "integer"
+    },
+    "slug": {
+      "description": "category slug to use in filters and item data (a name works too)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "slug",
+    "name",
+    "default_unit",
+    "fields",
+    "own_items"
+  ],
+  "type": "object"
+}
+```
+
 ### `craft_inventory_list`
 
 List stock
@@ -344,7 +641,7 @@ List what the workspace holds: items with quantity and unit, optionally filtered
   "additionalProperties": false,
   "properties": {
     "category": {
-      "description": "category slug, see craft_reference",
+      "description": "category slug or name, see craft_reference",
       "type": "string"
     },
     "limit": {
@@ -540,11 +837,11 @@ Create a catalogue item private to this workspace, for material that is in no ma
     },
     "attrs": {
       "additionalProperties": true,
-      "description": "category specific attributes",
+      "description": "values of the category's extra fields by key, see craft_reference",
       "type": "object"
     },
     "category": {
-      "description": "category slug, see craft_reference",
+      "description": "category slug or name, see craft_reference",
       "type": "string"
     },
     "color_hex": {
@@ -564,7 +861,7 @@ Create a catalogue item private to this workspace, for material that is in no ma
       "type": "string"
     },
     "manufacturer": {
-      "description": "manufacturer name; created when unknown",
+      "description": "manufacturer name; created in the warehouse when unknown",
       "type": "string"
     },
     "name": {
@@ -932,11 +1229,11 @@ Replace the data of a private item of this workspace. All fields are replaced, s
     },
     "attrs": {
       "additionalProperties": true,
-      "description": "category specific attributes",
+      "description": "values of the category's extra fields by key, see craft_reference",
       "type": "object"
     },
     "category": {
-      "description": "category slug, see craft_reference",
+      "description": "category slug or name, see craft_reference",
       "type": "string"
     },
     "color_hex": {
@@ -960,7 +1257,7 @@ Replace the data of a private item of this workspace. All fields are replaced, s
       "type": "string"
     },
     "manufacturer": {
-      "description": "manufacturer name; created when unknown",
+      "description": "manufacturer name; created in the warehouse when unknown",
       "type": "string"
     },
     "name": {
@@ -1091,6 +1388,129 @@ Replace the data of a private item of this workspace. All fields are replaced, s
     "unit",
     "stock_qty",
     "in_inventory"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_manufacturer_delete`
+
+Delete a manufacturer
+
+Delete an own manufacturer that no item uses.
+
+**Доступ:** изменяет и удаляет. Вызов может удалить данные; клиент должен подтверждать его у пользователя.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "id from craft_reference",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "deleted": {
+      "description": "always true on success",
+      "type": "boolean"
+    },
+    "id": {
+      "description": "deleted id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "deleted"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_manufacturer_save`
+
+Create or change a manufacturer
+
+Create an own manufacturer (omit id) or change one. Manufacturers of the official catalogues are read-only. A change replaces both name and website.
+
+**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "manufacturer to change; omit to create",
+      "type": "string"
+    },
+    "name": {
+      "description": "manufacturer name",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    },
+    "website": {
+      "description": "http(s) website",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "manufacturer id",
+      "type": "string"
+    },
+    "name": {
+      "description": "manufacturer name",
+      "type": "string"
+    },
+    "official": {
+      "description": "from an official catalogue, read-only",
+      "type": "boolean"
+    },
+    "website": {
+      "description": "website",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "official"
   ],
   "type": "object"
 }
@@ -2378,9 +2798,9 @@ Withdraw material from the stock for a project: decreases the stock and increase
 
 ### `craft_reference`
 
-Craft reference data
+Warehouse reference data
 
-List the material categories (slug, name, default unit) and the known manufacturers of the craft supplies catalogue. Call it first to learn the valid category slugs and units before searching or creating items.
+List how a warehouse is configured: material categories (with their default unit and extra fields), manufacturers, units and the official catalogues. Call it before searching or creating items to learn the valid categories, units and fields.
 
 **Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
 
@@ -2405,8 +2825,43 @@ List the material categories (slug, name, default unit) and the known manufactur
 {
   "additionalProperties": false,
   "properties": {
+    "catalogs": {
+      "description": "official catalogues",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "connected to this warehouse",
+            "type": "boolean"
+          },
+          "items": {
+            "description": "number of positions",
+            "type": "integer"
+          },
+          "name": {
+            "description": "catalogue name",
+            "type": "string"
+          },
+          "source": {
+            "description": "catalogue key for craft_catalogs_set",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "name",
+          "enabled",
+          "items"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
     "categories": {
-      "description": "all material categories",
+      "description": "categories of the warehouse",
       "items": {
         "additionalProperties": false,
         "properties": {
@@ -2414,19 +2869,69 @@ List the material categories (slug, name, default unit) and the known manufactur
             "description": "unit used when an item does not name one",
             "type": "string"
           },
-          "name": {
-            "description": "category name in Russian",
+          "fields": {
+            "description": "extra fields; their values go to item attrs under key",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "description": "name of the value in item attrs; omit for a new field",
+                  "type": "string"
+                },
+                "label": {
+                  "description": "label shown to people",
+                  "type": "string"
+                },
+                "options": {
+                  "description": "allowed values of a select field",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "type": {
+                  "description": "text, number, bool or select",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label",
+                "type"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "id": {
+            "description": "category id",
             "type": "string"
           },
+          "name": {
+            "description": "category name",
+            "type": "string"
+          },
+          "own_items": {
+            "description": "how many of the warehouse's own items use it",
+            "type": "integer"
+          },
           "slug": {
-            "description": "category slug to use in filters and item data",
+            "description": "category slug to use in filters and item data (a name works too)",
             "type": "string"
           }
         },
         "required": [
+          "id",
           "slug",
           "name",
-          "default_unit"
+          "default_unit",
+          "fields",
+          "own_items"
         ],
         "type": "object"
       },
@@ -2436,9 +2941,33 @@ List the material categories (slug, name, default unit) and the known manufactur
       ]
     },
     "manufacturers": {
-      "description": "known manufacturer names",
+      "description": "own and connected official manufacturers",
       "items": {
-        "type": "string"
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "manufacturer id",
+            "type": "string"
+          },
+          "name": {
+            "description": "manufacturer name",
+            "type": "string"
+          },
+          "official": {
+            "description": "from an official catalogue, read-only",
+            "type": "boolean"
+          },
+          "website": {
+            "description": "website",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "official"
+        ],
+        "type": "object"
       },
       "type": [
         "null",
@@ -2446,9 +2975,24 @@ List the material categories (slug, name, default unit) and the known manufactur
       ]
     },
     "units": {
-      "description": "every valid unit",
+      "description": "units of the warehouse",
       "items": {
-        "type": "string"
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "unit id",
+            "type": "string"
+          },
+          "name": {
+            "description": "unit name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
       },
       "type": [
         "null",
@@ -2459,7 +3003,8 @@ List the material categories (slug, name, default unit) and the known manufactur
   "required": [
     "categories",
     "manufacturers",
-    "units"
+    "units",
+    "catalogs"
   ],
   "type": "object"
 }
@@ -2872,6 +3417,116 @@ Set the quantity of an item to an absolute value (a stocktake). Identify the ite
     "item",
     "qty",
     "updated_at"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_unit_delete`
+
+Delete a unit
+
+Delete a unit that no own item and no category uses.
+
+**Доступ:** изменяет и удаляет. Вызов может удалить данные; клиент должен подтверждать его у пользователя.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "id from craft_reference",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "deleted": {
+      "description": "always true on success",
+      "type": "boolean"
+    },
+    "id": {
+      "description": "deleted id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "deleted"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_unit_save`
+
+Create or rename a unit
+
+Create a unit (omit id) or rename one. A rename follows into own items and categories counted in it; quantities are not converted.
+
+**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "unit to rename; omit to create",
+      "type": "string"
+    },
+    "name": {
+      "description": "unit name, up to 24 characters",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "unit id",
+      "type": "string"
+    },
+    "name": {
+      "description": "unit name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name"
   ],
   "type": "object"
 }
@@ -5909,7 +6564,7 @@ application/json` и `Accept: application/json, text/event-stream`. Ответ
 уже подтверждено, правка отменила срабатывание), инструмент возвращает ошибку
 `nothing to confirm: …`.
 
-### Бусинки: wishlist и проекты
+### Склад: закупки и проекты
 
 Инструменты `craft_*` работают с одним складом: он задаётся аргументом `space`,
 если складов несколько. Примеры ниже — те же `tools/call`, что и выше.

@@ -77,6 +77,8 @@ type ConnectionService interface {
 type WorkspaceService interface {
 	// Create makes a space of a mini-app owned by the user.
 	Create(ctx context.Context, userID, app, name string) (workspace.Workspace, error)
+	// CreateFromTemplate is Create with the chosen starting content.
+	CreateFromTemplate(ctx context.Context, userID, app, name, template string) (workspace.Workspace, error)
 	// List returns the spaces of the user, of one mini-app or of all of them
 	// when app is empty.
 	List(ctx context.Context, userID, app string) ([]workspace.Workspace, error)
@@ -97,10 +99,20 @@ type WorkspaceService interface {
 // CraftService is the craft supplies business logic. The real implementation is
 // *craft.Service.
 type CraftService interface {
-	// Categories lists the material categories.
-	Categories(ctx context.Context) ([]craft.Category, error)
-	// Manufacturers lists the known manufacturers.
-	Manufacturers(ctx context.Context) ([]craft.Manufacturer, error)
+	// Categories, Manufacturers, ListUnits and CatalogSources describe how a
+	// warehouse is configured.
+	Categories(ctx context.Context, userID, workspaceID string) ([]craft.Category, error)
+	Manufacturers(ctx context.Context, userID, workspaceID string) ([]craft.Manufacturer, error)
+	ListUnits(ctx context.Context, userID, workspaceID string) ([]craft.Unit, error)
+	CatalogSources(ctx context.Context, userID, workspaceID string) ([]craft.CatalogSource, error)
+	// SaveCategory creates (empty id) or changes a category.
+	SaveCategory(ctx context.Context, userID, workspaceID, id string, input craft.CategoryInput) (craft.Category, error)
+	DeleteCategory(ctx context.Context, userID, workspaceID, id string) error
+	SaveManufacturer(ctx context.Context, userID, workspaceID, id, name, website string) (craft.Manufacturer, error)
+	DeleteManufacturer(ctx context.Context, userID, workspaceID, id string) error
+	SaveUnit(ctx context.Context, userID, workspaceID, id, name string) (craft.Unit, error)
+	DeleteUnit(ctx context.Context, userID, workspaceID, id string) error
+	SetCatalogSources(ctx context.Context, userID, workspaceID string, sources []string) ([]craft.CatalogSource, error)
 	// SearchCatalog searches the global catalogue and private items.
 	SearchCatalog(ctx context.Context, userID, workspaceID string, filter craft.CatalogFilter) ([]craft.Item, error)
 	// GetItem returns one visible catalogue item.

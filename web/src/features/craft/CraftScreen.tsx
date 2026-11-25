@@ -9,11 +9,12 @@ import { IconPlus } from "../../ui/icons";
 import { useCurrentWorkspace } from "../workspaces/selection";
 import { SpaceBar } from "../workspaces/SpaceBar";
 import { AddStockDialog } from "./AddStockDialog";
-import { CreateCraftItemDialog, LinkCraftItemDialog, StockEditDialog } from "./CraftDialogs";
-import { useAdjustCraftStock, useCraftCatalog, useCraftCategories, useCraftInventory, useCraftManufacturers } from "./data";
+import { CraftItemDialog, LinkCraftItemDialog, StockEditDialog } from "./CraftDialogs";
+import { useAdjustCraftStock, useCraftCatalog, useCraftInventory, useCraftReference, useDeleteCraftItem } from "./data";
 import { formatQty, itemColorLabel, itemMeta, qtyLabel, swatchStyle } from "./format";
 import ProjectsPanel from "./ProjectsPanel";
 import PurchasesPanel from "./PurchasesPanel";
+import { WarehouseSettings } from "./WarehouseSettings";
 
 type Tab = "inventory" | "purchases" | "projects" | "catalog";
 
@@ -29,24 +30,25 @@ const LOW_STOCK_MAX = 5;
 
 /** Category and manufacturer selects of the stock and catalogue tabs. */
 function CraftFilters({
+  workspaceId,
   category,
   manufacturer,
   onCategory,
   onManufacturer,
 }: {
+  workspaceId: string;
   category: string;
   manufacturer: string;
   onCategory: (value: string) => void;
   onManufacturer: (value: string) => void;
 }) {
-  const categories = useCraftCategories();
-  const manufacturers = useCraftManufacturers();
+  const reference = useCraftReference(workspaceId);
 
   return (
     <>
       <SelectField label="Категория" value={category} onChange={(event) => onCategory(event.target.value)}>
         <option value="">Все категории</option>
-        {(categories.data ?? []).map((item) => (
+        {(reference.data?.categories ?? []).map((item) => (
           <option key={item.slug} value={item.slug}>
             {item.name}
           </option>
@@ -54,7 +56,7 @@ function CraftFilters({
       </SelectField>
       <SelectField label="Производитель" value={manufacturer} onChange={(event) => onManufacturer(event.target.value)}>
         <option value="">Все производители</option>
-        {(manufacturers.data ?? []).map((item) => (
+        {(reference.data?.manufacturers ?? []).map((item) => (
           <option key={item.id} value={item.name}>
             {item.name}
           </option>
@@ -167,7 +169,7 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
 
       <div className="craft-filters">
         <TextField label="Поиск" placeholder="Название, цвет или артикул" value={q} onChange={(event) => setQ(event.target.value)} />
-        <CraftFilters category={category} manufacturer={manufacturer} onCategory={setCategory} onManufacturer={setManufacturer} />
+        <CraftFilters workspaceId={workspaceId} category={category} manufacturer={manufacturer} onCategory={setCategory} onManufacturer={setManufacturer} />
       </div>
 
       <div className="switch-row">
@@ -228,8 +230,12 @@ function CatalogRow({
   item,
   onAdd,
   onLink,
+  onEdit,
+  onDelete,
 }: {
   item: CraftItem;
+  onEdit: (item: CraftItem) => void;
+  onDelete: (item: CraftItem) => void;
   onAdd: (item: CraftItem) => void;
   onLink: (item: CraftItem) => void;
 }) {
@@ -251,9 +257,17 @@ function CatalogRow({
           На склад
         </Button>
         {item.private && (
-          <Button size="s" aria-label={`Связать с каталогом: ${item.name}`} onClick={() => onLink(item)}>
-            Связать
-          </Button>
+          <>
+            <Button size="s" aria-label={`Изменить позицию: ${item.name}`} onClick={() => onEdit(item)}>
+              Изменить
+            </Button>
+            <Button size="s" aria-label={`Связать с каталогом: ${item.name}`} onClick={() => onLink(item)}>
+              Связать
+            </Button>
+            <Button size="s" variant="danger" aria-label={`Удалить позицию: ${item.name}`} onClick={() => onDelete(item)}>
+              Удалить
+            </Button>
+          </>
         )}
       </div>
     </li>
@@ -262,6 +276,9 @@ function CatalogRow({
 
 /** «Каталог»: search the shared catalogue, create private items and stock them. */
 function CatalogPanel({ workspaceId }: { workspaceId: string }) {
+  const host = useHost();
+  const remove = useDeleteCraftItem();
+  const [editing, setEditing] = useState<CraftItem | null>(null);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [manufacturer, setManufacturer] = useState("");
@@ -280,11 +297,24 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
   const items = query.data ?? [];
   const filtered = q.trim() !== "" || category !== "" || manufacturer !== "" || onlyInStock;
 
+  async function handleDelete(item: CraftItem) {
+    if (!(await host.showConfirm(`Удалить «${item.name}» вместе с остатком, закупками и планами проектов?`))) {
+      return;
+    }
+    try {
+      await remove.mutateAsync({ params: { path: { id: workspaceId, item_id: item.id } } });
+      host.haptic("success");
+    } catch (cause) {
+      host.haptic("error");
+      await host.showAlert(`Не удалось удалить позицию: ${describeApiError(cause)}`);
+    }
+  }
+
   return (
     <section className="page__section" aria-label="Каталог">
       <div className="craft-filters">
         <TextField label="Поиск" placeholder="Название, цвет или артикул" value={q} onChange={(event) => setQ(event.target.value)} />
-        <CraftFilters category={category} manufacturer={manufacturer} onCategory={setCategory} onManufacturer={setManufacturer} />
+        <CraftFilters workspaceId={workspaceId} category={category} manufacturer={manufacturer} onCategory={setCategory} onManufacturer={setManufacturer} />
       </div>
 
       <div className="switch-row">
@@ -326,13 +356,18 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
               item={item}
               onAdd={setAdding}
               onLink={setLinking}
+              onEdit={setEditing}
+              onDelete={(value) => void handleDelete(value)}
             />
           ))}
         </ul>
       )}
 
       {createOpen && (
-        <CreateCraftItemDialog workspaceId={workspaceId} onClose={() => setCreateOpen(false)} onCreated={() => setCreateOpen(false)} />
+        <CraftItemDialog workspaceId={workspaceId} onClose={() => setCreateOpen(false)} onSaved={() => setCreateOpen(false)} />
+      )}
+      {editing && (
+        <CraftItemDialog workspaceId={workspaceId} item={editing} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} />
       )}
       {adding && <AddStockDialog workspaceId={workspaceId} item={adding} onClose={() => setAdding(null)} />}
       {linking && <LinkCraftItemDialog workspaceId={workspaceId} item={linking} onClose={() => setLinking(null)} />}
@@ -358,6 +393,7 @@ export default function CraftScreen() {
       </header>
 
       <SpaceBar app="warehouse" space={space} />
+      {current && <WarehouseSettings key={`settings-${current.id}`} workspaceId={current.id} />}
 
       {current && (
         <>

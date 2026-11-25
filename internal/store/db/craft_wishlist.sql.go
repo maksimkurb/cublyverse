@@ -195,14 +195,16 @@ SELECT w.id, w.workspace_id, w.catalog_item_id, w.title, w.qty_wanted, w.priorit
        i.source        AS item_source,
        i.source_url    AS item_source_url,
        i.image_url     AS item_image_url,
-       c.slug          AS category_slug,
-       c.name          AS category_name,
+       COALESCE(sc.slug, rc.slug, '')::text AS category_slug,
+       COALESCE(sc.name, rc.name, '')::text AS category_name,
        m.name          AS manufacturer_name,
        COALESCE(inv.qty, 0)::numeric(12,3) AS stock_qty,
        (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory
 FROM craft_wishlist_items w
 LEFT JOIN craft_catalog_items i ON i.id = w.catalog_item_id
-LEFT JOIN craft_categories c ON c.id = i.category_id
+LEFT JOIN craft_categories rc ON rc.id = i.category_id
+LEFT JOIN craft_categories sc
+       ON sc.workspace_id = w.workspace_id AND i.workspace_id IS NULL AND sc.catalog_slug = rc.slug
 LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 LEFT JOIN craft_inventory inv ON inv.catalog_item_id = i.id AND inv.workspace_id = w.workspace_id
 WHERE w.workspace_id = $1::uuid
@@ -245,8 +247,8 @@ type ListCraftWishlistItemsRow struct {
 	ItemSource       *string        `json:"item_source"`
 	ItemSourceUrl    *string        `json:"item_source_url"`
 	ItemImageUrl     *string        `json:"item_image_url"`
-	CategorySlug     *string        `json:"category_slug"`
-	CategoryName     *string        `json:"category_name"`
+	CategorySlug     string         `json:"category_slug"`
+	CategoryName     string         `json:"category_name"`
 	ManufacturerName *string        `json:"manufacturer_name"`
 	StockQty         pgtype.Numeric `json:"stock_qty"`
 	InInventory      bool           `json:"in_inventory"`

@@ -211,44 +211,6 @@ func (q *Queries) GetCraftCatalogItem(ctx context.Context, arg GetCraftCatalogIt
 	return i, err
 }
 
-const getCraftCategory = `-- name: GetCraftCategory :one
-SELECT id, slug, name, default_unit, attr_schema, sort_order FROM craft_categories
-WHERE id = $1
-`
-
-func (q *Queries) GetCraftCategory(ctx context.Context, id pgtype.UUID) (CraftCategory, error) {
-	row := q.db.QueryRow(ctx, getCraftCategory, id)
-	var i CraftCategory
-	err := row.Scan(
-		&i.ID,
-		&i.Slug,
-		&i.Name,
-		&i.DefaultUnit,
-		&i.AttrSchema,
-		&i.SortOrder,
-	)
-	return i, err
-}
-
-const getCraftCategoryBySlug = `-- name: GetCraftCategoryBySlug :one
-SELECT id, slug, name, default_unit, attr_schema, sort_order FROM craft_categories
-WHERE slug = $1
-`
-
-func (q *Queries) GetCraftCategoryBySlug(ctx context.Context, slug string) (CraftCategory, error) {
-	row := q.db.QueryRow(ctx, getCraftCategoryBySlug, slug)
-	var i CraftCategory
-	err := row.Scan(
-		&i.ID,
-		&i.Slug,
-		&i.Name,
-		&i.DefaultUnit,
-		&i.AttrSchema,
-		&i.SortOrder,
-	)
-	return i, err
-}
-
 const getCraftInventory = `-- name: GetCraftInventory :one
 SELECT workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at FROM craft_inventory
 WHERE workspace_id = $1
@@ -275,20 +237,56 @@ func (q *Queries) GetCraftInventory(ctx context.Context, arg GetCraftInventoryPa
 	return i, err
 }
 
-const getCraftManufacturerByName = `-- name: GetCraftManufacturerByName :one
-SELECT id, name, website, notes, created_at FROM craft_manufacturers
-WHERE lower(name) = lower($1)
+const getCraftItemLabels = `-- name: GetCraftItemLabels :one
+SELECT COALESCE(sc.slug, rc.slug)::text AS category_slug,
+       COALESCE(sc.name, rc.name)::text AS category_name,
+       m.name AS manufacturer_name
+FROM craft_catalog_items i
+JOIN craft_categories rc ON rc.id = i.category_id
+LEFT JOIN craft_categories sc
+       ON sc.workspace_id = $1::uuid AND i.workspace_id IS NULL AND sc.catalog_slug = rc.slug
+LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
+WHERE i.id = $2::uuid
 `
 
-func (q *Queries) GetCraftManufacturerByName(ctx context.Context, lower string) (CraftManufacturer, error) {
-	row := q.db.QueryRow(ctx, getCraftManufacturerByName, lower)
-	var i CraftManufacturer
+type GetCraftItemLabelsParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ID          pgtype.UUID `json:"id"`
+}
+
+type GetCraftItemLabelsRow struct {
+	CategorySlug     string  `json:"category_slug"`
+	CategoryName     string  `json:"category_name"`
+	ManufacturerName *string `json:"manufacturer_name"`
+}
+
+// How a warehouse names the category and manufacturer of an item.
+func (q *Queries) GetCraftItemLabels(ctx context.Context, arg GetCraftItemLabelsParams) (GetCraftItemLabelsRow, error) {
+	row := q.db.QueryRow(ctx, getCraftItemLabels, arg.WorkspaceID, arg.ID)
+	var i GetCraftItemLabelsRow
+	err := row.Scan(&i.CategorySlug, &i.CategoryName, &i.ManufacturerName)
+	return i, err
+}
+
+const getReferenceCraftCategoryBySlug = `-- name: GetReferenceCraftCategoryBySlug :one
+SELECT id, slug, name, default_unit, sort_order, workspace_id, catalog_slug, fields FROM craft_categories
+WHERE workspace_id IS NULL
+  AND slug = $1
+`
+
+// A category of the official catalogues.
+func (q *Queries) GetReferenceCraftCategoryBySlug(ctx context.Context, slug string) (CraftCategory, error) {
+	row := q.db.QueryRow(ctx, getReferenceCraftCategoryBySlug, slug)
+	var i CraftCategory
 	err := row.Scan(
 		&i.ID,
+		&i.Slug,
 		&i.Name,
-		&i.Website,
-		&i.Notes,
-		&i.CreatedAt,
+		&i.DefaultUnit,
+		&i.SortOrder,
+		&i.WorkspaceID,
+		&i.CatalogSlug,
+		&i.Fields,
 	)
 	return i, err
 }
@@ -360,54 +358,25 @@ func (q *Queries) InsertCraftInventoryLog(ctx context.Context, arg InsertCraftIn
 	return err
 }
 
-const listCraftCategories = `-- name: ListCraftCategories :many
-SELECT id, slug, name, default_unit, attr_schema, sort_order FROM craft_categories
-ORDER BY sort_order, name
-`
-
-func (q *Queries) ListCraftCategories(ctx context.Context) ([]CraftCategory, error) {
-	rows, err := q.db.Query(ctx, listCraftCategories)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CraftCategory{}
-	for rows.Next() {
-		var i CraftCategory
-		if err := rows.Scan(
-			&i.ID,
-			&i.Slug,
-			&i.Name,
-			&i.DefaultUnit,
-			&i.AttrSchema,
-			&i.SortOrder,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listCraftInventory = `-- name: ListCraftInventory :many
 SELECT inv.workspace_id, inv.catalog_item_id, inv.qty, inv.location, inv.notes, inv.updated_at,
        i.name, i.article, i.series, i.color_name, i.color_hex, i.color_source,
        i.size, i.finish, i.unit, i.pack_size, i.workspace_id AS item_workspace_id,
-       c.slug AS category_slug, c.name AS category_name,
+       COALESCE(sc.slug, rc.slug)::text AS category_slug,
+       COALESCE(sc.name, rc.name)::text AS category_name,
        m.name AS manufacturer_name
 FROM craft_inventory inv
 JOIN craft_catalog_items i ON i.id = inv.catalog_item_id
-JOIN craft_categories c ON c.id = i.category_id
+JOIN craft_categories rc ON rc.id = i.category_id
+LEFT JOIN craft_categories sc
+       ON sc.workspace_id = inv.workspace_id AND i.workspace_id IS NULL AND sc.catalog_slug = rc.slug
 LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 WHERE inv.workspace_id = $1::uuid
-  AND ($2::text = '' OR c.slug = $2)
+  AND ($2::text = '' OR COALESCE(sc.slug, rc.slug) = $2)
   AND ($3::text = '' OR m.name ILIKE $3)
   AND ($4::text = '' OR i.article ILIKE $4 || '%' OR i.name ILIKE '%' || $4 || '%' OR i.color_name ILIKE '%' || $4 || '%')
   AND ($5::numeric IS NULL OR inv.qty <= $5)
-ORDER BY c.sort_order, m.name NULLS LAST, i.article, i.name
+ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT $7 OFFSET $6
 `
 
@@ -537,37 +506,6 @@ func (q *Queries) ListCraftInventoryLog(ctx context.Context, arg ListCraftInvent
 	return items, nil
 }
 
-const listCraftManufacturers = `-- name: ListCraftManufacturers :many
-SELECT id, name, website, notes, created_at FROM craft_manufacturers
-ORDER BY name
-`
-
-func (q *Queries) ListCraftManufacturers(ctx context.Context) ([]CraftManufacturer, error) {
-	rows, err := q.db.Query(ctx, listCraftManufacturers)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CraftManufacturer{}
-	for rows.Next() {
-		var i CraftManufacturer
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Website,
-			&i.Notes,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const lockCraftInventoryRow = `-- name: LockCraftInventoryRow :one
 SELECT workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at FROM craft_inventory
 WHERE workspace_id = $1
@@ -623,23 +561,31 @@ func (q *Queries) RelinkCraftInventory(ctx context.Context, arg RelinkCraftInven
 
 const searchCraftCatalog = `-- name: SearchCraftCatalog :many
 SELECT i.id, i.workspace_id, i.category_id, i.manufacturer_id, i.article, i.series, i.name, i.color_name, i.color_hex, i.color_source, i.size, i.finish, i.unit, i.pack_size, i.attrs, i.source, i.source_url, i.image_url, i.external_id, i.fetched_at, i.manual_override, i.deprecated_at, i.created_at, i.updated_at,
-       c.slug  AS category_slug,
-       c.name  AS category_name,
+       COALESCE(sc.slug, rc.slug)::text AS category_slug,
+       COALESCE(sc.name, rc.name)::text AS category_name,
        m.name  AS manufacturer_name,
        COALESCE(inv.qty, 0)::numeric(12,3) AS stock_qty,
        (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory
 FROM craft_catalog_items i
-JOIN craft_categories c ON c.id = i.category_id
+JOIN craft_categories rc ON rc.id = i.category_id
+LEFT JOIN craft_categories sc
+       ON sc.workspace_id = $1::uuid AND i.workspace_id IS NULL AND sc.catalog_slug = rc.slug
 LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 LEFT JOIN craft_inventory inv
        ON inv.catalog_item_id = i.id AND inv.workspace_id = $1::uuid
-WHERE (i.workspace_id IS NULL OR i.workspace_id = $1::uuid)
+WHERE (
+        i.workspace_id = $1::uuid
+        OR (i.workspace_id IS NULL AND EXISTS (
+                SELECT 1 FROM craft_space_catalogs sources
+                WHERE sources.workspace_id = $1::uuid AND sources.source = i.source
+            ))
+      )
   AND i.deprecated_at IS NULL
-  AND ($2::text = '' OR c.slug = $2)
+  AND ($2::text = '' OR COALESCE(sc.slug, rc.slug) = $2)
   AND ($3::text = '' OR m.name ILIKE $3)
   AND ($4::text = '' OR i.article ILIKE $4 || '%' OR i.name ILIKE '%' || $4 || '%' OR i.color_name ILIKE '%' || $4 || '%')
   AND ($5::boolean = false OR inv.catalog_item_id IS NOT NULL)
-ORDER BY c.sort_order, m.name NULLS LAST, i.article, i.name
+ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT $7 OFFSET $6
 `
 
@@ -904,10 +850,10 @@ func (q *Queries) UpdateCraftInventoryMeta(ctx context.Context, arg UpdateCraftI
 const upsertCraftManufacturer = `-- name: UpsertCraftManufacturer :one
 INSERT INTO craft_manufacturers (name, website, notes)
 VALUES ($1, $2, $3)
-ON CONFLICT (name) DO UPDATE
+ON CONFLICT (COALESCE(workspace_id, '00000000-0000-0000-0000-000000000000'), lower(name)) DO UPDATE
 SET website = CASE WHEN EXCLUDED.website <> '' THEN EXCLUDED.website ELSE craft_manufacturers.website END,
     notes   = CASE WHEN EXCLUDED.notes <> '' THEN EXCLUDED.notes ELSE craft_manufacturers.notes END
-RETURNING id, name, website, notes, created_at
+RETURNING id, name, website, notes, created_at, workspace_id
 `
 
 type UpsertCraftManufacturerParams struct {
@@ -916,6 +862,7 @@ type UpsertCraftManufacturerParams struct {
 	Notes   string `json:"notes"`
 }
 
+// A manufacturer of the official catalogues.
 func (q *Queries) UpsertCraftManufacturer(ctx context.Context, arg UpsertCraftManufacturerParams) (CraftManufacturer, error) {
 	row := q.db.QueryRow(ctx, upsertCraftManufacturer, arg.Name, arg.Website, arg.Notes)
 	var i CraftManufacturer
@@ -925,6 +872,7 @@ func (q *Queries) UpsertCraftManufacturer(ctx context.Context, arg UpsertCraftMa
 		&i.Website,
 		&i.Notes,
 		&i.CreatedAt,
+		&i.WorkspaceID,
 	)
 	return i, err
 }

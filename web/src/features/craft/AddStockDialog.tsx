@@ -4,7 +4,7 @@ import type { CraftItem, CraftStockEntry } from "../../api/client";
 import { describeApiError } from "../../api/errors";
 import { useHost, useHostBackButton } from "../../host/HostContext";
 import { Button, Notice, Sheet, TextField } from "../../ui/controls";
-import { CreateCraftItemDialog } from "./CraftDialogs";
+import { CraftItemDialog } from "./CraftDialogs";
 import { useAdjustCraftStock, useCraftCatalog, useUpdateCraftStockMeta } from "./data";
 import { formatQty, itemMeta, swatchStyle } from "./format";
 import { parsePositiveQty } from "./wishlist";
@@ -28,10 +28,10 @@ export function AddStockDialog({ workspaceId, item, onClose }: AddStockDialogPro
 
   if (creating) {
     return (
-      <CreateCraftItemDialog
+      <CraftItemDialog
         workspaceId={workspaceId}
         onClose={() => setCreating(false)}
-        onCreated={(created) => {
+        onSaved={(created) => {
           setSelected(created);
           setCreating(false);
         }}

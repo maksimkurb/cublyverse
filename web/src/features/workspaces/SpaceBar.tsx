@@ -10,6 +10,7 @@ import { SPACE_APPS, type SpaceApp } from "./apps";
 import { useCreateWorkspace, useDeleteWorkspace } from "./data";
 import type { CurrentWorkspace } from "./selection";
 import { CandidatesSection, MembersList } from "./SpaceMembers";
+import { TemplatePicker, type WarehouseTemplate } from "./TemplatePicker";
 import { CreateWorkspaceDialog, RenameWorkspaceDialog } from "./WorkspaceDialogs";
 
 /** Props of the space control of a mini-app. */
@@ -67,6 +68,7 @@ function Onboarding({ app, space }: SpaceBarProps) {
   const host = useHost();
   const create = useCreateWorkspace();
   const [name, setName] = useState("Личное");
+  const [template, setTemplate] = useState<WarehouseTemplate>("craft");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -80,7 +82,7 @@ function Onboarding({ app, space }: SpaceBarProps) {
     setBusy(true);
     setError(null);
     try {
-      const created = await create.mutateAsync({ body: { app, name: trimmed } });
+      const created = await create.mutateAsync({ body: { app, name: trimmed, ...(app === "warehouse" ? { template } : {}) } });
       space.select(created.id);
       host.haptic("success");
     } catch (cause) {
@@ -97,6 +99,7 @@ function Onboarding({ app, space }: SpaceBarProps) {
       <p className="page__state">{SPACE_APPS[app].onboarding}</p>
       {error && <Notice tone="error">{error}</Notice>}
       <TextField label="Название" maxLength={80} value={name} onChange={(event) => setName(event.target.value)} />
+      {app === "warehouse" && <TemplatePicker value={template} onChange={setTemplate} />}
       <Button type="submit" variant="primary" block loading={busy}>
         Начать
       </Button>

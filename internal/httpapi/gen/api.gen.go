@@ -69,6 +69,30 @@ func (e BindingPlatform) Valid() bool {
 	}
 }
 
+// Defines values for CraftFieldType.
+const (
+	Bool   CraftFieldType = "bool"
+	Number CraftFieldType = "number"
+	Select CraftFieldType = "select"
+	Text   CraftFieldType = "text"
+)
+
+// Valid indicates whether the value is a known member of the CraftFieldType enum.
+func (e CraftFieldType) Valid() bool {
+	switch e {
+	case Bool:
+		return true
+	case Number:
+		return true
+	case Select:
+		return true
+	case Text:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CraftItemInputColorSource.
 const (
 	Approx   CraftItemInputColorSource = "approx"
@@ -102,6 +126,24 @@ func (e CreateReminderRequestEndKind) Valid() bool {
 	case CreateReminderRequestEndKindNone:
 		return true
 	case CreateReminderRequestEndKindUntil:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateWorkspaceRequestTemplate.
+const (
+	Craft CreateWorkspaceRequestTemplate = "craft"
+	Empty CreateWorkspaceRequestTemplate = "empty"
+)
+
+// Valid indicates whether the value is a known member of the CreateWorkspaceRequestTemplate enum.
+func (e CreateWorkspaceRequestTemplate) Valid() bool {
+	switch e {
+	case Craft:
+		return true
+	case Empty:
 		return true
 	default:
 		return false
@@ -427,8 +469,44 @@ type Connection struct {
 	Scopes []string `json:"scopes"`
 }
 
-// CraftCategory A kind of craft material.
+// CraftCatalogSource An official catalogue a warehouse can connect.
+type CraftCatalogSource struct {
+	// Enabled Connected to this warehouse.
+	//
+	// Example: true
+	Enabled bool `json:"enabled"`
+
+	// Items Number of positions in the catalogue.
+	//
+	// Example: 508
+	Items int `json:"items"`
+
+	// Name Name shown to the user.
+	//
+	// Example: DMC (мулине)
+	Name string `json:"name"`
+
+	// Source Key of the catalogue.
+	//
+	// Example: dmc
+	Source string `json:"source"`
+}
+
+// CraftCatalogSourcesInput The official catalogues to keep connected.
+type CraftCatalogSourcesInput struct {
+	// Sources Catalogue keys; an empty list disconnects all.
+	//
+	// Example: ["dmc","preciosa"]
+	Sources []string `json:"sources"`
+}
+
+// CraftCategory A kind of material of one warehouse.
 type CraftCategory struct {
+	// CatalogSlug Set when items of an official catalogue are shown under this category.
+	//
+	// Example:
+	CatalogSlug string `json:"catalog_slug"`
+
 	// DefaultUnit Unit an item of this category is counted in when it does not name
 	// one.
 	//
@@ -436,21 +514,73 @@ type CraftCategory struct {
 	// Example: шт
 	DefaultUnit string `json:"default_unit"`
 
+	// Fields Extra fields of the items.
+	Fields []CraftField `json:"fields"`
+
 	// Id Category id (UUID).
 	//
 	// Example: 8a3b1c2d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
 	Id string `json:"id"`
 
-	// Name Russian name shown to the user.
+	// Name Name shown to the user.
 	//
 	// Example: Жемчуг
 	Name string `json:"name"`
+
+	// OwnItems Number of the warehouse's own items in the category.
+	//
+	// Example: 3
+	OwnItems int `json:"own_items"`
 
 	// Slug Stable slug used in filters and item data.
 	//
 	// Example: pearls
 	Slug string `json:"slug"`
 }
+
+// CraftCategoryInput Editable data of a category.
+type CraftCategoryInput struct {
+	// DefaultUnit A unit of the warehouse.
+	//
+	// Example: м
+	DefaultUnit string `json:"default_unit"`
+
+	// Fields All extra fields of the category.
+	Fields []CraftField `json:"fields"`
+
+	// Name Name, unique in the warehouse.
+	//
+	// Example: Лента
+	Name string `json:"name"`
+}
+
+// CraftField An extra field of the items of a category.
+type CraftField struct {
+	// Key Name of the value in item `attrs`; omit for a new field.
+	//
+	// Example: f-1a2b3c4d5e
+	Key *string `json:"key,omitempty"`
+
+	// Label Label shown to people.
+	//
+	// Example: Длина мотка, м
+	Label string `json:"label"`
+
+	// Options Allowed values of a `select` field.
+	//
+	// Example: ["матовый","глянцевый"]
+	Options *[]string `json:"options,omitempty"`
+
+	// Type Kind of the value.
+	//
+	// Example: number
+	Type CraftFieldType `json:"type"`
+}
+
+// CraftFieldType Kind of the value.
+//
+// Example: number
+type CraftFieldType string
 
 // CraftItem A catalogue entry: either a global item shared by every workspace or a
 // private item of one workspace. `stock_qty` and `in_inventory` describe
@@ -590,7 +720,7 @@ type CraftItemInput struct {
 	// Example: {}
 	Attrs *map[string]interface{} `json:"attrs,omitempty"`
 
-	// Category Category slug, see `/craft/categories`.
+	// Category Category slug (or name) of the warehouse.
 	//
 	// Example: pearls
 	Category string `json:"category"`
@@ -658,7 +788,7 @@ type CraftItemInput struct {
 // Example: approx
 type CraftItemInputColorSource string
 
-// CraftManufacturer A producer of craft material.
+// CraftManufacturer A producer of materials.
 type CraftManufacturer struct {
 	// Id Manufacturer id (UUID).
 	//
@@ -670,10 +800,48 @@ type CraftManufacturer struct {
 	// Example: PRECIOSA
 	Name string `json:"name"`
 
+	// Official From a connected official catalogue, read-only.
+	//
+	// Example: false
+	Official bool `json:"official"`
+
+	// OwnItems Number of the warehouse's own items of the manufacturer.
+	//
+	// Example: 2
+	OwnItems int `json:"own_items"`
+
 	// Website Manufacturer website; empty when unknown.
 	//
 	// Example: https://www.preciosa.com
 	Website string `json:"website"`
+}
+
+// CraftManufacturerInput Editable data of a manufacturer.
+type CraftManufacturerInput struct {
+	// Name Name, unique among own manufacturers.
+	//
+	// Example: Gamma
+	Name string `json:"name"`
+
+	// Website An http(s) address, or empty.
+	//
+	// Example: https://www.example.com
+	Website string `json:"website"`
+}
+
+// CraftReference The configuration of one warehouse.
+type CraftReference struct {
+	// Catalogs Official catalogues.
+	Catalogs []CraftCatalogSource `json:"catalogs"`
+
+	// Categories Categories of the warehouse.
+	Categories []CraftCategory `json:"categories"`
+
+	// Manufacturers Own and connected official manufacturers.
+	Manufacturers []CraftManufacturer `json:"manufacturers"`
+
+	// Units Units of the warehouse.
+	Units []CraftUnit `json:"units"`
 }
 
 // CraftStockEntry One stock row of a workspace with its catalogue item.
@@ -702,6 +870,27 @@ type CraftStockEntry struct {
 	//
 	// Example: 2026-01-16T08:00:00Z
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// CraftUnit A unit stock can be counted in.
+type CraftUnit struct {
+	// Id Unit id (UUID).
+	//
+	// Example: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+	Id string `json:"id"`
+
+	// Name Unit name.
+	//
+	// Example: моток
+	Name string `json:"name"`
+}
+
+// CraftUnitInput Editable data of a unit.
+type CraftUnitInput struct {
+	// Name Name, unique in the warehouse. A rename follows into own items.
+	//
+	// Example: катушка
+	Name string `json:"name"`
 }
 
 // CreateReminderRequest Fields of a new reminder. `repeat_minutes` defaults to 10, `enabled` to
@@ -850,7 +1039,22 @@ type CreateWorkspaceRequest struct {
 	//
 	// Example: Дом
 	Name string `json:"name"`
+
+	// Template Starting content of a new warehouse: `craft` (default) has the
+	// needlework categories, units and official catalogues, `empty` has
+	// one unit. Ignored for other mini-apps.
+	//
+	//
+	// Example: craft
+	Template *CreateWorkspaceRequestTemplate `json:"template,omitempty"`
 }
+
+// CreateWorkspaceRequestTemplate Starting content of a new warehouse: `craft` (default) has the
+// needlework categories, units and official catalogues, `empty` has
+// one unit. Ignored for other mini-apps.
+//
+// Example: craft
+type CreateWorkspaceRequestTemplate string
 
 // CreatedToken A freshly created token. `token` is the only time the plaintext is
 // returned: it is not stored anywhere and cannot be shown again.
@@ -1822,6 +2026,9 @@ type WorkspaceMember struct {
 // CraftItemID Example: 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
 type CraftItemID = string
 
+// CraftReferenceID Example: 8a3b1c2d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+type CraftReferenceID = string
+
 // ProjectID Example: 5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f
 type ProjectID = string
 
@@ -1949,11 +2156,20 @@ type RenameWorkspaceJSONRequestBody = RenameWorkspaceRequest
 // CreateCraftItemJSONRequestBody defines body for CreateCraftItem for application/json ContentType.
 type CreateCraftItemJSONRequestBody = CraftItemInput
 
+// SetCraftCatalogSourcesJSONRequestBody defines body for SetCraftCatalogSources for application/json ContentType.
+type SetCraftCatalogSourcesJSONRequestBody = CraftCatalogSourcesInput
+
 // UpdateCraftItemJSONRequestBody defines body for UpdateCraftItem for application/json ContentType.
 type UpdateCraftItemJSONRequestBody = CraftItemInput
 
 // LinkCraftItemJSONRequestBody defines body for LinkCraftItem for application/json ContentType.
 type LinkCraftItemJSONRequestBody = LinkCraftItemRequest
+
+// CreateCraftCategoryJSONRequestBody defines body for CreateCraftCategory for application/json ContentType.
+type CreateCraftCategoryJSONRequestBody = CraftCategoryInput
+
+// UpdateCraftCategoryJSONRequestBody defines body for UpdateCraftCategory for application/json ContentType.
+type UpdateCraftCategoryJSONRequestBody = CraftCategoryInput
 
 // UpdateCraftInventoryMetaJSONRequestBody defines body for UpdateCraftInventoryMeta for application/json ContentType.
 type UpdateCraftInventoryMetaJSONRequestBody = UpdateCraftStockMetaRequest
@@ -1963,6 +2179,12 @@ type SetCraftInventoryQtyJSONRequestBody = SetCraftStockRequest
 
 // AdjustCraftInventoryQtyJSONRequestBody defines body for AdjustCraftInventoryQty for application/json ContentType.
 type AdjustCraftInventoryQtyJSONRequestBody = AdjustCraftStockRequest
+
+// CreateCraftManufacturerJSONRequestBody defines body for CreateCraftManufacturer for application/json ContentType.
+type CreateCraftManufacturerJSONRequestBody = CraftManufacturerInput
+
+// UpdateCraftManufacturerJSONRequestBody defines body for UpdateCraftManufacturer for application/json ContentType.
+type UpdateCraftManufacturerJSONRequestBody = CraftManufacturerInput
 
 // AddWorkspaceMemberJSONRequestBody defines body for AddWorkspaceMember for application/json ContentType.
 type AddWorkspaceMemberJSONRequestBody = AddWorkspaceMemberRequest
@@ -1978,6 +2200,12 @@ type SetProjectMaterialJSONRequestBody = SetProjectMaterialRequest
 
 // UseProjectMaterialJSONRequestBody defines body for UseProjectMaterial for application/json ContentType.
 type UseProjectMaterialJSONRequestBody = UseProjectMaterialRequest
+
+// CreateCraftUnitJSONRequestBody defines body for CreateCraftUnit for application/json ContentType.
+type CreateCraftUnitJSONRequestBody = CraftUnitInput
+
+// UpdateCraftUnitJSONRequestBody defines body for UpdateCraftUnit for application/json ContentType.
+type UpdateCraftUnitJSONRequestBody = CraftUnitInput
 
 // CreateWishJSONRequestBody defines body for CreateWish for application/json ContentType.
 type CreateWishJSONRequestBody = WishInput
@@ -2005,12 +2233,6 @@ type ServerInterface interface {
 	// RevokeConnection Disconnect an application
 	// (DELETE /connections/{id})
 	RevokeConnection(w http.ResponseWriter, r *http.Request, id string)
-	// ListCraftCategories List material categories
-	// (GET /craft/categories)
-	ListCraftCategories(w http.ResponseWriter, r *http.Request)
-	// ListCraftManufacturers List manufacturers
-	// (GET /craft/manufacturers)
-	ListCraftManufacturers(w http.ResponseWriter, r *http.Request)
 	// GetHealth Service health and version
 	// (GET /health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
@@ -2065,6 +2287,9 @@ type ServerInterface interface {
 	// CreateCraftItem Create a private catalogue item
 	// (POST /workspaces/{id}/catalog)
 	CreateCraftItem(w http.ResponseWriter, r *http.Request, id WorkspaceID)
+	// SetCraftCatalogSources Connect official catalogues
+	// (PUT /workspaces/{id}/catalog-sources)
+	SetCraftCatalogSources(w http.ResponseWriter, r *http.Request, id WorkspaceID)
 	// DeleteCraftItem Delete a private catalogue item
 	// (DELETE /workspaces/{id}/catalog/{item_id})
 	DeleteCraftItem(w http.ResponseWriter, r *http.Request, id WorkspaceID, itemId CraftItemID)
@@ -2077,6 +2302,15 @@ type ServerInterface interface {
 	// LinkCraftItem Link a private item to a catalogue item
 	// (POST /workspaces/{id}/catalog/{item_id}/link)
 	LinkCraftItem(w http.ResponseWriter, r *http.Request, id WorkspaceID, itemId CraftItemID)
+	// CreateCraftCategory Create a category
+	// (POST /workspaces/{id}/categories)
+	CreateCraftCategory(w http.ResponseWriter, r *http.Request, id WorkspaceID)
+	// DeleteCraftCategory Delete a category
+	// (DELETE /workspaces/{id}/categories/{ref_id})
+	DeleteCraftCategory(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID)
+	// UpdateCraftCategory Change a category
+	// (PUT /workspaces/{id}/categories/{ref_id})
+	UpdateCraftCategory(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID)
 	// ListCraftInventory List the stock of a workspace
 	// (GET /workspaces/{id}/inventory)
 	ListCraftInventory(w http.ResponseWriter, r *http.Request, id WorkspaceID, params ListCraftInventoryParams)
@@ -2092,6 +2326,15 @@ type ServerInterface interface {
 	// AdjustCraftInventoryQty Add to or use up stock
 	// (POST /workspaces/{id}/inventory/{item_id}/adjust)
 	AdjustCraftInventoryQty(w http.ResponseWriter, r *http.Request, id WorkspaceID, itemId CraftItemID)
+	// CreateCraftManufacturer Create a manufacturer
+	// (POST /workspaces/{id}/manufacturers)
+	CreateCraftManufacturer(w http.ResponseWriter, r *http.Request, id WorkspaceID)
+	// DeleteCraftManufacturer Delete a manufacturer
+	// (DELETE /workspaces/{id}/manufacturers/{ref_id})
+	DeleteCraftManufacturer(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID)
+	// UpdateCraftManufacturer Change a manufacturer
+	// (PUT /workspaces/{id}/manufacturers/{ref_id})
+	UpdateCraftManufacturer(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID)
 	// ListWorkspaceMemberCandidates List users who can be added to a workspace
 	// (GET /workspaces/{id}/member-candidates)
 	ListWorkspaceMemberCandidates(w http.ResponseWriter, r *http.Request, id WorkspaceID, params ListWorkspaceMemberCandidatesParams)
@@ -2131,6 +2374,18 @@ type ServerInterface interface {
 	// ShortageToWishlist Add the project shortage to the wish list
 	// (POST /workspaces/{id}/projects/{project_id}/shortage-to-wishlist)
 	ShortageToWishlist(w http.ResponseWriter, r *http.Request, id WorkspaceID, projectId ProjectID)
+	// GetCraftReference Warehouse reference data
+	// (GET /workspaces/{id}/reference)
+	GetCraftReference(w http.ResponseWriter, r *http.Request, id WorkspaceID)
+	// CreateCraftUnit Create a unit
+	// (POST /workspaces/{id}/units)
+	CreateCraftUnit(w http.ResponseWriter, r *http.Request, id WorkspaceID)
+	// DeleteCraftUnit Delete a unit
+	// (DELETE /workspaces/{id}/units/{ref_id})
+	DeleteCraftUnit(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID)
+	// UpdateCraftUnit Change a unit
+	// (PUT /workspaces/{id}/units/{ref_id})
+	UpdateCraftUnit(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID)
 	// ListWishes List the wish list
 	// (GET /workspaces/{id}/wishlist)
 	ListWishes(w http.ResponseWriter, r *http.Request, id WorkspaceID, params ListWishesParams)
@@ -2222,34 +2477,6 @@ func (siw *ServerInterfaceWrapper) RevokeConnection(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RevokeConnection(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListCraftCategories operation middleware
-func (siw *ServerInterfaceWrapper) ListCraftCategories(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListCraftCategories(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListCraftManufacturers operation middleware
-func (siw *ServerInterfaceWrapper) ListCraftManufacturers(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListCraftManufacturers(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2738,6 +2965,32 @@ func (siw *ServerInterfaceWrapper) CreateCraftItem(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// SetCraftCatalogSources operation middleware
+func (siw *ServerInterfaceWrapper) SetCraftCatalogSources(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetCraftCatalogSources(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DeleteCraftItem operation middleware
 func (siw *ServerInterfaceWrapper) DeleteCraftItem(w http.ResponseWriter, r *http.Request) {
 
@@ -2869,6 +3122,102 @@ func (siw *ServerInterfaceWrapper) LinkCraftItem(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.LinkCraftItem(w, r, id, itemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCraftCategory operation middleware
+func (siw *ServerInterfaceWrapper) CreateCraftCategory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCraftCategory(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCraftCategory operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCraftCategory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ref_id" -------------
+	var refId CraftReferenceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ref_id", r.PathValue("ref_id"), &refId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ref_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCraftCategory(w, r, id, refId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCraftCategory operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCraftCategory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ref_id" -------------
+	var refId CraftReferenceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ref_id", r.PathValue("ref_id"), &refId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ref_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCraftCategory(w, r, id, refId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3116,6 +3465,102 @@ func (siw *ServerInterfaceWrapper) AdjustCraftInventoryQty(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AdjustCraftInventoryQty(w, r, id, itemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCraftManufacturer operation middleware
+func (siw *ServerInterfaceWrapper) CreateCraftManufacturer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCraftManufacturer(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCraftManufacturer operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCraftManufacturer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ref_id" -------------
+	var refId CraftReferenceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ref_id", r.PathValue("ref_id"), &refId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ref_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCraftManufacturer(w, r, id, refId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCraftManufacturer operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCraftManufacturer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ref_id" -------------
+	var refId CraftReferenceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ref_id", r.PathValue("ref_id"), &refId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ref_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCraftManufacturer(w, r, id, refId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3578,6 +4023,128 @@ func (siw *ServerInterfaceWrapper) ShortageToWishlist(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// GetCraftReference operation middleware
+func (siw *ServerInterfaceWrapper) GetCraftReference(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCraftReference(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCraftUnit operation middleware
+func (siw *ServerInterfaceWrapper) CreateCraftUnit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCraftUnit(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCraftUnit operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCraftUnit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ref_id" -------------
+	var refId CraftReferenceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ref_id", r.PathValue("ref_id"), &refId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ref_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCraftUnit(w, r, id, refId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCraftUnit operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCraftUnit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id WorkspaceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ref_id" -------------
+	var refId CraftReferenceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ref_id", r.PathValue("ref_id"), &refId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ref_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCraftUnit(w, r, id, refId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListWishes operation middleware
 func (siw *ServerInterfaceWrapper) ListWishes(w http.ResponseWriter, r *http.Request) {
 
@@ -3974,8 +4541,17 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/members", wrapper.AddWorkspaceMember)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workspaces/{id}/members/{user_id}", wrapper.RemoveWorkspaceMember)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workspaces/{id}/member-candidates", wrapper.ListWorkspaceMemberCandidates)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/craft/categories", wrapper.ListCraftCategories)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/craft/manufacturers", wrapper.ListCraftManufacturers)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workspaces/{id}/reference", wrapper.GetCraftReference)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workspaces/{id}/catalog-sources", wrapper.SetCraftCatalogSources)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/categories", wrapper.CreateCraftCategory)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workspaces/{id}/categories/{ref_id}", wrapper.DeleteCraftCategory)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workspaces/{id}/categories/{ref_id}", wrapper.UpdateCraftCategory)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/manufacturers", wrapper.CreateCraftManufacturer)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workspaces/{id}/manufacturers/{ref_id}", wrapper.DeleteCraftManufacturer)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workspaces/{id}/manufacturers/{ref_id}", wrapper.UpdateCraftManufacturer)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/units", wrapper.CreateCraftUnit)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workspaces/{id}/units/{ref_id}", wrapper.DeleteCraftUnit)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workspaces/{id}/units/{ref_id}", wrapper.UpdateCraftUnit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workspaces/{id}/catalog", wrapper.SearchCraftCatalog)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workspaces/{id}/catalog", wrapper.CreateCraftItem)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workspaces/{id}/catalog/{item_id}", wrapper.DeleteCraftItem)
@@ -4219,104 +4795,6 @@ func (response RevokeConnection404JSONResponse) VisitRevokeConnectionResponse(w 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListCraftCategoriesRequestObject struct {
-}
-
-type ListCraftCategoriesResponseObject interface {
-	VisitListCraftCategoriesResponse(w http.ResponseWriter) error
-}
-
-type ListCraftCategories200JSONResponse []CraftCategory
-
-func (response ListCraftCategories200JSONResponse) VisitListCraftCategoriesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListCraftCategories401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response ListCraftCategories401JSONResponse) VisitListCraftCategoriesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListCraftCategories403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response ListCraftCategories403JSONResponse) VisitListCraftCategoriesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListCraftManufacturersRequestObject struct {
-}
-
-type ListCraftManufacturersResponseObject interface {
-	VisitListCraftManufacturersResponse(w http.ResponseWriter) error
-}
-
-type ListCraftManufacturers200JSONResponse []CraftManufacturer
-
-func (response ListCraftManufacturers200JSONResponse) VisitListCraftManufacturersResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListCraftManufacturers401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response ListCraftManufacturers401JSONResponse) VisitListCraftManufacturersResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListCraftManufacturers403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response ListCraftManufacturers403JSONResponse) VisitListCraftManufacturersResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -5372,6 +5850,85 @@ func (response CreateCraftItem404JSONResponse) VisitCreateCraftItemResponse(w ht
 	return err
 }
 
+type SetCraftCatalogSourcesRequestObject struct {
+	Id   WorkspaceID `json:"id"`
+	Body *SetCraftCatalogSourcesJSONRequestBody
+}
+
+type SetCraftCatalogSourcesResponseObject interface {
+	VisitSetCraftCatalogSourcesResponse(w http.ResponseWriter) error
+}
+
+type SetCraftCatalogSources200JSONResponse []CraftCatalogSource
+
+func (response SetCraftCatalogSources200JSONResponse) VisitSetCraftCatalogSourcesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCraftCatalogSources400JSONResponse Error
+
+func (response SetCraftCatalogSources400JSONResponse) VisitSetCraftCatalogSourcesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCraftCatalogSources401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response SetCraftCatalogSources401JSONResponse) VisitSetCraftCatalogSourcesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCraftCatalogSources403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response SetCraftCatalogSources403JSONResponse) VisitSetCraftCatalogSourcesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCraftCatalogSources404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response SetCraftCatalogSources404JSONResponse) VisitSetCraftCatalogSourcesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteCraftItemRequestObject struct {
 	Id     WorkspaceID `json:"id"`
 	ItemId CraftItemID `json:"item_id"`
@@ -5645,6 +6202,238 @@ func (response LinkCraftItem403JSONResponse) VisitLinkCraftItemResponse(w http.R
 type LinkCraftItem404JSONResponse Error
 
 func (response LinkCraftItem404JSONResponse) VisitLinkCraftItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftCategoryRequestObject struct {
+	Id   WorkspaceID `json:"id"`
+	Body *CreateCraftCategoryJSONRequestBody
+}
+
+type CreateCraftCategoryResponseObject interface {
+	VisitCreateCraftCategoryResponse(w http.ResponseWriter) error
+}
+
+type CreateCraftCategory201JSONResponse CraftCategory
+
+func (response CreateCraftCategory201JSONResponse) VisitCreateCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftCategory400JSONResponse Error
+
+func (response CreateCraftCategory400JSONResponse) VisitCreateCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftCategory401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateCraftCategory401JSONResponse) VisitCreateCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftCategory403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateCraftCategory403JSONResponse) VisitCreateCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftCategory404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateCraftCategory404JSONResponse) VisitCreateCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftCategoryRequestObject struct {
+	Id    WorkspaceID      `json:"id"`
+	RefId CraftReferenceID `json:"ref_id"`
+}
+
+type DeleteCraftCategoryResponseObject interface {
+	VisitDeleteCraftCategoryResponse(w http.ResponseWriter) error
+}
+
+type DeleteCraftCategory204Response struct {
+}
+
+func (response DeleteCraftCategory204Response) VisitDeleteCraftCategoryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteCraftCategory400JSONResponse Error
+
+func (response DeleteCraftCategory400JSONResponse) VisitDeleteCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftCategory401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteCraftCategory401JSONResponse) VisitDeleteCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftCategory403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteCraftCategory403JSONResponse) VisitDeleteCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftCategory404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteCraftCategory404JSONResponse) VisitDeleteCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftCategoryRequestObject struct {
+	Id    WorkspaceID      `json:"id"`
+	RefId CraftReferenceID `json:"ref_id"`
+	Body  *UpdateCraftCategoryJSONRequestBody
+}
+
+type UpdateCraftCategoryResponseObject interface {
+	VisitUpdateCraftCategoryResponse(w http.ResponseWriter) error
+}
+
+type UpdateCraftCategory200JSONResponse CraftCategory
+
+func (response UpdateCraftCategory200JSONResponse) VisitUpdateCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftCategory400JSONResponse Error
+
+func (response UpdateCraftCategory400JSONResponse) VisitUpdateCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftCategory401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateCraftCategory401JSONResponse) VisitUpdateCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftCategory403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateCraftCategory403JSONResponse) VisitUpdateCraftCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftCategory404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateCraftCategory404JSONResponse) VisitUpdateCraftCategoryResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -6024,6 +6813,238 @@ func (response AdjustCraftInventoryQty409JSONResponse) VisitAdjustCraftInventory
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftManufacturerRequestObject struct {
+	Id   WorkspaceID `json:"id"`
+	Body *CreateCraftManufacturerJSONRequestBody
+}
+
+type CreateCraftManufacturerResponseObject interface {
+	VisitCreateCraftManufacturerResponse(w http.ResponseWriter) error
+}
+
+type CreateCraftManufacturer201JSONResponse CraftManufacturer
+
+func (response CreateCraftManufacturer201JSONResponse) VisitCreateCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftManufacturer400JSONResponse Error
+
+func (response CreateCraftManufacturer400JSONResponse) VisitCreateCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftManufacturer401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateCraftManufacturer401JSONResponse) VisitCreateCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftManufacturer403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateCraftManufacturer403JSONResponse) VisitCreateCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftManufacturer404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateCraftManufacturer404JSONResponse) VisitCreateCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftManufacturerRequestObject struct {
+	Id    WorkspaceID      `json:"id"`
+	RefId CraftReferenceID `json:"ref_id"`
+}
+
+type DeleteCraftManufacturerResponseObject interface {
+	VisitDeleteCraftManufacturerResponse(w http.ResponseWriter) error
+}
+
+type DeleteCraftManufacturer204Response struct {
+}
+
+func (response DeleteCraftManufacturer204Response) VisitDeleteCraftManufacturerResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteCraftManufacturer400JSONResponse Error
+
+func (response DeleteCraftManufacturer400JSONResponse) VisitDeleteCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftManufacturer401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteCraftManufacturer401JSONResponse) VisitDeleteCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftManufacturer403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteCraftManufacturer403JSONResponse) VisitDeleteCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftManufacturer404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteCraftManufacturer404JSONResponse) VisitDeleteCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftManufacturerRequestObject struct {
+	Id    WorkspaceID      `json:"id"`
+	RefId CraftReferenceID `json:"ref_id"`
+	Body  *UpdateCraftManufacturerJSONRequestBody
+}
+
+type UpdateCraftManufacturerResponseObject interface {
+	VisitUpdateCraftManufacturerResponse(w http.ResponseWriter) error
+}
+
+type UpdateCraftManufacturer200JSONResponse CraftManufacturer
+
+func (response UpdateCraftManufacturer200JSONResponse) VisitUpdateCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftManufacturer400JSONResponse Error
+
+func (response UpdateCraftManufacturer400JSONResponse) VisitUpdateCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftManufacturer401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateCraftManufacturer401JSONResponse) VisitUpdateCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftManufacturer403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateCraftManufacturer403JSONResponse) VisitUpdateCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftManufacturer404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateCraftManufacturer404JSONResponse) VisitUpdateCraftManufacturerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -6965,6 +7986,316 @@ func (response ShortageToWishlist404JSONResponse) VisitShortageToWishlistRespons
 	return err
 }
 
+type GetCraftReferenceRequestObject struct {
+	Id WorkspaceID `json:"id"`
+}
+
+type GetCraftReferenceResponseObject interface {
+	VisitGetCraftReferenceResponse(w http.ResponseWriter) error
+}
+
+type GetCraftReference200JSONResponse CraftReference
+
+func (response GetCraftReference200JSONResponse) VisitGetCraftReferenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCraftReference400JSONResponse Error
+
+func (response GetCraftReference400JSONResponse) VisitGetCraftReferenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCraftReference401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetCraftReference401JSONResponse) VisitGetCraftReferenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCraftReference403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetCraftReference403JSONResponse) VisitGetCraftReferenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCraftReference404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetCraftReference404JSONResponse) VisitGetCraftReferenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftUnitRequestObject struct {
+	Id   WorkspaceID `json:"id"`
+	Body *CreateCraftUnitJSONRequestBody
+}
+
+type CreateCraftUnitResponseObject interface {
+	VisitCreateCraftUnitResponse(w http.ResponseWriter) error
+}
+
+type CreateCraftUnit201JSONResponse CraftUnit
+
+func (response CreateCraftUnit201JSONResponse) VisitCreateCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftUnit400JSONResponse Error
+
+func (response CreateCraftUnit400JSONResponse) VisitCreateCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftUnit401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateCraftUnit401JSONResponse) VisitCreateCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftUnit403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateCraftUnit403JSONResponse) VisitCreateCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCraftUnit404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateCraftUnit404JSONResponse) VisitCreateCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftUnitRequestObject struct {
+	Id    WorkspaceID      `json:"id"`
+	RefId CraftReferenceID `json:"ref_id"`
+}
+
+type DeleteCraftUnitResponseObject interface {
+	VisitDeleteCraftUnitResponse(w http.ResponseWriter) error
+}
+
+type DeleteCraftUnit204Response struct {
+}
+
+func (response DeleteCraftUnit204Response) VisitDeleteCraftUnitResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteCraftUnit400JSONResponse Error
+
+func (response DeleteCraftUnit400JSONResponse) VisitDeleteCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftUnit401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteCraftUnit401JSONResponse) VisitDeleteCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftUnit403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteCraftUnit403JSONResponse) VisitDeleteCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCraftUnit404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteCraftUnit404JSONResponse) VisitDeleteCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftUnitRequestObject struct {
+	Id    WorkspaceID      `json:"id"`
+	RefId CraftReferenceID `json:"ref_id"`
+	Body  *UpdateCraftUnitJSONRequestBody
+}
+
+type UpdateCraftUnitResponseObject interface {
+	VisitUpdateCraftUnitResponse(w http.ResponseWriter) error
+}
+
+type UpdateCraftUnit200JSONResponse CraftUnit
+
+func (response UpdateCraftUnit200JSONResponse) VisitUpdateCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftUnit400JSONResponse Error
+
+func (response UpdateCraftUnit400JSONResponse) VisitUpdateCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftUnit401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateCraftUnit401JSONResponse) VisitUpdateCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftUnit403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateCraftUnit403JSONResponse) VisitUpdateCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCraftUnit404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateCraftUnit404JSONResponse) VisitUpdateCraftUnitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListWishesRequestObject struct {
 	Id     WorkspaceID `json:"id"`
 	Params ListWishesParams
@@ -7496,12 +8827,6 @@ type StrictServerInterface interface {
 	// RevokeConnection Disconnect an application
 	// (DELETE /connections/{id})
 	RevokeConnection(ctx context.Context, request RevokeConnectionRequestObject) (RevokeConnectionResponseObject, error)
-	// ListCraftCategories List material categories
-	// (GET /craft/categories)
-	ListCraftCategories(ctx context.Context, request ListCraftCategoriesRequestObject) (ListCraftCategoriesResponseObject, error)
-	// ListCraftManufacturers List manufacturers
-	// (GET /craft/manufacturers)
-	ListCraftManufacturers(ctx context.Context, request ListCraftManufacturersRequestObject) (ListCraftManufacturersResponseObject, error)
 	// GetHealth Service health and version
 	// (GET /health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
@@ -7556,6 +8881,9 @@ type StrictServerInterface interface {
 	// CreateCraftItem Create a private catalogue item
 	// (POST /workspaces/{id}/catalog)
 	CreateCraftItem(ctx context.Context, request CreateCraftItemRequestObject) (CreateCraftItemResponseObject, error)
+	// SetCraftCatalogSources Connect official catalogues
+	// (PUT /workspaces/{id}/catalog-sources)
+	SetCraftCatalogSources(ctx context.Context, request SetCraftCatalogSourcesRequestObject) (SetCraftCatalogSourcesResponseObject, error)
 	// DeleteCraftItem Delete a private catalogue item
 	// (DELETE /workspaces/{id}/catalog/{item_id})
 	DeleteCraftItem(ctx context.Context, request DeleteCraftItemRequestObject) (DeleteCraftItemResponseObject, error)
@@ -7568,6 +8896,15 @@ type StrictServerInterface interface {
 	// LinkCraftItem Link a private item to a catalogue item
 	// (POST /workspaces/{id}/catalog/{item_id}/link)
 	LinkCraftItem(ctx context.Context, request LinkCraftItemRequestObject) (LinkCraftItemResponseObject, error)
+	// CreateCraftCategory Create a category
+	// (POST /workspaces/{id}/categories)
+	CreateCraftCategory(ctx context.Context, request CreateCraftCategoryRequestObject) (CreateCraftCategoryResponseObject, error)
+	// DeleteCraftCategory Delete a category
+	// (DELETE /workspaces/{id}/categories/{ref_id})
+	DeleteCraftCategory(ctx context.Context, request DeleteCraftCategoryRequestObject) (DeleteCraftCategoryResponseObject, error)
+	// UpdateCraftCategory Change a category
+	// (PUT /workspaces/{id}/categories/{ref_id})
+	UpdateCraftCategory(ctx context.Context, request UpdateCraftCategoryRequestObject) (UpdateCraftCategoryResponseObject, error)
 	// ListCraftInventory List the stock of a workspace
 	// (GET /workspaces/{id}/inventory)
 	ListCraftInventory(ctx context.Context, request ListCraftInventoryRequestObject) (ListCraftInventoryResponseObject, error)
@@ -7583,6 +8920,15 @@ type StrictServerInterface interface {
 	// AdjustCraftInventoryQty Add to or use up stock
 	// (POST /workspaces/{id}/inventory/{item_id}/adjust)
 	AdjustCraftInventoryQty(ctx context.Context, request AdjustCraftInventoryQtyRequestObject) (AdjustCraftInventoryQtyResponseObject, error)
+	// CreateCraftManufacturer Create a manufacturer
+	// (POST /workspaces/{id}/manufacturers)
+	CreateCraftManufacturer(ctx context.Context, request CreateCraftManufacturerRequestObject) (CreateCraftManufacturerResponseObject, error)
+	// DeleteCraftManufacturer Delete a manufacturer
+	// (DELETE /workspaces/{id}/manufacturers/{ref_id})
+	DeleteCraftManufacturer(ctx context.Context, request DeleteCraftManufacturerRequestObject) (DeleteCraftManufacturerResponseObject, error)
+	// UpdateCraftManufacturer Change a manufacturer
+	// (PUT /workspaces/{id}/manufacturers/{ref_id})
+	UpdateCraftManufacturer(ctx context.Context, request UpdateCraftManufacturerRequestObject) (UpdateCraftManufacturerResponseObject, error)
 	// ListWorkspaceMemberCandidates List users who can be added to a workspace
 	// (GET /workspaces/{id}/member-candidates)
 	ListWorkspaceMemberCandidates(ctx context.Context, request ListWorkspaceMemberCandidatesRequestObject) (ListWorkspaceMemberCandidatesResponseObject, error)
@@ -7622,6 +8968,18 @@ type StrictServerInterface interface {
 	// ShortageToWishlist Add the project shortage to the wish list
 	// (POST /workspaces/{id}/projects/{project_id}/shortage-to-wishlist)
 	ShortageToWishlist(ctx context.Context, request ShortageToWishlistRequestObject) (ShortageToWishlistResponseObject, error)
+	// GetCraftReference Warehouse reference data
+	// (GET /workspaces/{id}/reference)
+	GetCraftReference(ctx context.Context, request GetCraftReferenceRequestObject) (GetCraftReferenceResponseObject, error)
+	// CreateCraftUnit Create a unit
+	// (POST /workspaces/{id}/units)
+	CreateCraftUnit(ctx context.Context, request CreateCraftUnitRequestObject) (CreateCraftUnitResponseObject, error)
+	// DeleteCraftUnit Delete a unit
+	// (DELETE /workspaces/{id}/units/{ref_id})
+	DeleteCraftUnit(ctx context.Context, request DeleteCraftUnitRequestObject) (DeleteCraftUnitResponseObject, error)
+	// UpdateCraftUnit Change a unit
+	// (PUT /workspaces/{id}/units/{ref_id})
+	UpdateCraftUnit(ctx context.Context, request UpdateCraftUnitRequestObject) (UpdateCraftUnitResponseObject, error)
 	// ListWishes List the wish list
 	// (GET /workspaces/{id}/wishlist)
 	ListWishes(ctx context.Context, request ListWishesRequestObject) (ListWishesResponseObject, error)
@@ -7782,54 +9140,6 @@ func (sh *strictHandler) RevokeConnection(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RevokeConnectionResponseObject); ok {
 		if err := validResponse.VisitRevokeConnectionResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListCraftCategories operation middleware
-func (sh *strictHandler) ListCraftCategories(w http.ResponseWriter, r *http.Request) {
-	var request ListCraftCategoriesRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListCraftCategories(ctx, request.(ListCraftCategoriesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListCraftCategories")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListCraftCategoriesResponseObject); ok {
-		if err := validResponse.VisitListCraftCategoriesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListCraftManufacturers operation middleware
-func (sh *strictHandler) ListCraftManufacturers(w http.ResponseWriter, r *http.Request) {
-	var request ListCraftManufacturersRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListCraftManufacturers(ctx, request.(ListCraftManufacturersRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListCraftManufacturers")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListCraftManufacturersResponseObject); ok {
-		if err := validResponse.VisitListCraftManufacturersResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -8341,6 +9651,39 @@ func (sh *strictHandler) CreateCraftItem(w http.ResponseWriter, r *http.Request,
 	}
 }
 
+// SetCraftCatalogSources operation middleware
+func (sh *strictHandler) SetCraftCatalogSources(w http.ResponseWriter, r *http.Request, id WorkspaceID) {
+	var request SetCraftCatalogSourcesRequestObject
+
+	request.Id = id
+
+	var body SetCraftCatalogSourcesJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetCraftCatalogSources(ctx, request.(SetCraftCatalogSourcesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetCraftCatalogSources")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetCraftCatalogSourcesResponseObject); ok {
+		if err := validResponse.VisitSetCraftCatalogSourcesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // DeleteCraftItem operation middleware
 func (sh *strictHandler) DeleteCraftItem(w http.ResponseWriter, r *http.Request, id WorkspaceID, itemId CraftItemID) {
 	var request DeleteCraftItemRequestObject
@@ -8456,6 +9799,100 @@ func (sh *strictHandler) LinkCraftItem(w http.ResponseWriter, r *http.Request, i
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(LinkCraftItemResponseObject); ok {
 		if err := validResponse.VisitLinkCraftItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateCraftCategory operation middleware
+func (sh *strictHandler) CreateCraftCategory(w http.ResponseWriter, r *http.Request, id WorkspaceID) {
+	var request CreateCraftCategoryRequestObject
+
+	request.Id = id
+
+	var body CreateCraftCategoryJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateCraftCategory(ctx, request.(CreateCraftCategoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateCraftCategory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateCraftCategoryResponseObject); ok {
+		if err := validResponse.VisitCreateCraftCategoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteCraftCategory operation middleware
+func (sh *strictHandler) DeleteCraftCategory(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID) {
+	var request DeleteCraftCategoryRequestObject
+
+	request.Id = id
+	request.RefId = refId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteCraftCategory(ctx, request.(DeleteCraftCategoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteCraftCategory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteCraftCategoryResponseObject); ok {
+		if err := validResponse.VisitDeleteCraftCategoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCraftCategory operation middleware
+func (sh *strictHandler) UpdateCraftCategory(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID) {
+	var request UpdateCraftCategoryRequestObject
+
+	request.Id = id
+	request.RefId = refId
+
+	var body UpdateCraftCategoryJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCraftCategory(ctx, request.(UpdateCraftCategoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCraftCategory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateCraftCategoryResponseObject); ok {
+		if err := validResponse.VisitUpdateCraftCategoryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -8612,6 +10049,100 @@ func (sh *strictHandler) AdjustCraftInventoryQty(w http.ResponseWriter, r *http.
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AdjustCraftInventoryQtyResponseObject); ok {
 		if err := validResponse.VisitAdjustCraftInventoryQtyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateCraftManufacturer operation middleware
+func (sh *strictHandler) CreateCraftManufacturer(w http.ResponseWriter, r *http.Request, id WorkspaceID) {
+	var request CreateCraftManufacturerRequestObject
+
+	request.Id = id
+
+	var body CreateCraftManufacturerJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateCraftManufacturer(ctx, request.(CreateCraftManufacturerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateCraftManufacturer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateCraftManufacturerResponseObject); ok {
+		if err := validResponse.VisitCreateCraftManufacturerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteCraftManufacturer operation middleware
+func (sh *strictHandler) DeleteCraftManufacturer(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID) {
+	var request DeleteCraftManufacturerRequestObject
+
+	request.Id = id
+	request.RefId = refId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteCraftManufacturer(ctx, request.(DeleteCraftManufacturerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteCraftManufacturer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteCraftManufacturerResponseObject); ok {
+		if err := validResponse.VisitDeleteCraftManufacturerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCraftManufacturer operation middleware
+func (sh *strictHandler) UpdateCraftManufacturer(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID) {
+	var request UpdateCraftManufacturerRequestObject
+
+	request.Id = id
+	request.RefId = refId
+
+	var body UpdateCraftManufacturerJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCraftManufacturer(ctx, request.(UpdateCraftManufacturerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCraftManufacturer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateCraftManufacturerResponseObject); ok {
+		if err := validResponse.VisitUpdateCraftManufacturerResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -9004,6 +10535,126 @@ func (sh *strictHandler) ShortageToWishlist(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// GetCraftReference operation middleware
+func (sh *strictHandler) GetCraftReference(w http.ResponseWriter, r *http.Request, id WorkspaceID) {
+	var request GetCraftReferenceRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCraftReference(ctx, request.(GetCraftReferenceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCraftReference")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCraftReferenceResponseObject); ok {
+		if err := validResponse.VisitGetCraftReferenceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateCraftUnit operation middleware
+func (sh *strictHandler) CreateCraftUnit(w http.ResponseWriter, r *http.Request, id WorkspaceID) {
+	var request CreateCraftUnitRequestObject
+
+	request.Id = id
+
+	var body CreateCraftUnitJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateCraftUnit(ctx, request.(CreateCraftUnitRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateCraftUnit")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateCraftUnitResponseObject); ok {
+		if err := validResponse.VisitCreateCraftUnitResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteCraftUnit operation middleware
+func (sh *strictHandler) DeleteCraftUnit(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID) {
+	var request DeleteCraftUnitRequestObject
+
+	request.Id = id
+	request.RefId = refId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteCraftUnit(ctx, request.(DeleteCraftUnitRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteCraftUnit")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteCraftUnitResponseObject); ok {
+		if err := validResponse.VisitDeleteCraftUnitResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCraftUnit operation middleware
+func (sh *strictHandler) UpdateCraftUnit(w http.ResponseWriter, r *http.Request, id WorkspaceID, refId CraftReferenceID) {
+	var request UpdateCraftUnitRequestObject
+
+	request.Id = id
+	request.RefId = refId
+
+	var body UpdateCraftUnitJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCraftUnit(ctx, request.(UpdateCraftUnitRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCraftUnit")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateCraftUnitResponseObject); ok {
+		if err := validResponse.VisitUpdateCraftUnitResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListWishes operation middleware
 func (sh *strictHandler) ListWishes(w http.ResponseWriter, r *http.Request, id WorkspaceID, params ListWishesParams) {
 	var request ListWishesRequestObject
@@ -9226,353 +10877,378 @@ func (sh *strictHandler) RemoveWishLink(w http.ResponseWriter, r *http.Request, 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"iXf2VLJMPMWjBvDNl9/8zwEA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

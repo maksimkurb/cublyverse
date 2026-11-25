@@ -517,19 +517,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/craft/categories": {
+    "/workspaces/{id}/reference": {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
             cookie?: never;
         };
         /**
-         * List material categories
-         * @description Returns the reference categories of the craft catalogue with their slug,
-         *     Russian name and default unit. They are the same for every workspace.
+         * Warehouse reference data
+         * @description Categories with their extra fields, manufacturers, units and the official
+         *     catalogues of one warehouse.
          */
-        get: operations["listCraftCategories"];
+        get: operations["getCraftReference"];
         put?: never;
         post?: never;
         delete?: never;
@@ -538,22 +544,202 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/craft/manufacturers": {
+    "/workspaces/{id}/catalog-sources": {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
             cookie?: never;
         };
+        get?: never;
         /**
-         * List manufacturers
-         * @description Returns the known manufacturers of craft materials. A workspace may also
-         *     create a manufacturer implicitly by naming it in a private item.
+         * Connect official catalogues
+         * @description Replaces the set of official catalogues the warehouse searches. Connecting
+         *     one adds the category and unit its items need.
          */
-        get: operations["listCraftManufacturers"];
-        put?: never;
+        put: operations["setCraftCatalogSources"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a category
+         * @description Adds a category to the warehouse.
+         */
+        post: operations["createCraftCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/categories/{ref_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /** @description Id of a category, manufacturer or unit of the warehouse. */
+                ref_id: components["parameters"]["CraftReferenceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change a category
+         * @description Replaces the data of a category of the warehouse.
+         */
+        put: operations["updateCraftCategory"];
+        post?: never;
+        /**
+         * Delete a category
+         * @description Removes a category that nothing uses; otherwise the answer is 400 and says why.
+         */
+        delete: operations["deleteCraftCategory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/manufacturers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a manufacturer
+         * @description Adds a manufacturer to the warehouse.
+         */
+        post: operations["createCraftManufacturer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/manufacturers/{ref_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /** @description Id of a category, manufacturer or unit of the warehouse. */
+                ref_id: components["parameters"]["CraftReferenceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change a manufacturer
+         * @description Replaces the data of a manufacturer of the warehouse.
+         */
+        put: operations["updateCraftManufacturer"];
+        post?: never;
+        /**
+         * Delete a manufacturer
+         * @description Removes a manufacturer that nothing uses; otherwise the answer is 400 and says why.
+         */
+        delete: operations["deleteCraftManufacturer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a unit
+         * @description Adds a unit to the warehouse.
+         */
+        post: operations["createCraftUnit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/units/{ref_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /** @description Id of a category, manufacturer or unit of the warehouse. */
+                ref_id: components["parameters"]["CraftReferenceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change a unit
+         * @description Replaces the data of a unit of the warehouse.
+         */
+        put: operations["updateCraftUnit"];
+        post?: never;
+        /**
+         * Delete a unit
+         * @description Removes a unit that nothing uses; otherwise the answer is 400 and says why.
+         */
+        delete: operations["deleteCraftUnit"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2008,6 +2194,14 @@ export interface components {
         };
         /** @description A new space of a mini-app. */
         CreateWorkspaceRequest: {
+            /**
+             * @description Starting content of a new warehouse: `craft` (default) has the
+             *     needlework categories, units and official catalogues, `empty` has
+             *     one unit. Ignored for other mini-apps.
+             * @example craft
+             * @enum {string}
+             */
+            template?: "craft" | "empty";
             app: components["schemas"]["SpaceApp"];
             /**
              * @description Name of the workspace, 1..80 characters. Leading and trailing
@@ -2034,7 +2228,34 @@ export interface components {
              */
             user_id: string;
         };
-        /** @description A kind of craft material. */
+        /** @description An extra field of the items of a category. */
+        CraftField: {
+            /**
+             * @description Name of the value in item `attrs`; omit for a new field.
+             * @example f-1a2b3c4d5e
+             */
+            key?: string;
+            /**
+             * @description Label shown to people.
+             * @example Длина мотка, м
+             */
+            label: string;
+            /**
+             * @description Kind of the value.
+             * @example number
+             * @enum {string}
+             */
+            type: "text" | "number" | "bool" | "select";
+            /**
+             * @description Allowed values of a `select` field.
+             * @example [
+             *       "матовый",
+             *       "глянцевый"
+             *     ]
+             */
+            options?: string[];
+        };
+        /** @description A kind of material of one warehouse. */
         CraftCategory: {
             /**
              * @description Category id (UUID).
@@ -2047,7 +2268,7 @@ export interface components {
              */
             slug: string;
             /**
-             * @description Russian name shown to the user.
+             * @description Name shown to the user.
              * @example Жемчуг
              */
             name: string;
@@ -2057,8 +2278,35 @@ export interface components {
              * @example шт
              */
             default_unit: string;
+            /** @description Extra fields of the items. */
+            fields: components["schemas"]["CraftField"][];
+            /**
+             * @description Set when items of an official catalogue are shown under this category.
+             * @example
+             */
+            catalog_slug: string;
+            /**
+             * @description Number of the warehouse's own items in the category.
+             * @example 3
+             */
+            own_items: number;
         };
-        /** @description A producer of craft material. */
+        /** @description Editable data of a category. */
+        CraftCategoryInput: {
+            /**
+             * @description Name, unique in the warehouse.
+             * @example Лента
+             */
+            name: string;
+            /**
+             * @description A unit of the warehouse.
+             * @example м
+             */
+            default_unit: string;
+            /** @description All extra fields of the category. */
+            fields: components["schemas"]["CraftField"][];
+        };
+        /** @description A producer of materials. */
         CraftManufacturer: {
             /**
              * @description Manufacturer id (UUID).
@@ -2075,6 +2323,95 @@ export interface components {
              * @example https://www.preciosa.com
              */
             website: string;
+            /**
+             * @description From a connected official catalogue, read-only.
+             * @example false
+             */
+            official: boolean;
+            /**
+             * @description Number of the warehouse's own items of the manufacturer.
+             * @example 2
+             */
+            own_items: number;
+        };
+        /** @description Editable data of a manufacturer. */
+        CraftManufacturerInput: {
+            /**
+             * @description Name, unique among own manufacturers.
+             * @example Gamma
+             */
+            name: string;
+            /**
+             * @description An http(s) address, or empty.
+             * @example https://www.example.com
+             */
+            website: string;
+        };
+        /** @description A unit stock can be counted in. */
+        CraftUnit: {
+            /**
+             * @description Unit id (UUID).
+             * @example 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+             */
+            id: string;
+            /**
+             * @description Unit name.
+             * @example моток
+             */
+            name: string;
+        };
+        /** @description Editable data of a unit. */
+        CraftUnitInput: {
+            /**
+             * @description Name, unique in the warehouse. A rename follows into own items.
+             * @example катушка
+             */
+            name: string;
+        };
+        /** @description An official catalogue a warehouse can connect. */
+        CraftCatalogSource: {
+            /**
+             * @description Key of the catalogue.
+             * @example dmc
+             */
+            source: string;
+            /**
+             * @description Name shown to the user.
+             * @example DMC (мулине)
+             */
+            name: string;
+            /**
+             * @description Connected to this warehouse.
+             * @example true
+             */
+            enabled: boolean;
+            /**
+             * @description Number of positions in the catalogue.
+             * @example 508
+             */
+            items: number;
+        };
+        /** @description The official catalogues to keep connected. */
+        CraftCatalogSourcesInput: {
+            /**
+             * @description Catalogue keys; an empty list disconnects all.
+             * @example [
+             *       "dmc",
+             *       "preciosa"
+             *     ]
+             */
+            sources: string[];
+        };
+        /** @description The configuration of one warehouse. */
+        CraftReference: {
+            /** @description Categories of the warehouse. */
+            categories: components["schemas"]["CraftCategory"][];
+            /** @description Own and connected official manufacturers. */
+            manufacturers: components["schemas"]["CraftManufacturer"][];
+            /** @description Units of the warehouse. */
+            units: components["schemas"]["CraftUnit"][];
+            /** @description Official catalogues. */
+            catalogs: components["schemas"]["CraftCatalogSource"][];
         };
         /**
          * @description A catalogue entry: either a global item shared by every workspace or a
@@ -2207,7 +2544,7 @@ export interface components {
          */
         CraftItemInput: {
             /**
-             * @description Category slug, see `/craft/categories`.
+             * @description Category slug (or name) of the warehouse.
              * @example pearls
              */
             category: string;
@@ -2743,6 +3080,8 @@ export interface components {
          *     as `404`, exactly like a user who is not a member.
          */
         WorkspaceUserID: string;
+        /** @description Id of a category, manufacturer or unit of the warehouse. */
+        CraftReferenceID: string;
         /**
          * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
          *     like an item that does not exist or is not visible to the workspace.
@@ -3553,48 +3892,456 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    listCraftCategories: {
+    getCraftReference: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Material categories. */
+            /** @description The configuration of the warehouse. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CraftCategory"][];
+                    "application/json": components["schemas"]["CraftReference"];
+                };
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
-    listCraftManufacturers: {
+    setCraftCatalogSources: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CraftCatalogSourcesInput"];
+            };
+        };
         responses: {
-            /** @description Known manufacturers. */
+            /** @description The official catalogues after the change. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CraftManufacturer"][];
+                    "application/json": components["schemas"]["CraftCatalogSource"][];
+                };
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createCraftCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CraftCategoryInput"];
+            };
+        };
+        responses: {
+            /** @description The new category. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftCategory"];
+                };
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateCraftCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /** @description Id of a category, manufacturer or unit of the warehouse. */
+                ref_id: components["parameters"]["CraftReferenceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CraftCategoryInput"];
+            };
+        };
+        responses: {
+            /** @description The changed category. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftCategory"];
+                };
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteCraftCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /** @description Id of a category, manufacturer or unit of the warehouse. */
+                ref_id: components["parameters"]["CraftReferenceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The category was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createCraftManufacturer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CraftManufacturerInput"];
+            };
+        };
+        responses: {
+            /** @description The new manufacturer. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftManufacturer"];
+                };
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateCraftManufacturer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /** @description Id of a category, manufacturer or unit of the warehouse. */
+                ref_id: components["parameters"]["CraftReferenceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CraftManufacturerInput"];
+            };
+        };
+        responses: {
+            /** @description The changed manufacturer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftManufacturer"];
+                };
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteCraftManufacturer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /** @description Id of a category, manufacturer or unit of the warehouse. */
+                ref_id: components["parameters"]["CraftReferenceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The manufacturer was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createCraftUnit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CraftUnitInput"];
+            };
+        };
+        responses: {
+            /** @description The new unit. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftUnit"];
+                };
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateCraftUnit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /** @description Id of a category, manufacturer or unit of the warehouse. */
+                ref_id: components["parameters"]["CraftReferenceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CraftUnitInput"];
+            };
+        };
+        responses: {
+            /** @description The changed unit. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftUnit"];
+                };
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteCraftUnit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /** @description Id of a category, manufacturer or unit of the warehouse. */
+                ref_id: components["parameters"]["CraftReferenceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The unit was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The data is invalid or the entry is still in use. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     searchCraftCatalog: {

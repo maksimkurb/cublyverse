@@ -1,19 +1,20 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 
 import type { CraftItem, CraftStockEntry } from "../../api/client";
 import { describeApiError } from "../../api/errors";
 import { useHost, useHostBackButton } from "../../host/HostContext";
-import { Button, Notice, SelectField, Sheet, TextAreaField, TextField } from "../../ui/controls";
+import { Button, Checkbox, Notice, SelectField, Sheet, TextAreaField, TextField } from "../../ui/controls";
 import {
   useCraftCatalog,
-  useCraftCategories,
+  useCraftReference,
   useCreateCraftItem,
   useLinkCraftItem,
   useRemoveCraftStock,
   useSetCraftStock,
+  useUpdateCraftItem,
   useUpdateCraftStockMeta,
 } from "./data";
-import { UNITS, formatQty, itemMeta, normalizeHex, swatchStyle } from "./format";
+import { formatQty, itemMeta, normalizeHex, swatchStyle } from "./format";
 
 /** Props of the stock edit dialog. */
 export interface StockEditDialogProps {
@@ -117,33 +118,48 @@ export function StockEditDialog({ workspaceId, entry, onClose }: StockEditDialog
   );
 }
 
-/** Props of the private item dialog. */
-export interface CreateCraftItemDialogProps {
+/** Props of the own item dialog. */
+export interface CraftItemDialogProps {
   workspaceId: string;
+  /** The own item to change; absent to create one. */
+  item?: CraftItem;
   onClose: () => void;
-  /** Receives the created item. */
-  onCreated: (item: CraftItem) => void;
+  /** Receives the saved item. */
+  onSaved: (item: CraftItem) => void;
 }
 
-/** Creates a private catalogue item; the form is shaped by the category. */
-export function CreateCraftItemDialog({ workspaceId, onClose, onCreated }: CreateCraftItemDialogProps) {
+/** Text of a stored attribute for an input. */
+function attrText(value: unknown): string {
+  return value === undefined || value === null ? "" : String(value);
+}
+
+/**
+ * Creates or changes an own item. The category decides the default unit and
+ * which extra fields the form has.
+ */
+export function CraftItemDialog({ workspaceId, item, onClose, onSaved }: CraftItemDialogProps) {
   useHostBackButton(onClose);
   const host = useHost();
-  const categoriesQuery = useCraftCategories();
+  const reference = useCraftReference(workspaceId);
   const create = useCreateCraftItem();
+  const update = useUpdateCraftItem();
 
-  const [category, setCategory] = useState("");
-  const [name, setName] = useState("");
-  const [manufacturer, setManufacturer] = useState("");
-  const [article, setArticle] = useState("");
-  const [colorName, setColorName] = useState("");
-  const [colorHex, setColorHex] = useState("");
-  const [unit, setUnit] = useState<string>(UNITS[0]);
+  const [category, setCategory] = useState(item?.category ?? "");
+  const [name, setName] = useState(item?.name ?? "");
+  const [manufacturer, setManufacturer] = useState(item?.manufacturer ?? "");
+  const [article, setArticle] = useState(item?.article ?? "");
+  const [colorName, setColorName] = useState(item?.color_name ?? "");
+  const [colorHex, setColorHex] = useState(item?.color_hex ?? "");
+  const [size, setSize] = useState(item?.size ?? "");
+  const [unit, setUnit] = useState(item?.unit ?? "");
+  const [attrs, setAttrs] = useState<Record<string, unknown>>(item?.attrs ?? {});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const manufacturersListId = useId();
 
-  const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
-  const selected = categories.find((item) => item.slug === category);
+  const categories = useMemo(() => reference.data?.categories ?? [], [reference.data]);
+  const units = reference.data?.units ?? [];
+  const selected = categories.find((entry) => entry.slug === category);
 
   // The first category is a sensible default; the unit follows the category.
   useEffect(() => {
@@ -155,87 +171,171 @@ export function CreateCraftItemDialog({ workspaceId, onClose, onCreated }: Creat
 
   function handleCategoryChange(slug: string) {
     setCategory(slug);
-    const next = categories.find((item) => item.slug === slug);
+    const next = categories.find((entry) => entry.slug === slug);
     if (next) {
       setUnit(next.default_unit);
     }
   }
 
+  function setAttr(key: string, value: unknown) {
+    setAttrs((current) => ({ ...current, [key]: value }));
+  }
+
+  /** The stored attributes with the values of the category's fields typed. */
+  function typedAttrs(): Record<string, unknown> | string {
+    const result: Record<string, unknown> = { ...attrs };
+    for (const field of selected?.fields ?? []) {
+      const key = field.key ?? "";
+      const value = result[key];
+      if (value === undefined || value === "") {
+        delete result[key];
+      } else if (field.type === "number") {
+        const parsed = Number(String(value).replace(",", "."));
+        if (!Number.isFinite(parsed)) {
+          return `Поле «${field.label}» должно быть числом.`;
+        }
+        result[key] = parsed;
+      }
+    }
+    return result;
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!category) {
-      setError("Выберите категорию.");
+    const fail = (message: string) => {
+      setError(message);
       host.haptic("error");
+    };
+    if (!category) {
+      fail("Выберите категорию.");
       return;
     }
     if (!name.trim() && !article.trim()) {
-      setError("Укажите название или артикул.");
-      host.haptic("error");
+      fail("Укажите название или артикул.");
       return;
     }
     const hex = normalizeHex(colorHex);
     if (hex === null) {
-      setError("Цвет должен быть в формате #RRGGBB.");
-      host.haptic("error");
+      fail("Цвет должен быть в формате #RRGGBB.");
+      return;
+    }
+    const values = typedAttrs();
+    if (typeof values === "string") {
+      fail(values);
       return;
     }
     setError(null);
     setBusy(true);
+    const body = {
+      category,
+      name: name.trim() || undefined,
+      manufacturer: manufacturer.trim() || undefined,
+      article: article.trim() || undefined,
+      color_name: colorName.trim() || undefined,
+      color_hex: hex || undefined,
+      size: size.trim() || undefined,
+      unit,
+      attrs: values,
+    };
     try {
-      const created = await create.mutateAsync({
-        params: { path: { id: workspaceId } },
-        body: {
-          category,
-          name: name.trim() || undefined,
-          manufacturer: manufacturer.trim() || undefined,
-          article: article.trim() || undefined,
-          color_name: colorName.trim() || undefined,
-          color_hex: hex || undefined,
-          unit,
-        },
-      });
+      // A change replaces the item, so fields without an input are sent back.
+      const saved = item
+        ? await update.mutateAsync({
+            params: { path: { id: workspaceId, item_id: item.id } },
+            body: {
+              ...body,
+              series: item.series || undefined,
+              finish: item.finish || undefined,
+              pack_size: item.pack_size,
+              color_source:
+                hex && hex === item.color_hex && (item.color_source === "official" || item.color_source === "approx")
+                  ? (item.color_source as "official" | "approx")
+                  : undefined,
+            },
+          })
+        : await create.mutateAsync({ params: { path: { id: workspaceId } }, body });
       host.haptic("success");
-      onCreated(created);
+      onSaved(saved);
     } catch (cause) {
-      setError(describeApiError(cause));
-      host.haptic("error");
+      fail(describeApiError(cause));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Sheet title="Новая позиция" onClose={onClose}>
+    <Sheet title={item ? "Изменить позицию" : "Новая позиция"} onClose={onClose}>
       <form className="cv-form" onSubmit={handleSubmit} noValidate>
         {error && (
           <Notice tone="error" title="Проверьте данные">
             {error}
           </Notice>
         )}
+        {reference.isSuccess && categories.length === 0 && (
+          <Notice tone="error">В складе нет категорий. Создайте первую в «Настройках склада».</Notice>
+        )}
         <SelectField label="Категория" value={category} onChange={(event) => handleCategoryChange(event.target.value)}>
-          {categories.map((item) => (
-            <option key={item.slug} value={item.slug}>
-              {item.name}
+          {categories.map((entry) => (
+            <option key={entry.slug} value={entry.slug}>
+              {entry.name}
             </option>
           ))}
         </SelectField>
         <TextField label="Название" placeholder="Например: Жемчуг айвори 2 мм" maxLength={200} value={name} onChange={(event) => setName(event.target.value)} />
-        <TextField label="Производитель" placeholder="Например: PRECIOSA" value={manufacturer} onChange={(event) => setManufacturer(event.target.value)} />
+        <TextField label="Производитель" list={manufacturersListId} placeholder="Выберите или впишите нового" value={manufacturer} onChange={(event) => setManufacturer(event.target.value)} />
+        <datalist id={manufacturersListId}>
+          {(reference.data?.manufacturers ?? []).map((entry) => (
+            <option key={entry.id} value={entry.name} />
+          ))}
+        </datalist>
         <TextField label="Артикул" value={article} onChange={(event) => setArticle(event.target.value)} />
         <div className="craft-color">
-          <TextField label="Цвет" placeholder="#RRGGBB" mono value={colorHex} onChange={(event) => setColorHex(event.target.value)} />
+          <TextField label="Цвет" placeholder="#RRGGBB, необязательно" mono value={colorHex} onChange={(event) => setColorHex(event.target.value)} />
           <span className="craft-swatch craft-swatch--large" style={swatchStyle({ color_hex: normalizeHex(colorHex) ?? "" })} aria-hidden="true" />
         </div>
         <TextField label="Название цвета" placeholder="Например: айвори" value={colorName} onChange={(event) => setColorName(event.target.value)} />
+        <TextField label="Размер" placeholder="Необязательно" value={size} onChange={(event) => setSize(event.target.value)} />
         <SelectField label="Единица" hint={`По умолчанию для категории: ${selected?.default_unit ?? "—"}`} value={unit} onChange={(event) => setUnit(event.target.value)}>
-          {UNITS.map((value) => (
-            <option key={value} value={value}>
-              {value}
+          {units.map((entry) => (
+            <option key={entry.id} value={entry.name}>
+              {entry.name}
             </option>
           ))}
         </SelectField>
+        {(selected?.fields ?? []).map((field) => {
+          const key = field.key ?? "";
+          if (field.type === "bool") {
+            return (
+              <label className="scopes__item" key={key}>
+                <Checkbox checked={attrs[key] === true} onCheckedChange={(checked) => setAttr(key, checked)} />
+                <span className="scopes__label">{field.label}</span>
+              </label>
+            );
+          }
+          if (field.type === "select") {
+            return (
+              <SelectField key={key} label={field.label} value={attrText(attrs[key])} onChange={(event) => setAttr(key, event.target.value)}>
+                <option value="">—</option>
+                {(field.options ?? []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </SelectField>
+            );
+          }
+          return (
+            <TextField
+              key={key}
+              label={field.label}
+              inputMode={field.type === "number" ? "decimal" : undefined}
+              value={attrText(attrs[key])}
+              onChange={(event) => setAttr(key, event.target.value)}
+            />
+          );
+        })}
         <Button type="submit" variant="primary" block loading={busy} disabled={categories.length === 0}>
-          Создать позицию
+          {item ? "Сохранить" : "Создать позицию"}
         </Button>
       </form>
     </Sheet>

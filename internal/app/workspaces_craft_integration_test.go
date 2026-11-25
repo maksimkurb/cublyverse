@@ -96,12 +96,42 @@ func TestWorkspacesAndCraftAPI(t *testing.T) {
 
 	// --- catalogue ----------------------------------------------------------
 
-	status, body = env.api(http.MethodGet, "/craft/categories", token, "")
-	if status != http.StatusOK || !strings.Contains(body, `"slug":"pearls"`) || !strings.Contains(body, `"default_unit":"шт"`) {
-		t.Fatalf("categories status %d: %s", status, body)
+	status, body = env.api(http.MethodGet, "/workspaces/"+ws+"/reference", token, "")
+	if status != http.StatusOK || !strings.Contains(body, `"slug":"pearls"`) || !strings.Contains(body, `"source":"preciosa"`) {
+		t.Fatalf("reference status %d: %s", status, body)
 	}
-	if status, body = env.api(http.MethodGet, "/craft/manufacturers", token, ""); status != http.StatusOK {
-		t.Fatalf("manufacturers status %d: %s", status, body)
+
+	// Own reference data: create, use, change and delete over HTTP.
+	create := func(path, payload string) string {
+		t.Helper()
+		status, body := env.api(http.MethodPost, "/workspaces/"+ws+path, token, payload)
+		if status != http.StatusCreated {
+			t.Fatalf("POST %s status %d: %s", path, status, body)
+		}
+		var created struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal([]byte(body), &created); err != nil || created.ID == "" {
+			t.Fatalf("POST %s: %s", path, body)
+		}
+		return created.ID
+	}
+	unitID := create("/units", `{"name":"катушка"}`)
+	categoryID := create("/categories", `{"name":"Лента","default_unit":"катушка","fields":[{"label":"Ширина, мм","type":"number"}]}`)
+	makerID := create("/manufacturers", `{"name":"Gamma","website":""}`)
+	if status, body = env.api(http.MethodDelete, "/workspaces/"+ws+"/units/"+unitID, token, ""); status != http.StatusBadRequest {
+		t.Fatalf("unit in use status %d: %s", status, body)
+	}
+	if status, body = env.api(http.MethodPut, "/workspaces/"+ws+"/categories/"+categoryID, token, `{"name":"Ленты","default_unit":"катушка","fields":[]}`); status != http.StatusOK || !strings.Contains(body, "Ленты") {
+		t.Fatalf("update category status %d: %s", status, body)
+	}
+	for _, path := range []string{"/categories/" + categoryID, "/units/" + unitID, "/manufacturers/" + makerID} {
+		if status, body = env.api(http.MethodDelete, "/workspaces/"+ws+path, token, ""); status != http.StatusNoContent {
+			t.Fatalf("DELETE %s status %d: %s", path, status, body)
+		}
+	}
+	if status, body = env.api(http.MethodPut, "/workspaces/"+ws+"/catalog-sources", token, `{"sources":["dmc"]}`); status != http.StatusOK {
+		t.Fatalf("catalog sources status %d: %s", status, body)
 	}
 
 	status, body = env.api(http.MethodPost, "/workspaces/"+ws+"/catalog", token,

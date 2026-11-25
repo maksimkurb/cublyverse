@@ -9,7 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/maksimkurb/cublyverse/internal/auth"
-	"github.com/maksimkurb/cublyverse/internal/store/db"
+	"github.com/maksimkurb/cublyverse/internal/features/craft"
 	"github.com/maksimkurb/cublyverse/internal/workspace"
 )
 
@@ -43,14 +43,11 @@ func (a *mcpTestApp) call(session *mcp.ClientSession, name string, args map[stri
 func TestCraftMCP(t *testing.T) {
 	env := newMCPTestApp(t)
 	ctx := context.Background()
-	q := env.app.Store().Queries()
 
-	owner, _ := workspace.ParseID(env.user.ID)
-	ws, err := q.CreateWorkspace(ctx, db.CreateWorkspaceParams{Name: "Дом", CreatedBy: owner, App: workspace.AppWarehouse})
+	spaces := workspace.New(env.app.Store())
+	craft.New(env.app.Store(), spaces) // new warehouses start from a template
+	home, err := spaces.Create(ctx, env.user.ID, workspace.AppWarehouse, "Дом")
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := q.AddWorkspaceMember(ctx, db.AddWorkspaceMemberParams{WorkspaceID: ws.ID, UserID: owner, AddedBy: owner}); err != nil {
 		t.Fatal(err)
 	}
 	const path = "/mcp"
@@ -104,19 +101,15 @@ func TestCraftMCP(t *testing.T) {
 	}
 
 	// A second warehouse makes the space argument necessary; a name picks one.
-	garage, err := q.CreateWorkspace(ctx, db.CreateWorkspaceParams{Name: "Гараж", CreatedBy: owner, App: workspace.AppWarehouse})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := q.AddWorkspaceMember(ctx, db.AddWorkspaceMemberParams{WorkspaceID: garage.ID, UserID: owner, AddedBy: owner}); err != nil {
+	if _, err := spaces.Create(ctx, env.user.ID, workspace.AppWarehouse, "Гараж"); err != nil {
 		t.Fatal(err)
 	}
 	if ambiguous := env.call(session, "craft_inventory_list", map[string]any{}); !ambiguous.IsError || !strings.Contains(toolText(ambiguous), "Гараж") {
 		t.Fatalf("ambiguous space must list the choices: %s", toolText(ambiguous))
 	}
-	home := env.call(session, "craft_inventory_list", map[string]any{"space": "дом"})
-	if home.IsError || len(structured(t, home)["stock"].([]any)) != 1 {
-		t.Fatalf("inventory by name: %s", toolText(home))
+	byName := env.call(session, "craft_inventory_list", map[string]any{"space": "дом"})
+	if byName.IsError || len(structured(t, byName)["stock"].([]any)) != 1 {
+		t.Fatalf("inventory by name: %s", toolText(byName))
 	}
 
 	// A user outside the space cannot reach it, neither by id nor by name.
@@ -125,7 +118,7 @@ func TestCraftMCP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, ref := range []string{"Дом", workspace.FormatID(ws.ID), ""} {
+	for _, ref := range []string{"Дом", home.ID, ""} {
 		if denied := env.call(other, "craft_inventory_list", map[string]any{"space": ref}); !denied.IsError {
 			t.Fatalf("non-member must not read the space %q", ref)
 		}

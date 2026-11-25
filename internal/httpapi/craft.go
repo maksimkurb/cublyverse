@@ -18,51 +18,6 @@ const (
 	msgCraftNotEnoughStock = "Недостаточно запаса для списания"
 )
 
-// ListCraftCategories implements GET /api/v1/craft/categories.
-func (h *handlers) ListCraftCategories(ctx context.Context, _ gen.ListCraftCategoriesRequestObject) (gen.ListCraftCategoriesResponseObject, error) {
-	if _, ok := h.principalID(ctx); !ok {
-		return gen.ListCraftCategories401JSONResponse{
-			UnauthorizedJSONResponse: gen.UnauthorizedJSONResponse(errorPayload(codeUnauthorized, msgLoginRequired)),
-		}, nil
-	}
-	categories, err := h.deps.Craft.Categories(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make(gen.ListCraftCategories200JSONResponse, 0, len(categories))
-	for _, category := range categories {
-		out = append(out, gen.CraftCategory{
-			Id:          category.ID,
-			Slug:        category.Slug,
-			Name:        category.Name,
-			DefaultUnit: category.DefaultUnit,
-		})
-	}
-	return out, nil
-}
-
-// ListCraftManufacturers implements GET /api/v1/craft/manufacturers.
-func (h *handlers) ListCraftManufacturers(ctx context.Context, _ gen.ListCraftManufacturersRequestObject) (gen.ListCraftManufacturersResponseObject, error) {
-	if _, ok := h.principalID(ctx); !ok {
-		return gen.ListCraftManufacturers401JSONResponse{
-			UnauthorizedJSONResponse: gen.UnauthorizedJSONResponse(errorPayload(codeUnauthorized, msgLoginRequired)),
-		}, nil
-	}
-	manufacturers, err := h.deps.Craft.Manufacturers(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make(gen.ListCraftManufacturers200JSONResponse, 0, len(manufacturers))
-	for _, manufacturer := range manufacturers {
-		out = append(out, gen.CraftManufacturer{
-			Id:      manufacturer.ID,
-			Name:    manufacturer.Name,
-			Website: manufacturer.Website,
-		})
-	}
-	return out, nil
-}
-
 // SearchCraftCatalog implements GET /api/v1/workspaces/{id}/catalog.
 func (h *handlers) SearchCraftCatalog(ctx context.Context, request gen.SearchCraftCatalogRequestObject) (gen.SearchCraftCatalogResponseObject, error) {
 	principal, ok := h.principalID(ctx)

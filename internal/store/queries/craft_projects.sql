@@ -40,18 +40,20 @@ WHERE project_id = $1
 -- together give the shortage of the project.
 SELECT pm.project_id, pm.catalog_item_id, pm.qty_planned, pm.qty_used,
        i.*,
-       c.slug  AS category_slug,
-       c.name  AS category_name,
+       COALESCE(sc.slug, rc.slug)::text AS category_slug,
+       COALESCE(sc.name, rc.name)::text AS category_name,
        m.name  AS manufacturer_name,
        COALESCE(inv.qty, 0)::numeric(12,3) AS stock_qty,
        (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory
 FROM craft_project_materials pm
 JOIN craft_catalog_items i ON i.id = pm.catalog_item_id
-JOIN craft_categories c ON c.id = i.category_id
+JOIN craft_categories rc ON rc.id = i.category_id
+LEFT JOIN craft_categories sc
+       ON sc.workspace_id = sqlc.arg(workspace_id)::uuid AND i.workspace_id IS NULL AND sc.catalog_slug = rc.slug
 LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 LEFT JOIN craft_inventory inv ON inv.catalog_item_id = i.id AND inv.workspace_id = sqlc.arg(workspace_id)::uuid
 WHERE pm.project_id = sqlc.arg(project_id)
-ORDER BY c.sort_order, m.name NULLS LAST, i.article, i.name;
+ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name;
 
 -- name: UpsertCraftProjectMaterial :one
 -- Sets the planned quantity of a material; a NULL plan clears it.

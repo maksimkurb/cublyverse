@@ -459,7 +459,7 @@ func wishFromRow(r db.ListCraftWishlistItemsRow) Wish {
 		_ = json.Unmarshal(r.ItemAttrs, &attrs)
 		item := Item{
 			ID: workspace.FormatID(r.ItemID), WorkspaceID: workspace.FormatID(r.ItemWorkspaceID),
-			Category: deref(r.CategorySlug), CategoryName: deref(r.CategoryName),
+			Category: r.CategorySlug, CategoryName: r.CategoryName,
 			Manufacturer: deref(r.ManufacturerName), Article: deref(r.ItemArticle),
 			Series: deref(r.ItemSeries), Name: deref(r.ItemName), ColorName: deref(r.ItemColorName),
 			ColorHex: deref(r.ItemColorHex), ColorSource: deref(r.ItemColorSource),

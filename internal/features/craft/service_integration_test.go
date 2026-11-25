@@ -53,7 +53,7 @@ func (e *env) globalItem(t *testing.T, article string) string {
 	t.Helper()
 	ctx := context.Background()
 	q := e.st.Queries()
-	cat, err := q.GetCraftCategoryBySlug(ctx, "seed-beads")
+	cat, err := q.GetReferenceCraftCategoryBySlug(ctx, "seed-beads")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func (e *env) globalItem(t *testing.T, article string) string {
 	}
 	item, err := q.CreateCraftCatalogItem(ctx, db.CreateCraftCatalogItemParams{
 		CategoryID: cat.ID, ManufacturerID: m.ID, Article: article, Name: "PRECIOSA " + article,
-		Unit: "упаковка", Attrs: []byte("{}"), Source: "test",
+		Unit: "упаковка", Attrs: []byte("{}"), Source: "preciosa",
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -89,15 +89,29 @@ type Candidate struct {
 
 // Service is the workspace business logic.
 type Service struct {
-	st *store.Store
+	st    *store.Store
+	hooks map[string]Seed
 }
 
+// Seed fills a new space of a mini-app inside the transaction that creates it.
+// template is the choice of the creator, empty for the default.
+type Seed func(ctx context.Context, q *db.Queries, spaceID pgtype.UUID, template string) error
+
 // New returns the service.
-func New(st *store.Store) *Service { return &Service{st: st} }
+func New(st *store.Store) *Service { return &Service{st: st, hooks: map[string]Seed{}} }
+
+// OnCreate registers what fills a new space of a mini-app. Call it while wiring
+// the application, before requests are served.
+func (s *Service) OnCreate(app string, seed Seed) { s.hooks[app] = seed }
 
 // Create makes a space of a mini-app owned by the user, who becomes its first
 // member. The first space a user creates for a mini-app is their personal one.
 func (s *Service) Create(ctx context.Context, userID, app, name string) (Workspace, error) {
+	return s.CreateFromTemplate(ctx, userID, app, name, "")
+}
+
+// CreateFromTemplate is Create with the starting content the creator chose.
+func (s *Service) CreateFromTemplate(ctx context.Context, userID, app, name, template string) (Workspace, error) {
 	uid, err := ParseID(userID)
 	if err != nil {
 		return Workspace{}, err
@@ -112,8 +126,13 @@ func (s *Service) Create(ctx context.Context, userID, app, name string) (Workspa
 	var created db.Workspace
 	err = s.st.InTx(ctx, func(q *db.Queries) error {
 		var err error
-		created, err = CreateTx(ctx, q, uid, app, name)
-		return err
+		if created, err = CreateTx(ctx, q, uid, app, name); err != nil {
+			return err
+		}
+		if seed := s.hooks[app]; seed != nil {
+			return seed(ctx, q, created.ID, template)
+		}
+		return nil
 	})
 	if err != nil {
 		return Workspace{}, err

@@ -53,7 +53,7 @@ api/openapi.yaml ──┬─ oapi-codegen ───────→ internal/htt
 | `tokens` | `GET/POST /tokens`, `DELETE /tokens/{id}` | персональные токены для MCP и скриптов; только сессия. |
 | `connections` | `GET /connections`, `DELETE /connections/{id}` | приложения, подключённые через OAuth (MCP-клиенты); только сессия. Протокольные адреса `/oauth/*` и `/.well-known/*` в OpenAPI не входят: они описаны в `docs/MCP.md`. |
 | `workspaces` | `GET/POST /workspaces`, `PATCH/DELETE /workspaces/{id}`, `GET/POST /workspaces/{id}/members`, `DELETE /workspaces/{id}/members/{user_id}`, `GET /workspaces/{id}/member-candidates` | общие пространства и их участники; только сессия. |
-| `craft` | `GET /craft/categories`, `GET /craft/manufacturers`, `GET/POST /workspaces/{id}/catalog`, `GET/PUT/DELETE /workspaces/{id}/catalog/{item_id}`, `POST /workspaces/{id}/catalog/{item_id}/link`, `GET /workspaces/{id}/inventory`, `PUT/PATCH/DELETE /workspaces/{id}/inventory/{item_id}`, `POST /workspaces/{id}/inventory/{item_id}/adjust`, `GET/POST /workspaces/{id}/wishlist`, `PATCH/DELETE /workspaces/{id}/wishlist/{wish_id}`, `POST /workspaces/{id}/wishlist/{wish_id}/links`, `DELETE /workspaces/{id}/wishlist/{wish_id}/links/{link_id}`, `POST /workspaces/{id}/wishlist/{wish_id}/bought`, `GET/POST /workspaces/{id}/projects`, `GET/PATCH/DELETE /workspaces/{id}/projects/{project_id}`, `PUT/DELETE /workspaces/{id}/projects/{project_id}/materials/{item_id}`, `POST /workspaces/{id}/projects/{project_id}/materials/{item_id}/use`, `POST /workspaces/{id}/projects/{project_id}/shortage-to-wishlist` | каталог, запасы, wishlist и проекты пространства; только сессия. |
+| `craft` | `GET /workspaces/{id}/reference`, `POST /workspaces/{id}/categories`, `PUT/DELETE /workspaces/{id}/categories/{ref_id}`, `POST /workspaces/{id}/manufacturers`, `PUT/DELETE /workspaces/{id}/manufacturers/{ref_id}`, `POST /workspaces/{id}/units`, `PUT/DELETE /workspaces/{id}/units/{ref_id}`, `PUT /workspaces/{id}/catalog-sources`, `GET/POST /workspaces/{id}/catalog`, `GET/PUT/DELETE /workspaces/{id}/catalog/{item_id}`, `POST /workspaces/{id}/catalog/{item_id}/link`, `GET /workspaces/{id}/inventory`, `PUT/PATCH/DELETE /workspaces/{id}/inventory/{item_id}`, `POST /workspaces/{id}/inventory/{item_id}/adjust`, `GET/POST /workspaces/{id}/wishlist`, `PATCH/DELETE /workspaces/{id}/wishlist/{wish_id}`, `POST /workspaces/{id}/wishlist/{wish_id}/links`, `DELETE /workspaces/{id}/wishlist/{wish_id}/links/{link_id}`, `POST /workspaces/{id}/wishlist/{wish_id}/bought`, `GET/POST /workspaces/{id}/projects`, `GET/PATCH/DELETE /workspaces/{id}/projects/{project_id}`, `PUT/DELETE /workspaces/{id}/projects/{project_id}/materials/{item_id}`, `POST /workspaces/{id}/projects/{project_id}/materials/{item_id}/use`, `POST /workspaces/{id}/projects/{project_id}/shortage-to-wishlist` | каталог, запасы, wishlist и проекты пространства; только сессия. |
 
 Все операции, кроме `GET /health` и `POST /auth/telegram`, требуют
 `bearerAuth` или `cookieAuth`; `POST /auth/logout` тоже работает без сессии,
@@ -383,14 +383,17 @@ POST /auth/confirm (form: state, token)
 
 ## Каталог и запасы
 
-Операции тега `craft`. Справочники (`GET /craft/categories`,
-`GET /craft/manufacturers`) общие для всех пространств. Позиция каталога либо
-общая (её пишут скраперы, менять нельзя), либо частная для пространства.
+Операции тега `craft`. Категории (со своими полями), производители и единицы у
+каждого склада свои, официальные каталоги подключаются к складу. Позиция
+каталога либо общая (её пишут скраперы, менять нельзя), либо своя для склада.
 
 | Метод и путь | Назначение |
 |---|---|
-| `GET /craft/categories` | категории: `slug`, имя, единица по умолчанию |
-| `GET /craft/manufacturers` | известные производители |
+| `GET /workspaces/{id}/reference` | категории, производители, единицы и официальные каталоги склада |
+| `POST …/categories`, `PUT/DELETE …/categories/{ref_id}` | категории и их поля (`text`, `number`, `bool`, `select`); занятую позициями удалить нельзя |
+| `POST …/manufacturers`, `PUT/DELETE …/manufacturers/{ref_id}` | свои производители; официальные только читаются |
+| `POST …/units`, `PUT/DELETE …/units/{ref_id}` | единицы; переименование переносится в свои позиции и категории |
+| `PUT /workspaces/{id}/catalog-sources` | подключённые официальные каталоги (`dmc`, `preciosa`) |
 | `GET /workspaces/{id}/catalog?category=&manufacturer=&q=&only_in_stock=&limit=&offset=` | поиск по общему каталогу и частным позициям; в ответе остаток пространства |
 | `POST /workspaces/{id}/catalog` | создать частную позицию (`201`) |
 | `GET/PUT/DELETE /workspaces/{id}/catalog/{item_id}` | одна позиция; менять и удалять можно только частную |

@@ -77,8 +77,8 @@ var Scopes = []Scope{
 	{Name: ScopeProfileRead, Description: "Чтение профиля"},
 	{Name: ScopeRemindersRead, Description: "Чтение напоминаний"},
 	{Name: ScopeRemindersWrite, Description: "Изменение напоминаний"},
-	{Name: ScopeCraftRead, Description: "Чтение запасов и каталога («Бусинки»)"},
-	{Name: ScopeCraftWrite, Description: "Изменение запасов, каталога и закупок («Бусинки»)"},
+	{Name: ScopeCraftRead, Description: "Чтение складов: запасы, каталог, закупки и проекты"},
+	{Name: ScopeCraftWrite, Description: "Изменение складов: запасы, каталог, справочники, закупки и проекты"},
 }
 
 // ErrAPITokenNotFound means the token does not exist or belongs to another

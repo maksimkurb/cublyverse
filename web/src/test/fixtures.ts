@@ -115,6 +115,9 @@ export function makeCategory(overrides: Partial<CraftCategory> = {}): CraftCateg
     slug: "pearls",
     name: "Жемчуг",
     default_unit: "шт",
+    fields: [],
+    catalog_slug: "",
+    own_items: 0,
     ...overrides,
   };
 }

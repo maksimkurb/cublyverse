@@ -50,7 +50,11 @@ func (h *handlers) CreateWorkspace(ctx context.Context, request gen.CreateWorksp
 	if request.Body == nil {
 		return gen.CreateWorkspace400JSONResponse(errorPayload(codeBadRequest, msgBadRequest)), nil
 	}
-	created, err := h.deps.Workspaces.Create(ctx, principal, string(request.Body.App), request.Body.Name)
+	template := ""
+	if request.Body.Template != nil {
+		template = string(*request.Body.Template)
+	}
+	created, err := h.deps.Workspaces.CreateFromTemplate(ctx, principal, string(request.Body.App), request.Body.Name, template)
 	if err != nil {
 		var invalid *workspace.ValidationError
 		if errors.As(err, &invalid) {

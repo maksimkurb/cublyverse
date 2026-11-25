@@ -42,8 +42,9 @@ cublyverse migrate status
 | 00013 | `00013_catalog_sync.sql` | `craft_catalog_sync_runs` — журнал запусков скраперов глобального каталога: источник, статус `running`/`ok`/`failed`, счётчики `created`/`updated`/`unchanged`, текст ошибки. |
 | 00014 | `00014_reminders_recurrence.sql` | Гибкое повторение напоминаний: `interval_count`, `month_week_position`, `month_weekday`, `start_date`, `end_kind`, `end_date`, `end_count`, `occurrences_fired`, `finished_at`; новые `CHECK` и бэкфилл старых строк под прежнее поведение. |
 | 00015 | `00015_spaces.sql` | Пространства по мини-аппам (`workspaces.app`, `personal`); напоминания получают `workspace_id` (существующие переезжают в личное пространство автора) и получателей `reminder_recipients`; у OAuth убрана привязка к пространству, гранты удалённых адресов `/mcp/w/…` удаляются. |
+| 00016 | `00016_craft_reference.sql` | Настраиваемый склад: `craft_categories` и `craft_manufacturers` получают `workspace_id` (строки без него — эталон официальных каталогов), у категорий — свои поля `fields` и связь `catalog_slug`; новые `craft_units` и `craft_space_catalogs`. Существующие склады получают копии категорий, все единицы и оба каталога. |
 
-Нумерация не переиспользуется: следующая миграция — `00016_<тема>.sql`.
+Нумерация не переиспользуется: следующая миграция — `00017_<тема>.sql`.
 `make check` сверяет, что каждый файл из `internal/store/migrations/*.sql`
 упомянут в этом документе.
 

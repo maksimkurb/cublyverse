@@ -24,14 +24,27 @@ function invalidateWorkspaceData(queryClient: QueryClient) {
   });
 }
 
-/** Material categories with their default units. */
-export function useCraftCategories() {
-  return $api.useQuery("get", "/craft/categories");
+/** Categories, manufacturers, units and official catalogues of a warehouse. */
+export function useCraftReference(workspaceId: string) {
+  return $api.useQuery("get", "/workspaces/{id}/reference", { params: { path: { id: workspaceId } } });
 }
 
-/** Known manufacturers. */
-export function useCraftManufacturers() {
-  return $api.useQuery("get", "/craft/manufacturers");
+/** Mutations of the warehouse configuration; each refreshes the warehouse. */
+export function useReferenceMutations() {
+  const queryClient = useQueryClient();
+  const options = { onSuccess: () => invalidateWorkspaceData(queryClient) };
+  return {
+    createCategory: $api.useMutation("post", "/workspaces/{id}/categories", options),
+    updateCategory: $api.useMutation("put", "/workspaces/{id}/categories/{ref_id}", options),
+    deleteCategory: $api.useMutation("delete", "/workspaces/{id}/categories/{ref_id}", options),
+    createManufacturer: $api.useMutation("post", "/workspaces/{id}/manufacturers", options),
+    updateManufacturer: $api.useMutation("put", "/workspaces/{id}/manufacturers/{ref_id}", options),
+    deleteManufacturer: $api.useMutation("delete", "/workspaces/{id}/manufacturers/{ref_id}", options),
+    createUnit: $api.useMutation("post", "/workspaces/{id}/units", options),
+    updateUnit: $api.useMutation("put", "/workspaces/{id}/units/{ref_id}", options),
+    deleteUnit: $api.useMutation("delete", "/workspaces/{id}/units/{ref_id}", options),
+    setCatalogs: $api.useMutation("put", "/workspaces/{id}/catalog-sources", options),
+  };
 }
 
 /** Search the shared catalogue and the private items of the workspace. */
@@ -72,6 +85,22 @@ export function useCraftInventory(workspaceId: string, filter: CraftFilter) {
 export function useCreateCraftItem() {
   const queryClient = useQueryClient();
   return $api.useMutation("post", "/workspaces/{id}/catalog", {
+    onSuccess: () => invalidateWorkspaceData(queryClient),
+  });
+}
+
+/** Replaces the data of an own item. */
+export function useUpdateCraftItem() {
+  const queryClient = useQueryClient();
+  return $api.useMutation("put", "/workspaces/{id}/catalog/{item_id}", {
+    onSuccess: () => invalidateWorkspaceData(queryClient),
+  });
+}
+
+/** Deletes an own item with its stock. */
+export function useDeleteCraftItem() {
+  const queryClient = useQueryClient();
+  return $api.useMutation("delete", "/workspaces/{id}/catalog/{item_id}", {
     onSuccess: () => invalidateWorkspaceData(queryClient),
   });
 }

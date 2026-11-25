@@ -342,7 +342,7 @@ func (s *Service) MarkBought(ctx context.Context, userID, workspaceID, wishID st
 			if existing.QtyWanted.Valid {
 				qty := numFloat(existing.QtyWanted)
 				if _, err := s.adjustInTx(ctx, q, wid, existing.CatalogItemID, actor, pgtype.UUID{},
-					qty, "куплено из wishlist"); err != nil {
+					qty, "куплено по списку закупок"); err != nil {
 					return err
 				}
 			} else {
@@ -494,7 +494,7 @@ func mapWishUnique(err error) error {
 	}
 	var pg *pgconn.PgError
 	if errors.As(err, &pg) && pg.Code == "23505" {
-		return invalid("Позиция уже в wishlist")
+		return invalid("Позиция уже в закупках")
 	}
 	return fmt.Errorf("save wish: %w", err)
 }

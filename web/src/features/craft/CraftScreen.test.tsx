@@ -15,6 +15,7 @@ import {
   useRemoveCraftStock,
   useSetCraftStock,
   useUpdateCraftStockMeta,
+  useWishes,
 } from "./data";
 
 vi.mock("../workspaces/selection", () => ({
@@ -41,6 +42,7 @@ vi.mock("./data", async (importOriginal) => {
     useUpdateCraftStockMeta: vi.fn(),
     useRemoveCraftStock: vi.fn(),
     useLinkCraftItem: vi.fn(),
+    useWishes: vi.fn(),
   };
 });
 
@@ -75,6 +77,7 @@ function mutation(result: unknown = undefined): MutationStub {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useWishes).mockReturnValue(queryResult({ data: [] }));
   categoriesMock.mockReturnValue(queryResult({ data: [makeCategory()] }));
   manufacturersMock.mockReturnValue(queryResult({ data: [] }));
   inventoryMock.mockReturnValue(queryResult({ data: [] }));
@@ -186,5 +189,15 @@ describe("CraftScreen", () => {
       params: { path: { id: makeWorkspace().id, item_id: makeItem().id } },
       body: { target_item_id: "target" },
     });
+  });
+
+  it("shows the purchase list as a tab next to the stock", () => {
+    renderWithHost(<CraftScreen />);
+
+    fireEvent.click(screen.getByText("Закупки"));
+
+    expect(screen.getByRole("heading", { name: "Закупки" })).toBeInTheDocument();
+    expect(screen.getByText("Список закупок пуст")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Добавить в закупки" })).toBeInTheDocument();
   });
 });

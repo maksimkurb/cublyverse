@@ -62,7 +62,7 @@ func TestWishlistLifecycleAndIsolation(t *testing.T) {
 	// A catalogue item can be wanted only once at a time.
 	_, err = e.craft.AddWish(ctx, user, ws.ID, craft.WishInput{CatalogItemID: pearl.ID})
 	var invalid *craft.ValidationError
-	if !errors.As(err, &invalid) || !strings.Contains(invalid.Message, "уже в wishlist") {
+	if !errors.As(err, &invalid) || !strings.Contains(invalid.Message, "уже в закупках") {
 		t.Fatalf("duplicate wish = %v, want a validation error", err)
 	}
 

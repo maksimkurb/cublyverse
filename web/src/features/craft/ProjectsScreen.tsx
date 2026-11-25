@@ -93,7 +93,7 @@ function ProjectDetail({ workspaceId, projectId, onBack }: { workspaceId: string
       host.haptic("success");
     } catch (cause) {
       host.haptic("error");
-      await host.showAlert(`Не удалось добавить в wishlist: ${describeApiError(cause)}`);
+      await host.showAlert(`Не удалось добавить в закупки: ${describeApiError(cause)}`);
     }
   }
 
@@ -152,7 +152,7 @@ function ProjectDetail({ workspaceId, projectId, onBack }: { workspaceId: string
               Добавить материал
             </Button>
             <Button onClick={() => void handleShortage()} loading={shortage.isPending}>
-              Недостающее в wishlist
+              Недостающее в закупки
             </Button>
             <Button aria-label="Изменить проект" onClick={() => setEditOpen(true)}>
               Изменить

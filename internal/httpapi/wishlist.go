@@ -12,7 +12,7 @@ import (
 
 // User-facing messages of the wish list endpoints.
 const (
-	msgWishNotFound = "Запись wishlist не найдена"
+	msgWishNotFound = "Запись в закупках не найдена"
 )
 
 // ListWishes implements GET /api/v1/workspaces/{id}/wishlist.

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeItem, makeWish, makeWorkspace } from "../../test/fixtures";
 import { renderWithHost } from "../../test/render";
-import WishlistScreen from "./WishlistScreen";
+import PurchasesPanel from "./PurchasesPanel";
 import {
   useAddWishLink,
   useCraftCatalog,
@@ -14,16 +14,6 @@ import {
   useUpdateWish,
   useWishes,
 } from "./data";
-
-vi.mock("../workspaces/selection", () => ({
-  useCurrentWorkspace: () => ({
-    query: { isPending: false, isSuccess: true, isError: false, data: [makeWorkspace()], refetch: vi.fn() },
-    workspaces: [makeWorkspace()],
-    current: makeWorkspace(),
-    select: vi.fn(),
-  }),
-  writeStoredWorkspaceID: vi.fn(),
-}));
 
 vi.mock("./data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./data")>();
@@ -79,7 +69,7 @@ beforeEach(() => {
   boughtMock.mockReturnValue(mutation(makeWish({ status: "bought" })) as never);
 });
 
-describe("WishlistScreen", () => {
+describe("PurchasesPanel", () => {
   it("groups entries by status and opens shop links in a new tab", () => {
     wishesMock.mockReturnValue(
       queryResult({
@@ -100,9 +90,8 @@ describe("WishlistScreen", () => {
       }),
     );
 
-    renderWithHost(<WishlistScreen />);
+    renderWithHost(<PurchasesPanel workspaceId={makeWorkspace().id} />);
 
-    expect(screen.getByRole("heading", { name: "Wishlist" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Хочу купить/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Заказано/ })).toBeInTheDocument();
     expect(screen.getByText("Лента атласная")).toBeInTheDocument();
@@ -123,7 +112,7 @@ describe("WishlistScreen", () => {
     updateMock.mockReturnValue(update as never);
     wishesMock.mockReturnValue(queryResult({ data: [makeWish()] }));
 
-    renderWithHost(<WishlistScreen />);
+    renderWithHost(<PurchasesPanel workspaceId={makeWorkspace().id} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Изменить: Жемчуг айвори 2 мм" }));
     fireEvent.change(screen.getByLabelText("Сколько нужно"), { target: { value: "5" } });
@@ -142,7 +131,7 @@ describe("WishlistScreen", () => {
     boughtMock.mockReturnValue(bought as never);
     wishesMock.mockReturnValue(queryResult({ data: [makeWish()] }));
 
-    renderWithHost(<WishlistScreen />);
+    renderWithHost(<PurchasesPanel workspaceId={makeWorkspace().id} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Куплено: Жемчуг айвори 2 мм" }));
     expect(screen.getByText(/перейдёт в статус «Куплено»/)).toBeInTheDocument();
@@ -162,9 +151,9 @@ describe("WishlistScreen", () => {
     createMock.mockReturnValue(create as never);
     catalogMock.mockReturnValue(queryResult({ data: [makeItem()] }));
 
-    renderWithHost(<WishlistScreen />);
+    renderWithHost(<PurchasesPanel workspaceId={makeWorkspace().id} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Добавить в wishlist" }));
+    fireEvent.click(screen.getByRole("button", { name: "Добавить в закупки" }));
     fireEvent.click(await screen.findByRole("button", { name: "Выбрать: Жемчуг айвори 2 мм" }));
     fireEvent.change(screen.getByLabelText("Сколько нужно"), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText("Приоритет"), { target: { value: "1" } });

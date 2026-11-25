@@ -11,18 +11,23 @@ import { WorkspaceSwitcher } from "../workspaces/WorkspaceSwitcher";
 import { CreateCraftItemDialog, LinkCraftItemDialog, StockEditDialog } from "./CraftDialogs";
 import { useAdjustCraftStock, useCraftCatalog, useCraftCategories, useCraftInventory, useCraftManufacturers } from "./data";
 import { formatQty, itemColorLabel, itemMeta, qtyLabel, swatchStyle } from "./format";
+import PurchasesPanel from "./PurchasesPanel";
 
-type Tab = "inventory" | "catalog";
+type Tab = "inventory" | "purchases" | "catalog";
 
 const TABS: ReadonlyArray<{ value: Tab; label: string }> = [
   { value: "inventory", label: "Запасы" },
+  { value: "purchases", label: "Закупки" },
   { value: "catalog", label: "Каталог" },
 ];
 
 /** Threshold of the low-stock filter. */
 const LOW_STOCK_MAX = 5;
 
-/** Category and manufacturer selects shared by both tabs. */
+/** Page heading of every tab. */
+const TITLES: Record<Tab, string> = { inventory: "Запасы", purchases: "Закупки", catalog: "Каталог" };
+
+/** Category and manufacturer selects of the stock and catalogue tabs. */
 function CraftFilters({
   category,
   manufacturer,
@@ -348,19 +353,19 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
 }
 
 /**
- * «Бусинки»: the stock and the catalogue of the selected workspace. The
+ * «Бусинки»: the stock, purchases and catalogue of the selected workspace. The
  * workspace itself and its members live in the «Участники» screen.
  */
 export default function CraftScreen() {
   const [tab, setTab] = useState<Tab>("inventory");
-  usePageTitle(tab === "catalog" ? "Каталог" : "Запасы");
+  usePageTitle(TITLES[tab]);
 
   const { query, workspaces, current, select } = useCurrentWorkspace();
 
   return (
     <div className="page">
       <header className="page__head">
-        <h1 className="page__title">{tab === "catalog" ? "Каталог" : "Запасы"}</h1>
+        <h1 className="page__title">{TITLES[tab]}</h1>
       </header>
 
       {query.isPending && (
@@ -388,7 +393,9 @@ export default function CraftScreen() {
         <>
           <WorkspaceSwitcher workspaces={workspaces} currentId={current.id} onChange={select} />
           <Segmented label="Раздел" value={tab} options={TABS} onChange={setTab} />
-          {tab === "inventory" ? <InventoryPanel workspaceId={current.id} /> : <CatalogPanel workspaceId={current.id} />}
+          {tab === "inventory" && <InventoryPanel workspaceId={current.id} />}
+          {tab === "purchases" && <PurchasesPanel workspaceId={current.id} />}
+          {tab === "catalog" && <CatalogPanel workspaceId={current.id} />}
         </>
       )}
     </div>

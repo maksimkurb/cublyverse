@@ -141,7 +141,7 @@ export function isHttpURL(value: string): boolean {
 /** Russian count of added wishes for the confirmation message. */
 export function addedWishesLabel(count: number): string {
   if (count === 0) {
-    return "Все недостающие материалы уже в wishlist.";
+    return "Все недостающие материалы уже в закупках.";
   }
-  return `Добавлено в wishlist: ${count}.`;
+  return `Добавлено в закупки: ${count}.`;
 }

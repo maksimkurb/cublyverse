@@ -129,13 +129,13 @@ describe("ProjectsScreen", () => {
 
     renderWithHost(<ProjectsScreen />);
     fireEvent.click(screen.getByRole("button", { name: /Серьги «Майорка»/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Недостающее в wishlist" }));
+    fireEvent.click(screen.getByRole("button", { name: "Недостающее в закупки" }));
 
     await waitFor(() => expect(shortage.mutateAsync).toHaveBeenCalledTimes(1));
     expect(shortage.mutateAsync.mock.calls[0][0]).toMatchObject({
       params: { path: { id: makeWorkspace().id, project_id: makeProject().id } },
     });
-    expect(await screen.findByText("Добавлено в wishlist: 1.")).toBeInTheDocument();
+    expect(await screen.findByText("Добавлено в закупки: 1.")).toBeInTheDocument();
   });
 
   it("plans a catalogue item with the default quantity", async () => {

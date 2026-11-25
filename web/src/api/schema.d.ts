@@ -777,6 +777,383 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{id}/wishlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the wish list
+         * @description Returns what the workspace wants to buy. The default `status` is `wanted`;
+         *     `ordered` and `bought` show the other states and `all` shows every entry.
+         *     Each entry carries its shop links and, when it points at a catalogue
+         *     item, the item summary with the current stock of the workspace.
+         */
+        get: operations["listWishes"];
+        put?: never;
+        /**
+         * Add an entry to the wish list
+         * @description Adds what the workspace wants to buy. Either point at a catalogue item
+         *     with `catalog_item_id` — the title defaults to its name — or send a free
+         *     text `title` for something that is not in any catalogue yet. A catalogue
+         *     item can be wanted only once at a time: adding it again is a `400`.
+         */
+        post: operations["createWish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/wishlist/{wish_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an entry that does not exist or belongs to another workspace.
+                 */
+                wish_id: components["parameters"]["WishID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a wish list entry
+         * @description Deletes an entry together with its shop links. The stock does not change.
+         *     A request authenticated with the browser cookie must declare
+         *     `Content-Type: application/json` even though there is no body.
+         */
+        delete: operations["deleteWish"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a wish list entry
+         * @description Replaces the editable fields of an entry: wanted quantity, priority, note
+         *     and status. Send `qty_wanted: null` to clear the quantity. An omitted
+         *     `status` keeps the current one, so a repeated request does not move a
+         *     bought entry back to `wanted`.
+         */
+        patch: operations["updateWish"];
+        trace?: never;
+    };
+    "/workspaces/{id}/wishlist/{wish_id}/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an entry that does not exist or belongs to another workspace.
+                 */
+                wish_id: components["parameters"]["WishID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a shop link to a wish
+         * @description Attaches one shop page where the wished item can be bought. The URL must
+         *     start with `http://` or `https://`; the price, currency and availability
+         *     are optional.
+         */
+        post: operations["addWishLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/wishlist/{wish_id}/links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an entry that does not exist or belongs to another workspace.
+                 */
+                wish_id: components["parameters"]["WishID"];
+                /**
+                 * @description Shop link id (UUID) of a wish list entry. A malformed id is reported as
+                 *     `404`, exactly like a link that does not exist.
+                 */
+                link_id: components["parameters"]["WishLinkID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a shop link from a wish
+         * @description Deletes one shop link of an entry; the entry itself stays. A request
+         *     authenticated with the browser cookie must declare
+         *     `Content-Type: application/json` even though there is no body.
+         */
+        delete: operations["removeWishLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/wishlist/{wish_id}/bought": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an entry that does not exist or belongs to another workspace.
+                 */
+                wish_id: components["parameters"]["WishID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a wish as bought
+         * @description Marks an entry as bought. With `add_to_stock` set and a catalogue item,
+         *     the wanted quantity is added to the stock in the same transaction, as a
+         *     stock adjustment; a free-text entry is only marked bought. Calling it
+         *     again on an already bought entry changes no stock.
+         */
+        post: operations["markWishBought"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List craft projects
+         * @description Returns the projects of the workspace with the number of planned
+         *     materials in each. Materials themselves come from `GET
+         *     /workspaces/{id}/projects/{project_id}`.
+         */
+        get: operations["listProjects"];
+        put?: never;
+        /**
+         * Create a project
+         * @description Creates an empty project. Materials are planned with `PUT
+         *     /workspaces/{id}/projects/{project_id}/materials/{item_id}`.
+         */
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get a project with its materials
+         * @description Returns one project and every material planned for it: the planned and
+         *     already used quantity, the current stock and the shortage. `shortage` is
+         *     `max(0, qty_planned - qty_used - stock)`, the quantity still to buy; a
+         *     material without a plan has no shortage.
+         */
+        get: operations["getProject"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a project
+         * @description Deletes a project with its material plan. The stock does not change: the
+         *     inventory log keeps the reason of every withdrawal. A request
+         *     authenticated with the browser cookie must declare
+         *     `Content-Type: application/json` even though there is no body.
+         */
+        delete: operations["deleteProject"];
+        options?: never;
+        head?: never;
+        /**
+         * Change the name and notes of a project
+         * @description Replaces the name and notes of a project. Both are sent in full; an
+         *     omitted `notes` is stored as empty.
+         */
+        patch: operations["updateProject"];
+        trace?: never;
+    };
+    "/workspaces/{id}/projects/{project_id}/materials/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Plan a material for a project
+         * @description Adds a catalogue item to the project plan or changes its planned
+         *     quantity. `qty_planned: null` clears the plan; the used quantity and the
+         *     stock are untouched. The item must be visible to the workspace.
+         */
+        put: operations["setProjectMaterial"];
+        post?: never;
+        /**
+         * Drop a material from the project plan
+         * @description Removes a material from the plan of a project; its stock is untouched. A
+         *     request authenticated with the browser cookie must declare
+         *     `Content-Type: application/json` even though there is no body.
+         */
+        delete: operations["removeProjectMaterial"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/projects/{project_id}/materials/{item_id}/use": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Use material for a project
+         * @description Withdraws material from the stock for a project: the stock decreases and
+         *     the used quantity of the material grows in one transaction. The
+         *     inventory log records the project name as the reason. The item must be
+         *     planned in the project.
+         */
+        post: operations["useProjectMaterial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/projects/{project_id}/shortage-to-wishlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add the project shortage to the wish list
+         * @description Adds every material of the project with a positive shortage to the wish
+         *     list, using the shortage as the wanted quantity. Materials already wanted
+         *     are skipped, so a repeated call adds nothing. Returns the entries added
+         *     by this call.
+         */
+        post: operations["shortageToWishlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1764,6 +2141,321 @@ export interface components {
              */
             target_item_id: string;
         };
+        /**
+         * @description State of a wish list entry: `wanted` is still to buy, `ordered` is on its
+         *     way, `bought` is done.
+         * @example wanted
+         * @enum {string}
+         */
+        WishStatus: "wanted" | "ordered" | "bought";
+        /**
+         * @description One shop page where a wish can be bought, with the optional price and
+         *     availability reported by the shop.
+         */
+        WishLink: {
+            /**
+             * @description Link id (UUID), used to remove the link.
+             * @example 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+             */
+            id: string;
+            /**
+             * Format: uri
+             * @description Absolute `http://` or `https://` address of the shop page.
+             * @example https://shop.example/beads
+             */
+            url: string;
+            /**
+             * @description Shop name shown as a chip; empty when unknown.
+             * @example Магазин бусин
+             */
+            shop_name: string;
+            /**
+             * Format: double
+             * @description Price of the item as reported, or `null` when unknown.
+             * @example 12.5
+             */
+            price: number | null;
+            /**
+             * @description ISO 4217 currency code in upper case; empty when unknown.
+             * @example RUB
+             */
+            currency: string;
+            /**
+             * @description Whether the shop had the item in stock when it was checked, or `null`
+             *     when unknown.
+             * @example true
+             */
+            in_stock: boolean | null;
+            /**
+             * Format: date-time
+             * @description When the availability was checked, or `null`.
+             * @example 2026-01-16T08:00:00Z
+             */
+            checked_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the link was added.
+             * @example 2026-01-15T09:30:00Z
+             */
+            created_at: string;
+        };
+        /**
+         * @description One entry of the wish list: either a catalogue item or free text,
+         *     together with its shop links. `item` and `stock_qty` are present only
+         *     when the entry points at a catalogue item.
+         */
+        Wish: {
+            /**
+             * @description Wish list entry id (UUID).
+             * @example 3f0b9a2c-6d41-4e7b-8c55-1a2b3c4d5e6f
+             */
+            id: string;
+            /**
+             * @description Catalogue item the entry points at, or an empty string for free
+             *     text.
+             * @example 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+             */
+            catalog_item_id: string;
+            /**
+             * @description Name of the wanted item.
+             * @example Жемчуг айвори 2 мм
+             */
+            title: string;
+            /**
+             * Format: double
+             * @description Wanted quantity, or `null` while undecided.
+             * @example 3
+             */
+            qty_wanted: number | null;
+            /**
+             * @description How much it is wanted: 0 is normal, 1 is important, 2 is the most
+             *     important. The list is sorted by it.
+             * @example 2
+             */
+            priority: number;
+            /**
+             * @description Free-form note, for example for whom it is; empty when none.
+             * @example на подарок
+             */
+            note: string;
+            status: components["schemas"]["WishStatus"];
+            /**
+             * @description Principal id of the member who added the entry.
+             * @example 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+             */
+            created_by: string;
+            /**
+             * Format: date-time
+             * @description When the entry was added.
+             * @example 2026-01-15T09:30:00Z
+             */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When the entry last changed.
+             * @example 2026-01-16T08:00:00Z
+             */
+            updated_at: string;
+            item?: components["schemas"]["CraftItem"];
+            /** @description Shop pages where the item can be bought; empty when none. */
+            links: components["schemas"]["WishLink"][];
+        };
+        /**
+         * @description A new wish list entry. Send either `catalog_item_id` or a free text
+         *     `title`; when a catalogue item is named, the title defaults to its name.
+         */
+        WishInput: {
+            /**
+             * @description Catalogue item to want. It must be visible to the workspace and is
+             *     accepted only once at a time.
+             * @example 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+             */
+            catalog_item_id?: string;
+            /**
+             * @description Name of the wanted item, up to 200 characters. Required when there is
+             *     no catalogue item.
+             * @example Жемчуг айвори 2 мм
+             */
+            title?: string;
+            /**
+             * Format: double
+             * @description Wanted quantity; must be positive when sent.
+             * @example 3
+             */
+            qty_wanted?: number | null;
+            /**
+             * @description How much it is wanted: 0, 1 or 2.
+             * @default 0
+             * @example 2
+             */
+            priority: number;
+            /**
+             * @description Free-form note.
+             * @example на подарок
+             */
+            note?: string;
+        };
+        /**
+         * @description The editable fields of a wish list entry. Quantity, priority and note are
+         *     replaced; an omitted status keeps the current one.
+         */
+        WishUpdateRequest: {
+            /**
+             * Format: double
+             * @description New wanted quantity; must be positive when sent. `null` clears it.
+             * @example 5
+             */
+            qty_wanted?: number | null;
+            /**
+             * @description How much it is wanted: 0, 1 or 2.
+             * @example 1
+             */
+            priority: number;
+            /**
+             * @description Free-form note; an empty string clears it.
+             * @example
+             */
+            note: string;
+            status?: components["schemas"]["WishStatus"];
+        };
+        /** @description A shop page where a wish can be bought. */
+        WishLinkInput: {
+            /**
+             * Format: uri
+             * @description Absolute `http://` or `https://` address of the shop page.
+             * @example https://shop.example/beads
+             */
+            url: string;
+            /**
+             * @description Shop name shown as a chip; defaults to the host name.
+             * @example Магазин бусин
+             */
+            shop_name?: string;
+            /**
+             * Format: double
+             * @description Price of the item; must not be negative.
+             * @example 12.5
+             */
+            price?: number | null;
+            /**
+             * @description ISO 4217 currency code; it is stored in upper case. Empty when
+             *     unknown.
+             * @example RUB
+             */
+            currency?: string;
+            /**
+             * @description Whether the shop has the item in stock.
+             * @example true
+             */
+            in_stock?: boolean | null;
+        };
+        /** @description How to mark a wish list entry as bought. */
+        MarkWishBoughtRequest: {
+            /**
+             * @description Add the wanted quantity of a catalogue item to the stock. A free-text
+             *     entry is only marked bought.
+             * @example true
+             */
+            add_to_stock: boolean;
+        };
+        /**
+         * @description One material planned for a project. `shortage` is
+         *     `max(0, qty_planned - qty_used - stock)` and is zero when nothing is
+         *     missing or no quantity is planned.
+         */
+        ProjectMaterial: {
+            item: components["schemas"]["CraftItem"];
+            /**
+             * Format: double
+             * @description Planned quantity, or `null` when the plan was cleared.
+             * @example 20
+             */
+            qty_planned: number | null;
+            /**
+             * Format: double
+             * @description Quantity already withdrawn from the stock for the project.
+             * @example 5
+             */
+            qty_used: number;
+            /**
+             * Format: double
+             * @description Quantity still to buy: planned minus used minus stock, never below
+             *     zero.
+             * @example 10
+             */
+            shortage: number;
+        };
+        /**
+         * @description A craft project: what is being made and which materials it needs.
+         *     `material_count` is the number of planned materials; the list endpoint
+         *     returns it without the materials themselves.
+         */
+        Project: {
+            /**
+             * @description Project id (UUID).
+             * @example 5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f
+             */
+            id: string;
+            /**
+             * @description Project name.
+             * @example Серьги «Майорка»
+             */
+            name: string;
+            /**
+             * @description Free-form notes about the project; empty when none.
+             * @example Подарок на день рождения
+             */
+            notes: string;
+            /**
+             * Format: date-time
+             * @description When the project was created.
+             * @example 2026-01-15T09:30:00Z
+             */
+            created_at: string;
+            /**
+             * @description Number of materials planned for the project.
+             * @example 2
+             */
+            material_count: number;
+            /**
+             * @description Planned materials with their stock and shortage; empty in the list
+             *     response.
+             */
+            materials: components["schemas"]["ProjectMaterial"][];
+        };
+        /** @description Name and notes of a craft project. */
+        ProjectInput: {
+            /**
+             * @description Project name, 1..200 characters. Leading and trailing whitespace is
+             *     trimmed.
+             * @example Серьги «Майорка»
+             */
+            name: string;
+            /**
+             * @description Free-form notes about the project.
+             * @example Подарок на день рождения
+             */
+            notes?: string;
+        };
+        /** @description Planned quantity of one material. */
+        SetProjectMaterialRequest: {
+            /**
+             * Format: double
+             * @description Planned quantity, zero or more; `null` clears the plan.
+             * @example 20
+             */
+            qty_planned: number | null;
+        };
+        /** @description Quantity of a planned material to withdraw from the stock. */
+        UseProjectMaterialRequest: {
+            /**
+             * Format: double
+             * @description Quantity to withdraw; must be positive. A withdrawal larger than the
+             *     stock is a conflict.
+             * @example 5
+             */
+            qty: number;
+        };
     };
     responses: {
         /** @description Error response. */
@@ -1838,6 +2530,21 @@ export interface components {
          *     like an item that does not exist or is not visible to the workspace.
          */
         CraftItemID: string;
+        /**
+         * @description Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+         *     like an entry that does not exist or belongs to another workspace.
+         */
+        WishID: string;
+        /**
+         * @description Shop link id (UUID) of a wish list entry. A malformed id is reported as
+         *     `404`, exactly like a link that does not exist.
+         */
+        WishLinkID: string;
+        /**
+         * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+         *     project that does not exist or belongs to another workspace.
+         */
+        ProjectID: string;
     };
     requestBodies: never;
     headers: never;
@@ -3181,6 +3888,720 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listWishes: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Which entries to return: `wanted` (the default), `ordered`, `bought`
+                 *     or `all` for every status.
+                 */
+                status?: "wanted" | "ordered" | "bought" | "all";
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Wish list entries in priority and creation order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Wish"][];
+                };
+            };
+            /** @description The `status` filter is not one of the allowed values. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createWish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WishInput"];
+            };
+        };
+        responses: {
+            /** @description The created wish list entry. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Wish"];
+                };
+            };
+            /**
+             * @description The title is empty, too long, the quantity is not positive, the
+             *     priority is outside 0..2, or the catalogue item is already wanted.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The workspace or the catalogue item is unknown. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteWish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an entry that does not exist or belongs to another workspace.
+                 */
+                wish_id: components["parameters"]["WishID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateWish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an entry that does not exist or belongs to another workspace.
+                 */
+                wish_id: components["parameters"]["WishID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WishUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated entry with its links. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Wish"];
+                };
+            };
+            /**
+             * @description The quantity is not positive, the priority is outside 0..2 or the
+             *     status is unknown.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    addWishLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an entry that does not exist or belongs to another workspace.
+                 */
+                wish_id: components["parameters"]["WishID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WishLinkInput"];
+            };
+        };
+        responses: {
+            /** @description The created shop link. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WishLink"];
+                };
+            };
+            /**
+             * @description The URL is not http(s), the price is negative or the shop name is too
+             *     long.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeWishLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an entry that does not exist or belongs to another workspace.
+                 */
+                wish_id: components["parameters"]["WishID"];
+                /**
+                 * @description Shop link id (UUID) of a wish list entry. A malformed id is reported as
+                 *     `404`, exactly like a link that does not exist.
+                 */
+                link_id: components["parameters"]["WishLinkID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The link is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    markWishBought: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Wish list entry id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an entry that does not exist or belongs to another workspace.
+                 */
+                wish_id: components["parameters"]["WishID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkWishBoughtRequest"];
+            };
+        };
+        responses: {
+            /** @description The entry after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Wish"];
+                };
+            };
+            /** @description `add_to_stock` is set but the entry has no wanted quantity to add. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Projects of the workspace, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectInput"];
+            };
+        };
+        responses: {
+            /** @description The created project. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description The name is empty or longer than 200 characters. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project with its materials. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectInput"];
+            };
+        };
+        responses: {
+            /** @description The updated project with its materials. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description The name is empty or longer than 200 characters. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setProjectMaterial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetProjectMaterialRequest"];
+            };
+        };
+        responses: {
+            /** @description The project after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description The planned quantity is negative or not a finite number. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The project or the catalogue item is unknown. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    removeProjectMaterial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The material is no longer planned for the project. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The project is unknown or the item is not planned in it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    useProjectMaterial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UseProjectMaterialRequest"];
+            };
+        };
+        responses: {
+            /** @description The project after the withdrawal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description The quantity is zero, negative or not a finite number. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The project is unknown or the item is not planned in it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The withdrawal exceeds the quantity in stock. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    shortageToWishlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Project id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     project that does not exist or belongs to another workspace.
+                 */
+                project_id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The wish list entries added by this call; empty when all are already wanted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Wish"][];
+                };
+            };
+            /** @description An entry could not be added, for example a concurrent duplicate. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

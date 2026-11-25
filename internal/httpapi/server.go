@@ -122,6 +122,38 @@ type CraftService interface {
 	UpdateStockMeta(ctx context.Context, userID, workspaceID, itemID, location, notes string) error
 	// RemoveFromInventory removes a stock row.
 	RemoveFromInventory(ctx context.Context, userID, workspaceID, itemID string) error
+	// ListWishes returns the wish list of a workspace, filtered by status.
+	ListWishes(ctx context.Context, userID, workspaceID string, filter craft.WishFilter) ([]craft.Wish, error)
+	// AddWish adds a wish list entry: a catalogue item or free text.
+	AddWish(ctx context.Context, userID, workspaceID string, input craft.WishInput) (craft.Wish, error)
+	// UpdateWish changes the quantity, priority, note and status of an entry.
+	UpdateWish(ctx context.Context, userID, workspaceID, wishID string, input craft.WishUpdate) (craft.Wish, error)
+	// DeleteWish removes an entry with its shop links.
+	DeleteWish(ctx context.Context, userID, workspaceID, wishID string) error
+	// AddWishLink attaches a shop page to a wish.
+	AddWishLink(ctx context.Context, userID, workspaceID, wishID string, input craft.WishLinkInput) (craft.WishLink, error)
+	// RemoveWishLink removes one shop page of a wish.
+	RemoveWishLink(ctx context.Context, userID, workspaceID, wishID, linkID string) error
+	// MarkBought marks a wish as bought, optionally adding it to the stock.
+	MarkBought(ctx context.Context, userID, workspaceID, wishID string, addToStock bool) (craft.Wish, error)
+	// CreateProject creates an empty project.
+	CreateProject(ctx context.Context, userID, workspaceID string, input craft.ProjectInput) (craft.Project, error)
+	// ListProjects returns the projects of a workspace.
+	ListProjects(ctx context.Context, userID, workspaceID string) ([]craft.Project, error)
+	// GetProject returns one project with its materials.
+	GetProject(ctx context.Context, userID, workspaceID, projectID string) (craft.Project, error)
+	// UpdateProject replaces the name and notes of a project.
+	UpdateProject(ctx context.Context, userID, workspaceID, projectID string, input craft.ProjectInput) (craft.Project, error)
+	// DeleteProject removes a project with its material plan.
+	DeleteProject(ctx context.Context, userID, workspaceID, projectID string) error
+	// SetProjectMaterial sets the planned quantity of a material.
+	SetProjectMaterial(ctx context.Context, userID, workspaceID, projectID, itemID string, qtyPlanned *float64) (craft.Project, error)
+	// RemoveProjectMaterial drops a material from a project plan.
+	RemoveProjectMaterial(ctx context.Context, userID, workspaceID, projectID, itemID string) error
+	// UseMaterial withdraws stock for a project and records the usage.
+	UseMaterial(ctx context.Context, userID, workspaceID, projectID, itemID string, qty float64) (craft.Project, error)
+	// ShortageToWishlist adds the project shortage to the wish list.
+	ShortageToWishlist(ctx context.Context, userID, workspaceID, projectID string) ([]craft.Wish, error)
 }
 
 // Deps are the collaborators the HTTP layer needs.

@@ -30,6 +30,18 @@ export type SetCraftStockRequest = components["schemas"]["SetCraftStockRequest"]
 export type AdjustCraftStockRequest = components["schemas"]["AdjustCraftStockRequest"];
 export type UpdateCraftStockMetaRequest = components["schemas"]["UpdateCraftStockMetaRequest"];
 export type LinkCraftItemRequest = components["schemas"]["LinkCraftItemRequest"];
+export type Wish = components["schemas"]["Wish"];
+export type WishLink = components["schemas"]["WishLink"];
+export type WishStatus = components["schemas"]["WishStatus"];
+export type WishInput = components["schemas"]["WishInput"];
+export type WishUpdateRequest = components["schemas"]["WishUpdateRequest"];
+export type WishLinkInput = components["schemas"]["WishLinkInput"];
+export type MarkWishBoughtRequest = components["schemas"]["MarkWishBoughtRequest"];
+export type Project = components["schemas"]["Project"];
+export type ProjectMaterial = components["schemas"]["ProjectMaterial"];
+export type ProjectInput = components["schemas"]["ProjectInput"];
+export type SetProjectMaterialRequest = components["schemas"]["SetProjectMaterialRequest"];
+export type UseProjectMaterialRequest = components["schemas"]["UseProjectMaterialRequest"];
 export type ApiError = components["schemas"]["Error"];
 
 /** Fetch implementation accepted by the client factory (injectable in tests). */

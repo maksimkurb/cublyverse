@@ -18,7 +18,7 @@ SET qty        = qty + $3,
     updated_at = now()
 WHERE workspace_id = $1
   AND catalog_item_id = $2
-RETURNING workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at
+RETURNING workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at, attrs
 `
 
 type AdjustCraftInventoryQtyParams struct {
@@ -40,6 +40,7 @@ func (q *Queries) AdjustCraftInventoryQty(ctx context.Context, arg AdjustCraftIn
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attrs,
 	)
 	return i, err
 }
@@ -212,7 +213,7 @@ func (q *Queries) GetCraftCatalogItem(ctx context.Context, arg GetCraftCatalogIt
 }
 
 const getCraftInventory = `-- name: GetCraftInventory :one
-SELECT workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at FROM craft_inventory
+SELECT workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at, attrs FROM craft_inventory
 WHERE workspace_id = $1
   AND catalog_item_id = $2
 `
@@ -233,6 +234,7 @@ func (q *Queries) GetCraftInventory(ctx context.Context, arg GetCraftInventoryPa
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attrs,
 	)
 	return i, err
 }
@@ -295,7 +297,7 @@ const insertCraftInventory = `-- name: InsertCraftInventory :one
 INSERT INTO craft_inventory (workspace_id, catalog_item_id, qty, location, notes)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (workspace_id, catalog_item_id) DO NOTHING
-RETURNING workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at
+RETURNING workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at, attrs
 `
 
 type InsertCraftInventoryParams struct {
@@ -323,6 +325,7 @@ func (q *Queries) InsertCraftInventory(ctx context.Context, arg InsertCraftInven
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attrs,
 	)
 	return i, err
 }
@@ -360,6 +363,7 @@ func (q *Queries) InsertCraftInventoryLog(ctx context.Context, arg InsertCraftIn
 
 const listCraftInventory = `-- name: ListCraftInventory :many
 SELECT inv.workspace_id, inv.catalog_item_id, inv.qty, inv.location, inv.notes, inv.updated_at,
+       inv.attrs AS stock_attrs,
        i.name, i.article, i.series, i.color_name, i.color_hex, i.color_source,
        i.size, i.finish, i.unit, i.pack_size, i.workspace_id AS item_workspace_id,
        COALESCE(sc.slug, rc.slug)::text AS category_slug,
@@ -374,7 +378,7 @@ LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 WHERE inv.workspace_id = $1::uuid
   AND ($2::text = '' OR COALESCE(sc.slug, rc.slug) = $2)
   AND ($3::text = '' OR m.name ILIKE $3)
-  AND ($4::text = '' OR i.article ILIKE $4 || '%' OR i.name ILIKE '%' || $4 || '%' OR i.color_name ILIKE '%' || $4 || '%')
+  AND ($4::text = '' OR i.article ILIKE $4 || '%' OR i.name ILIKE '%' || $4 || '%' OR i.color_name ILIKE '%' || $4 || '%' OR inv.attrs->>'color_name' ILIKE '%' || $4 || '%')
   AND ($5::numeric IS NULL OR inv.qty <= $5)
 ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT $7 OFFSET $6
@@ -397,6 +401,7 @@ type ListCraftInventoryRow struct {
 	Location         string         `json:"location"`
 	Notes            string         `json:"notes"`
 	UpdatedAt        time.Time      `json:"updated_at"`
+	StockAttrs       []byte         `json:"stock_attrs"`
 	Name             string         `json:"name"`
 	Article          string         `json:"article"`
 	Series           string         `json:"series"`
@@ -437,6 +442,7 @@ func (q *Queries) ListCraftInventory(ctx context.Context, arg ListCraftInventory
 			&i.Location,
 			&i.Notes,
 			&i.UpdatedAt,
+			&i.StockAttrs,
 			&i.Name,
 			&i.Article,
 			&i.Series,
@@ -507,7 +513,7 @@ func (q *Queries) ListCraftInventoryLog(ctx context.Context, arg ListCraftInvent
 }
 
 const lockCraftInventoryRow = `-- name: LockCraftInventoryRow :one
-SELECT workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at FROM craft_inventory
+SELECT workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at, attrs FROM craft_inventory
 WHERE workspace_id = $1
   AND catalog_item_id = $2
 FOR UPDATE
@@ -530,6 +536,7 @@ func (q *Queries) LockCraftInventoryRow(ctx context.Context, arg LockCraftInvent
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attrs,
 	)
 	return i, err
 }
@@ -565,7 +572,8 @@ SELECT i.id, i.workspace_id, i.category_id, i.manufacturer_id, i.article, i.seri
        COALESCE(sc.name, rc.name)::text AS category_name,
        m.name  AS manufacturer_name,
        COALESCE(inv.qty, 0)::numeric(12,3) AS stock_qty,
-       (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory
+       (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory,
+       inv.attrs AS stock_attrs
 FROM craft_catalog_items i
 JOIN craft_categories rc ON rc.id = i.category_id
 LEFT JOIN craft_categories sc
@@ -583,7 +591,7 @@ WHERE (
   AND i.deprecated_at IS NULL
   AND ($2::text = '' OR COALESCE(sc.slug, rc.slug) = $2)
   AND ($3::text = '' OR m.name ILIKE $3)
-  AND ($4::text = '' OR i.article ILIKE $4 || '%' OR i.name ILIKE '%' || $4 || '%' OR i.color_name ILIKE '%' || $4 || '%')
+  AND ($4::text = '' OR i.article ILIKE $4 || '%' OR i.name ILIKE '%' || $4 || '%' OR i.color_name ILIKE '%' || $4 || '%' OR inv.attrs->>'color_name' ILIKE '%' || $4 || '%')
   AND ($5::boolean = false OR inv.catalog_item_id IS NOT NULL)
 ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT $7 OFFSET $6
@@ -629,6 +637,7 @@ type SearchCraftCatalogRow struct {
 	ManufacturerName *string            `json:"manufacturer_name"`
 	StockQty         pgtype.Numeric     `json:"stock_qty"`
 	InInventory      bool               `json:"in_inventory"`
+	StockAttrs       []byte             `json:"stock_attrs"`
 }
 
 // Catalogue search over the global catalogue plus the workspace's own items.
@@ -680,6 +689,7 @@ func (q *Queries) SearchCraftCatalog(ctx context.Context, arg SearchCraftCatalog
 			&i.ManufacturerName,
 			&i.StockQty,
 			&i.InInventory,
+			&i.StockAttrs,
 		); err != nil {
 			return nil, err
 		}
@@ -691,13 +701,31 @@ func (q *Queries) SearchCraftCatalog(ctx context.Context, arg SearchCraftCatalog
 	return items, nil
 }
 
+const setCraftInventoryAttrs = `-- name: SetCraftInventoryAttrs :exec
+UPDATE craft_inventory
+SET attrs = $3
+WHERE workspace_id = $1
+  AND catalog_item_id = $2
+`
+
+type SetCraftInventoryAttrsParams struct {
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	CatalogItemID pgtype.UUID `json:"catalog_item_id"`
+	Attrs         []byte      `json:"attrs"`
+}
+
+func (q *Queries) SetCraftInventoryAttrs(ctx context.Context, arg SetCraftInventoryAttrsParams) error {
+	_, err := q.db.Exec(ctx, setCraftInventoryAttrs, arg.WorkspaceID, arg.CatalogItemID, arg.Attrs)
+	return err
+}
+
 const setCraftInventoryQty = `-- name: SetCraftInventoryQty :one
 UPDATE craft_inventory
 SET qty        = $3,
     updated_at = now()
 WHERE workspace_id = $1
   AND catalog_item_id = $2
-RETURNING workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at
+RETURNING workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at, attrs
 `
 
 type SetCraftInventoryQtyParams struct {
@@ -717,6 +745,7 @@ func (q *Queries) SetCraftInventoryQty(ctx context.Context, arg SetCraftInventor
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attrs,
 	)
 	return i, err
 }
@@ -817,7 +846,7 @@ SET location   = $3,
     updated_at = now()
 WHERE workspace_id = $1
   AND catalog_item_id = $2
-RETURNING workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at
+RETURNING workspace_id, catalog_item_id, qty, location, notes, created_at, updated_at, attrs
 `
 
 type UpdateCraftInventoryMetaParams struct {
@@ -843,6 +872,7 @@ func (q *Queries) UpdateCraftInventoryMeta(ctx context.Context, arg UpdateCraftI
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Attrs,
 	)
 	return i, err
 }

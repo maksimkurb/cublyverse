@@ -311,3 +311,24 @@ def test_format_report_dry_run(plan):
 def test_format_report_apply(plan):
     text = m.format_report(plan, m.Report(), False, "doc", "ws")
     assert text.splitlines()[-1] == "ИТОГ: изменения применены и зафиксированы."
+
+
+@pytest.mark.parametrize(
+    ("maker", "slug", "article", "size", "series", "want"),
+    [
+        ("DMC", "floss", "2", "", "", ["2", "02"]),
+        ("DMC", "floss", "321", "", "", ["321"]),
+        ("PRECIOSA Ornela", "seed-beads", "3254", "10/0", "Rocailles",
+         ["3254", "311-19001-10_0-03254"]),
+        # Without a size, or for another shape, the product is ambiguous.
+        ("PRECIOSA Ornela", "seed-beads", "58310", "", "Rocailles", ["58310"]),
+        ("PRECIOSA Ornela", "seed-beads", "38686", "10/0", "3-cuts", ["38686"]),
+        ("Gamma", "floss", "5", "", "", ["5"]),
+    ],
+)
+def test_official_articles(maker, slug, article, size, series, want):
+    item = m.MaterialItem(
+        grist_ids=[1], name="x", category_slug=slug, category_name="x",
+        manufacturer=maker, article=article, size=size, series=series,
+    )
+    assert m.official_articles(item) == want

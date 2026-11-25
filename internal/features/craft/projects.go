@@ -401,6 +401,7 @@ func projectMaterialFromRow(r db.ListCraftProjectMaterialsRow) ProjectMaterial {
 		SourceURL: r.SourceUrl, ImageURL: r.ImageUrl,
 		StockQty: numFloat(r.StockQty), InInventory: r.InInventory,
 	}
+	item = withStockColors(item, r.StockAttrs)
 	used := numFloat(r.QtyUsed)
 	material := ProjectMaterial{
 		Item: item, QtyPlanned: numFloatPtr(r.QtyPlanned), QtyUsed: used,

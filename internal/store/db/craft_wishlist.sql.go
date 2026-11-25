@@ -199,7 +199,8 @@ SELECT w.id, w.workspace_id, w.catalog_item_id, w.title, w.qty_wanted, w.priorit
        COALESCE(sc.name, rc.name, '')::text AS category_name,
        m.name          AS manufacturer_name,
        COALESCE(inv.qty, 0)::numeric(12,3) AS stock_qty,
-       (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory
+       (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory,
+       inv.attrs AS stock_attrs
 FROM craft_wishlist_items w
 LEFT JOIN craft_catalog_items i ON i.id = w.catalog_item_id
 LEFT JOIN craft_categories rc ON rc.id = i.category_id
@@ -252,6 +253,7 @@ type ListCraftWishlistItemsRow struct {
 	ManufacturerName *string        `json:"manufacturer_name"`
 	StockQty         pgtype.Numeric `json:"stock_qty"`
 	InInventory      bool           `json:"in_inventory"`
+	StockAttrs       []byte         `json:"stock_attrs"`
 }
 
 // Wish list entries of one workspace with the catalogue item and the current
@@ -299,6 +301,7 @@ func (q *Queries) ListCraftWishlistItems(ctx context.Context, arg ListCraftWishl
 			&i.ManufacturerName,
 			&i.StockQty,
 			&i.InInventory,
+			&i.StockAttrs,
 		); err != nil {
 			return nil, err
 		}

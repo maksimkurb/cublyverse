@@ -5,8 +5,8 @@ GRIST_TEST_INTEGRATION=1 is set and docker is available:
 
     GRIST_TEST_INTEGRATION=1 python -m pytest -m integration
 
-It applies the Up sections of migrations 00001/00010/00011, seeds a user, a
-workspace and one official global item, then runs migrate.py twice and asserts
+It applies the Up sections of all migrations, seeds a user, a
+warehouse and one official global item, then runs migrate.py twice and asserts
 that the second run changes nothing.
 """
 
@@ -88,17 +88,25 @@ def db():
         user_id = str(uuid.uuid4())
         with psycopg.connect(dsn) as conn:
             with conn.cursor() as cur:
-                cur.execute(goose_up(REPO_ROOT / "internal/store/migrations/00001_init.sql"))
-                cur.execute(goose_up(REPO_ROOT / "internal/store/migrations/00010_workspaces.sql"))
-                cur.execute(goose_up(REPO_ROOT / "internal/store/migrations/00011_craft.sql"))
+                for migration in sorted((REPO_ROOT / "internal/store/migrations").glob("*.sql")):
+                    cur.execute(goose_up(migration))
                 cur.execute(
                     "INSERT INTO users (id, oidc_issuer, oidc_subject)"
                     " VALUES (%s, 'test', 'test')",
                     (user_id,),
                 )
                 cur.execute(
-                    "INSERT INTO workspaces (id, name, created_by) VALUES (%s, 'Тест', %s)",
+                    "INSERT INTO workspaces (id, name, created_by, app)"
+                    " VALUES (%s, 'Тест', %s, 'warehouse')",
                     (workspace_id, user_id),
+                )
+                # The needlework template of a new warehouse.
+                cur.execute(
+                    "INSERT INTO craft_categories"
+                    " (workspace_id, slug, name, default_unit, sort_order, catalog_slug)"
+                    " SELECT %s, slug, name, default_unit, sort_order, slug"
+                    " FROM craft_categories WHERE workspace_id IS NULL",
+                    (workspace_id,),
                 )
                 cur.execute(
                     "INSERT INTO craft_manufacturers (name, website) VALUES ('DMC', '')"
@@ -106,16 +114,18 @@ def db():
                 )
                 manufacturer_id = cur.fetchone()[0]
                 cur.execute(
-                    "SELECT id FROM craft_categories WHERE slug = 'seed-beads'"
+                    "SELECT id FROM craft_categories"
+                    " WHERE slug = 'seed-beads' AND workspace_id IS NULL"
                 )
                 category_id = cur.fetchone()[0]
-                # The official row the imported DMC 1152 must link to.
+                # The official row the imported DMC 1152 must link to. It has no
+                # colour name, so the Grist one has to survive on the stock row.
                 cur.execute(
                     "INSERT INTO craft_catalog_items ("
                     " workspace_id, category_id, manufacturer_id, article, name,"
                     " color_name, color_hex, color_source, size, finish, unit)"
                     " VALUES (NULL, %s, %s, '1152', 'Официальный DMC 1152',"
-                    " 'официальный зелёный', '#000001', 'official', '', '', 'г')",
+                    " '', '#000001', 'official', '', '', 'г')",
                     (category_id, manufacturer_id),
                 )
         yield {"dsn": dsn, "workspace_id": workspace_id, "user_id": user_id}
@@ -226,6 +236,18 @@ def test_import_is_idempotent(db):
             )
             == 12
         )
+
+    with psycopg.connect(db["dsn"]) as conn:
+        kept = scalar(
+            conn,
+            "SELECT i.attrs FROM craft_inventory i"
+            " JOIN craft_catalog_items c ON c.id = i.catalog_item_id"
+            " WHERE i.workspace_id = %s::uuid AND c.workspace_id IS NULL",
+            (workspace_id,),
+        )
+    # Nothing from Grist is lost on a linked item.
+    assert kept["color_name"] and kept["color_hex"] == "#AABBCC"
+    assert kept["legacy"]["finish"] == "прозрачный"
 
     second = run_migrate(db, "--apply")
     assert "создано 0, уже импортировано 11" in second

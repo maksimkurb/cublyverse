@@ -6,7 +6,8 @@ only the Python standard library for HTTP and psycopg for the database, and is
 run by hand (see README.md next to this file). It must not be imported by the
 application.
 
-The target schema is internal/store/migrations/00011_craft.sql. The mapping is
+The target schema is that of internal/store/migrations (00017 and later). The
+target is one warehouse space: its categories, manufacturers and units. The mapping is
 done by pure functions (no network, no database) so it can be tested with
 pytest against a small fixture; the database part is a thin writer on top of
 the resulting plan.
@@ -266,6 +267,31 @@ class MaterialItem:
     @property
     def label(self) -> str:
         return f"#{self.grist_ids[0]} «{self.name}»"
+
+    def stock_attrs(self) -> dict[str, Any]:
+        """craft_inventory.attrs of a stock row linked to an official item.
+
+        Every Grist value is kept under "legacy". color_name and color_hex are
+        shown by the application only where the official item has none.
+        """
+        legacy = {
+            "name": self.name,
+            "article": self.article,
+            "series": self.series,
+            "color_name": self.color_name,
+            "color_hex": self.color_hex,
+            "size": self.size,
+            "finish": self.finish,
+            "unit": self.unit,
+            "source_url": self.source_url,
+            **self.attrs(),
+        }
+        out: dict[str, Any] = {"legacy": legacy}
+        if self.color_name:
+            out["color_name"] = self.color_name
+        if self.color_hex:
+            out["color_hex"] = self.color_hex
+        return out
 
     def attrs(self) -> dict[str, Any]:
         attrs: dict[str, Any] = {
@@ -562,6 +588,34 @@ def _fill_missing(target: MaterialItem, source: MaterialItem) -> None:
 
 # --- global catalogue conflicts --------------------------------------------
 
+# PRECIOSA Ornela publishes one article per size and colour:
+# <product>-<size>_0-<five digit colour>. Grist stores the colour number only.
+PRECIOSA_ROCAILLES = "311-19001"
+
+
+def official_articles(item: MaterialItem) -> list[str]:
+    """Spellings under which the official catalogue may list a Grist material.
+
+    Only spellings that name exactly one product are produced: a PRECIOSA colour
+    number without a size fits many products, so it is not guessed.
+    """
+    if not item.article:
+        return []
+    candidates = [item.article]
+    maker = item.manufacturer.casefold()
+    if maker == "dmc" and item.article.isdigit():
+        # The catalogue writes the 01-35 shades with a leading zero.
+        candidates.append(item.article.zfill(2))
+    if maker == "preciosa ornela" and item.category_slug == "seed-beads":
+        size = re.fullmatch(r"\s*(\d+)\s*/\s*0\s*", item.size)
+        if (
+            size
+            and re.fullmatch(r"\d{1,5}", item.article)
+            and item.series.casefold() in ("", "rocailles")
+        ):
+            candidates.append(f"{PRECIOSA_ROCAILLES}-{size[1]}_0-{item.article.zfill(5)}")
+    return list(dict.fromkeys(candidates))
+
 
 def compute_conflicts(item: MaterialItem, official: dict[str, Any]) -> list[tuple[str, str, str]]:
     """Legacy values that differ from an existing global item.
@@ -617,6 +671,7 @@ class Report:
     projects_existing: int = 0
     links_created: int = 0
     links_skipped: int = 0
+    linked: list[str] = field(default_factory=list)
     conflicts: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
 
@@ -654,6 +709,7 @@ def format_report(
         f"уже было {report.links_skipped}",
     ]
 
+    _section(lines, "Связаны с официальным каталогом:", report.linked)
     _section(
         lines,
         "Конфликты с глобальным каталогом (официальные данные не перезаписаны):",
@@ -749,17 +805,36 @@ def save_dump(path: str, dump: dict[str, Any]) -> None:
 
 # --- database ---------------------------------------------------------------
 
-SELECT_CATEGORIES = "SELECT slug, id FROM craft_categories"
+# Categories of the target warehouse, by the catalogue slug they stand for.
+SELECT_CATEGORIES = """
+SELECT COALESCE(NULLIF(catalog_slug, ''), slug), id
+FROM craft_categories
+WHERE workspace_id = %s::uuid
+"""
 
-UPSERT_MANUFACTURER = """
-INSERT INTO craft_manufacturers (name, website, notes)
-VALUES (%s, %s, %s)
-ON CONFLICT (name) DO UPDATE SET
-    website = CASE WHEN EXCLUDED.website <> '' THEN EXCLUDED.website
-                   ELSE craft_manufacturers.website END,
-    notes   = CASE WHEN EXCLUDED.notes <> '' THEN EXCLUDED.notes
-                   ELSE craft_manufacturers.notes END
-RETURNING id, (xmax = 0) AS inserted
+# Categories the official items point at.
+SELECT_REFERENCE_CATEGORIES = "SELECT slug, id FROM craft_categories WHERE workspace_id IS NULL"
+
+# The warehouse's own manufacturer of a name, else the official one.
+FIND_MANUFACTURER = """
+SELECT id
+FROM craft_manufacturers
+WHERE lower(name) = lower(%s)
+  AND (workspace_id = %s::uuid OR workspace_id IS NULL)
+ORDER BY workspace_id NULLS LAST
+LIMIT 1
+"""
+
+INSERT_MANUFACTURER = """
+INSERT INTO craft_manufacturers (workspace_id, name, website, notes)
+VALUES (%s::uuid, %s, %s, %s)
+RETURNING id
+"""
+
+INSERT_UNIT = """
+INSERT INTO craft_units (workspace_id, name, sort_order)
+VALUES (%s::uuid, %s, 100)
+ON CONFLICT DO NOTHING
 """
 
 FIND_BY_GRIST_ID = """
@@ -772,7 +847,7 @@ LIMIT 1
 """
 
 FIND_GLOBAL_ITEM = """
-SELECT i.id, i.name, i.color_name, i.color_hex, i.size, i.finish, i.unit
+SELECT i.id, i.name, i.color_name, i.color_hex, i.size, i.finish, i.unit, i.article
 FROM craft_catalog_items i
 JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 WHERE i.workspace_id IS NULL
@@ -807,10 +882,18 @@ RETURNING id
 """
 
 INSERT_INVENTORY = """
-INSERT INTO craft_inventory (workspace_id, catalog_item_id, qty, notes)
-VALUES (%s::uuid, %s::uuid, %s, %s)
+INSERT INTO craft_inventory (workspace_id, catalog_item_id, qty, notes, attrs)
+VALUES (%s::uuid, %s::uuid, %s, %s, %s::jsonb)
 ON CONFLICT (workspace_id, catalog_item_id) DO NOTHING
 RETURNING 1
+"""
+
+# A stock row that existed before the import keeps its quantity but still
+# receives the Grist values.
+KEEP_STOCK_ATTRS = """
+UPDATE craft_inventory
+SET attrs = %s::jsonb
+WHERE workspace_id = %s::uuid AND catalog_item_id = %s::uuid AND attrs = '{}'::jsonb
 """
 
 INSERT_INVENTORY_LOG = """
@@ -856,11 +939,14 @@ def connect(dsn: str):
 
 def ensure_target(conn, workspace_id: str, user_id: str, report: Report) -> None:
     with conn.cursor() as cur:
-        cur.execute("SELECT name FROM workspaces WHERE id = %s::uuid", (workspace_id,))
+        cur.execute(
+            "SELECT name FROM workspaces WHERE id = %s::uuid AND app = 'warehouse'",
+            (workspace_id,),
+        )
         row = cur.fetchone()
         if row is None:
             raise MigrationError(
-                f"рабочее пространство {workspace_id} не найдено — проверьте --workspace"
+                f"склад {workspace_id} не найден — проверьте --workspace"
             )
         report.workspace_name = row[0]
         cur.execute("SELECT 1 FROM users WHERE id = %s::uuid", (user_id,))
@@ -870,27 +956,32 @@ def ensure_target(conn, workspace_id: str, user_id: str, report: Report) -> None
 
 def apply_plan(conn, plan: ImportPlan, workspace_id: str, user_id: str, report: Report) -> None:
     with conn.cursor() as cur:
-        categories = {slug: category_id for slug, category_id in cur.execute(SELECT_CATEGORIES)}
+        categories = dict(cur.execute(SELECT_CATEGORIES, (workspace_id,)).fetchall())
+        reference = dict(cur.execute(SELECT_REFERENCE_CATEGORIES).fetchall())
         missing = sorted({item.category_slug for item in plan.items} - set(categories))
         if missing:
             raise MigrationError(
-                "в базе нет категорий: "
+                "в складе нет категорий: "
                 + ", ".join(missing)
-                + " — примените миграции (make migrate)"
+                + " — создайте склад по шаблону «Рукоделие»"
             )
+        for unit in sorted({item.unit for item in plan.items if item.unit}):
+            cur.execute(INSERT_UNIT, (workspace_id, unit))
 
         manufacturer_ids: dict[str, str] = {}
         for manufacturer in plan.manufacturers:
-            cur.execute(
-                UPSERT_MANUFACTURER,
-                (manufacturer.name, manufacturer.website, manufacturer.notes),
-            )
-            manufacturer_id, inserted = cur.fetchone()
-            manufacturer_ids[manufacturer.name] = manufacturer_id
-            if inserted:
-                report.manufacturers_created += 1
-            else:
+            cur.execute(FIND_MANUFACTURER, (manufacturer.name, workspace_id))
+            row = cur.fetchone()
+            if row is not None:
+                manufacturer_ids[manufacturer.name] = row[0]
                 report.manufacturers_updated += 1
+                continue
+            cur.execute(
+                INSERT_MANUFACTURER,
+                (workspace_id, manufacturer.name, manufacturer.website, manufacturer.notes),
+            )
+            manufacturer_ids[manufacturer.name] = cur.fetchone()[0]
+            report.manufacturers_created += 1
 
         imported: list[tuple[MaterialItem, str]] = []
         for item in plan.items:
@@ -899,18 +990,32 @@ def apply_plan(conn, plan: ImportPlan, workspace_id: str, user_id: str, report: 
                 manufacturer_ids.get(item.manufacturer) if item.manufacturer else None
             )
 
+            stock_attrs: dict[str, Any] = {}
             target_id = find_by_grist_id(cur, workspace_id, item)
             if target_id is not None:
                 report.items_existing += 1
             else:
                 official = None
-                if manufacturer_id and item.article:
-                    official = find_global_item(
-                        cur, category_id, item.manufacturer, item.article
+                if item.manufacturer and item.category_slug in reference:
+                    for article in official_articles(item):
+                        official = find_global_item(
+                            cur, reference[item.category_slug], item.manufacturer, article
+                        )
+                        if official is not None:
+                            break
+                if official is not None and as_text(official.get("unit")) != item.unit:
+                    # Linking would silently change what the quantity means.
+                    report.problems.append(
+                        f"{item.label}: в каталоге есть «{official['article']}», но там единица "
+                        f"«{official['unit']}», а в Grist «{item.unit}» — оставлена своя позиция, "
+                        "связать можно вручную."
                     )
+                    official = None
                 if official is not None:
                     target_id = official["id"]
+                    stock_attrs = item.stock_attrs()
                     report.items_linked_global += 1
+                    report.linked.append(f"{item.label} → {official['article']}")
                     for field_name, legacy, current in compute_conflicts(item, official):
                         report.conflicts.append(
                             conflict_message(item, official, field_name, legacy, current)
@@ -921,9 +1026,10 @@ def apply_plan(conn, plan: ImportPlan, workspace_id: str, user_id: str, report: 
                     )
                     if target_id is not None:
                         report.items_reused += 1
+                        stock_attrs = item.stock_attrs()
                         report.problems.append(
                             f"{item.label}: позиция с таким производителем и артикулом "
-                            "уже есть в рабочем пространстве — используется она."
+                            "уже есть в складе — используется она."
                         )
                     else:
                         cur.execute(
@@ -950,7 +1056,7 @@ def apply_plan(conn, plan: ImportPlan, workspace_id: str, user_id: str, report: 
                         report.items_created += 1
 
             imported.append((item, target_id))
-            import_stock(cur, workspace_id, user_id, item, target_id, report)
+            import_stock(cur, workspace_id, user_id, item, target_id, stock_attrs, report)
 
         project_ids: dict[str, str] = {}
         for project in plan.projects:
@@ -992,7 +1098,7 @@ def find_global_item(
     row = cur.fetchone()
     if row is None:
         return None
-    keys = ("id", "name", "color_name", "color_hex", "size", "finish", "unit")
+    keys = ("id", "name", "color_name", "color_hex", "size", "finish", "unit", "article")
     return dict(zip(keys, row))
 
 
@@ -1015,11 +1121,15 @@ def import_stock(
     user_id: str,
     item: MaterialItem,
     catalog_item_id: str,
+    stock_attrs: dict[str, Any],
     report: Report,
 ) -> None:
     """Write the stock row once and log the delta only when the row is new."""
-    cur.execute(INSERT_INVENTORY, (workspace_id, catalog_item_id, item.qty, item.notes))
+    attrs = json.dumps(stock_attrs, ensure_ascii=False)
+    cur.execute(INSERT_INVENTORY, (workspace_id, catalog_item_id, item.qty, item.notes, attrs))
     if cur.fetchone() is None:
+        if stock_attrs:
+            cur.execute(KEEP_STOCK_ATTRS, (attrs, workspace_id, catalog_item_id))
         report.stock_skipped += 1
         return
     report.stock_created += 1
@@ -1038,9 +1148,9 @@ def import_stock(
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Импорт документа Grist в каталог «Бусинки» Cublyverse.",
+        description="Импорт документа Grist в склад Cublyverse.",
     )
-    parser.add_argument("--workspace", required=True, help="uuid рабочего пространства")
+    parser.add_argument("--workspace", required=True, help="uuid склада (пространство мини-аппа «Склад»)")
     parser.add_argument(
         "--user", required=True, help="uuid пользователя для журнала остатков"
     )

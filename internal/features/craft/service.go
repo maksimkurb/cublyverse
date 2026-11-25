@@ -180,6 +180,7 @@ func (s *Service) SearchCatalog(ctx context.Context, userID, workspaceID string,
 		}, r.CategorySlug, r.CategoryName, deref(r.ManufacturerName))
 		item.StockQty = numFloat(r.StockQty)
 		item.InInventory = r.InInventory
+		item = withStockColors(item, r.StockAttrs)
 		out = append(out, item)
 	}
 	return out, nil
@@ -310,6 +311,7 @@ func (s *Service) ListInventory(ctx context.Context, userID, workspaceID string,
 			ColorSource: r.ColorSource, Size: r.Size, Finish: r.Finish, Unit: r.Unit, PackSize: numFloatPtr(r.PackSize),
 			StockQty: numFloat(r.Qty), InInventory: true,
 		}
+		item = withStockColors(item, r.StockAttrs)
 		out = append(out, StockEntry{
 			Item: item, Qty: numFloat(r.Qty), Location: r.Location, Notes: r.Notes, UpdatedAt: r.UpdatedAt,
 		})
@@ -447,6 +449,9 @@ func (s *Service) LinkToCatalog(ctx context.Context, userID, workspaceID, privat
 			if err != nil {
 				return fmt.Errorf("get linked stock: %w", err)
 			}
+			if err := rememberLinked(ctx, q, wid, tid, private); err != nil {
+				return err
+			}
 			if err := q.InsertCraftInventoryLog(ctx, db.InsertCraftInventoryLogParams{
 				WorkspaceID: wid, CatalogItemID: tid, UserID: actor, Delta: held.Qty, QtyAfter: after.Qty,
 				Reason: "связано с каталогом: " + private.Name,
@@ -515,6 +520,7 @@ func (s *Service) loadItem(ctx context.Context, q *db.Queries, wid pgtype.UUID, 
 	if stock, err := q.GetCraftInventory(ctx, db.GetCraftInventoryParams{WorkspaceID: wid, CatalogItemID: iid}); err == nil {
 		item.StockQty = numFloat(stock.Qty)
 		item.InInventory = true
+		item = withStockColors(item, stock.Attrs)
 	}
 	return item, nil
 }

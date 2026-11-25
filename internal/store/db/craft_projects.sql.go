@@ -147,7 +147,8 @@ SELECT pm.project_id, pm.catalog_item_id, pm.qty_planned, pm.qty_used,
        COALESCE(sc.name, rc.name)::text AS category_name,
        m.name  AS manufacturer_name,
        COALESCE(inv.qty, 0)::numeric(12,3) AS stock_qty,
-       (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory
+       (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory,
+       inv.attrs AS stock_attrs
 FROM craft_project_materials pm
 JOIN craft_catalog_items i ON i.id = pm.catalog_item_id
 JOIN craft_categories rc ON rc.id = i.category_id
@@ -198,6 +199,7 @@ type ListCraftProjectMaterialsRow struct {
 	ManufacturerName *string            `json:"manufacturer_name"`
 	StockQty         pgtype.Numeric     `json:"stock_qty"`
 	InInventory      bool               `json:"in_inventory"`
+	StockAttrs       []byte             `json:"stock_attrs"`
 }
 
 // Materials of a project with the catalogue item and the current stock, which
@@ -245,6 +247,7 @@ func (q *Queries) ListCraftProjectMaterials(ctx context.Context, arg ListCraftPr
 			&i.ManufacturerName,
 			&i.StockQty,
 			&i.InInventory,
+			&i.StockAttrs,
 		); err != nil {
 			return nil, err
 		}

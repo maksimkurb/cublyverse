@@ -468,6 +468,7 @@ func wishFromRow(r db.ListCraftWishlistItemsRow) Wish {
 			SourceURL: deref(r.ItemSourceUrl), ImageURL: deref(r.ItemImageUrl),
 			StockQty: numFloat(r.StockQty), InInventory: r.InInventory,
 		}
+		item = withStockColors(item, r.StockAttrs)
 		w.Item = &item
 	}
 	return w

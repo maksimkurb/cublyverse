@@ -66,7 +66,8 @@ SELECT i.*,
        COALESCE(sc.name, rc.name)::text AS category_name,
        m.name  AS manufacturer_name,
        COALESCE(inv.qty, 0)::numeric(12,3) AS stock_qty,
-       (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory
+       (inv.catalog_item_id IS NOT NULL)::boolean AS in_inventory,
+       inv.attrs AS stock_attrs
 FROM craft_catalog_items i
 JOIN craft_categories rc ON rc.id = i.category_id
 LEFT JOIN craft_categories sc
@@ -84,13 +85,14 @@ WHERE (
   AND i.deprecated_at IS NULL
   AND (sqlc.arg(category)::text = '' OR COALESCE(sc.slug, rc.slug) = sqlc.arg(category))
   AND (sqlc.arg(manufacturer)::text = '' OR m.name ILIKE sqlc.arg(manufacturer))
-  AND (sqlc.arg(query)::text = '' OR i.article ILIKE sqlc.arg(query) || '%' OR i.name ILIKE '%' || sqlc.arg(query) || '%' OR i.color_name ILIKE '%' || sqlc.arg(query) || '%')
+  AND (sqlc.arg(query)::text = '' OR i.article ILIKE sqlc.arg(query) || '%' OR i.name ILIKE '%' || sqlc.arg(query) || '%' OR i.color_name ILIKE '%' || sqlc.arg(query) || '%' OR inv.attrs->>'color_name' ILIKE '%' || sqlc.arg(query) || '%')
   AND (sqlc.arg(only_in_stock)::boolean = false OR inv.catalog_item_id IS NOT NULL)
 ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: ListCraftInventory :many
 SELECT inv.workspace_id, inv.catalog_item_id, inv.qty, inv.location, inv.notes, inv.updated_at,
+       inv.attrs AS stock_attrs,
        i.name, i.article, i.series, i.color_name, i.color_hex, i.color_source,
        i.size, i.finish, i.unit, i.pack_size, i.workspace_id AS item_workspace_id,
        COALESCE(sc.slug, rc.slug)::text AS category_slug,
@@ -105,7 +107,7 @@ LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 WHERE inv.workspace_id = sqlc.arg(workspace_id)::uuid
   AND (sqlc.arg(category)::text = '' OR COALESCE(sc.slug, rc.slug) = sqlc.arg(category))
   AND (sqlc.arg(manufacturer)::text = '' OR m.name ILIKE sqlc.arg(manufacturer))
-  AND (sqlc.arg(query)::text = '' OR i.article ILIKE sqlc.arg(query) || '%' OR i.name ILIKE '%' || sqlc.arg(query) || '%' OR i.color_name ILIKE '%' || sqlc.arg(query) || '%')
+  AND (sqlc.arg(query)::text = '' OR i.article ILIKE sqlc.arg(query) || '%' OR i.name ILIKE '%' || sqlc.arg(query) || '%' OR i.color_name ILIKE '%' || sqlc.arg(query) || '%' OR inv.attrs->>'color_name' ILIKE '%' || sqlc.arg(query) || '%')
   AND (sqlc.narg(max_qty)::numeric IS NULL OR inv.qty <= sqlc.narg(max_qty))
 ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
@@ -198,3 +200,9 @@ LEFT JOIN craft_categories sc
        ON sc.workspace_id = sqlc.arg(workspace_id)::uuid AND i.workspace_id IS NULL AND sc.catalog_slug = rc.slug
 LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 WHERE i.id = sqlc.arg(id)::uuid;
+
+-- name: SetCraftInventoryAttrs :exec
+UPDATE craft_inventory
+SET attrs = $3
+WHERE workspace_id = $1
+  AND catalog_item_id = $2;

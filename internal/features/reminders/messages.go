@@ -1,10 +1,12 @@
 package reminders
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/maksimkurb/cublyverse/internal/features/reminders/schedule"
 	unibot "github.com/maksimkurb/cublyverse/unibot"
 )
 
@@ -136,4 +138,193 @@ func scheduleSummary(reminder Reminder) string {
 		}
 	}
 	return strings.Join(days, ", ")
+}
+
+// Russian names used by ScheduleDescription. They are lower case because the
+// description is a phrase inside a list line.
+var (
+	weekdayShortNames = []string{"пн", "вт", "ср", "чт", "пт", "сб", "вс"}
+	weekdayFullNames  = []string{"понедельник", "вторник", "среду", "четверг", "пятницу", "субботу", "воскресенье"}
+	weekdayGenders    = []string{"m", "m", "f", "m", "f", "f", "n"}
+	monthGenitive     = []string{
+		"января", "февраля", "марта", "апреля", "мая", "июня",
+		"июля", "августа", "сентября", "октября", "ноября", "декабря",
+	}
+	// Ordinal accusative forms agree with the weekday: «каждый второй
+	// вторник», «каждую вторую среду», «каждое второе воскресенье».
+	ordinalAccusative = map[string][]string{
+		"m": {"первый", "второй", "третий", "четвёртый"},
+		"f": {"первую", "вторую", "третью", "четвёртую"},
+		"n": {"первое", "второе", "третье", "четвёртое"},
+	}
+	ordinalNominative = []string{"первый", "второй", "третий", "четвёртый"}
+)
+
+// ScheduleDescription is the single human-readable Russian description of a
+// schedule. The bot's list and confirmation texts use it; the WebApp mirrors the
+// same wording in `web/src/features/reminders/format.ts`, so the chat and the app
+// cannot describe one rule differently.
+func ScheduleDescription(reminder Reminder) string {
+	timeOfDay := reminder.TimeHHMM
+	interval := reminder.Interval
+	if interval < 1 {
+		interval = 1
+	}
+
+	var description string
+	switch reminder.Kind {
+	case Once:
+		return fmt.Sprintf("%s в %s (один раз)", formatCivilDate(reminder.StartDate), timeOfDay)
+
+	case Daily:
+		description = fmt.Sprintf("%s в %s", everyDays(interval), timeOfDay)
+
+	case Weekly:
+		days := make([]string, 0, len(reminder.Days))
+		for _, day := range reminder.Days {
+			if day >= 1 && day <= 7 {
+				days = append(days, weekdayShortNames[day-1])
+			}
+		}
+		if interval == 1 && len(days) == 7 {
+			description = fmt.Sprintf("каждый день в %s", timeOfDay)
+			break
+		}
+		description = fmt.Sprintf("%s по %s в %s", everyWeeks(interval), strings.Join(days, ", "), timeOfDay)
+
+	case Monthly:
+		description = monthlyDescription(reminder, interval, timeOfDay)
+
+	case Yearly:
+		description = fmt.Sprintf("%s %d %s в %s",
+			everyYears(interval), reminder.StartDate.Day, monthName(reminder.StartDate.Month), timeOfDay)
+
+	default:
+		description = fmt.Sprintf("%s в %s", scheduleSummary(reminder), timeOfDay)
+	}
+
+	return description + endDescription(reminder.End)
+}
+
+// monthlyDescription renders both monthly forms: a day of month and an nth
+// weekday.
+func monthlyDescription(reminder Reminder, interval int, timeOfDay string) string {
+	if reminder.MonthWeekPosition != 0 {
+		weekday := reminder.MonthWeekday
+		if weekday < 1 || weekday > 7 {
+			return fmt.Sprintf("каждый месяц в %s", timeOfDay)
+		}
+		gender := weekdayGenders[weekday-1]
+		name := weekdayFullNames[weekday-1]
+		if interval == 1 {
+			ordinal := map[string]string{"m": "последний", "f": "последнюю", "n": "последнее"}[gender]
+			if reminder.MonthWeekPosition > 0 {
+				ordinal = ordinalAccusative[gender][reminder.MonthWeekPosition-1]
+			}
+			adverb := map[string]string{"m": "каждый", "f": "каждую", "n": "каждое"}[gender]
+			return fmt.Sprintf("%s %s %s месяца в %s", adverb, ordinal, name, timeOfDay)
+		}
+		ordinal := "последний"
+		if reminder.MonthWeekPosition > 0 {
+			ordinal = ordinalNominative[reminder.MonthWeekPosition-1]
+		}
+		return fmt.Sprintf("%s, %s %s в %s", everyMonths(interval), ordinal, name, timeOfDay)
+	}
+
+	days := make([]string, 0, len(reminder.Days))
+	for _, day := range reminder.Days {
+		days = append(days, strconv.Itoa(day))
+	}
+	joined := joinRussian(days)
+	if interval == 1 && len(days) == 1 {
+		return fmt.Sprintf("каждое %s-е число месяца в %s", joined, timeOfDay)
+	}
+	return fmt.Sprintf("%s %s числа в %s", everyMonths(interval), joined, timeOfDay)
+}
+
+// endDescription appends the stop condition, if there is one.
+func endDescription(end schedule.End) string {
+	switch end.Kind {
+	case schedule.EndUntil:
+		return " до " + formatCivilDate(end.Date)
+	case schedule.EndCount:
+		return fmt.Sprintf(" (всего %d %s)", end.Count, plural(end.Count, "раз", "раза", "раз"))
+	default:
+		return ""
+	}
+}
+
+// everyDays phrases "every day" versus "every N days".
+func everyDays(interval int) string {
+	if interval == 1 {
+		return "каждый день"
+	}
+	return fmt.Sprintf("каждые %d %s", interval, plural(interval, "день", "дня", "дней"))
+}
+
+// everyWeeks phrases "every week" versus "every N weeks".
+func everyWeeks(interval int) string {
+	if interval == 1 {
+		return "каждую неделю"
+	}
+	return fmt.Sprintf("каждые %d %s", interval, plural(interval, "неделю", "недели", "недель"))
+}
+
+// everyMonths phrases "every month" versus "every N months".
+func everyMonths(interval int) string {
+	if interval == 1 {
+		return "каждый месяц"
+	}
+	return fmt.Sprintf("каждые %d %s", interval, plural(interval, "месяц", "месяца", "месяцев"))
+}
+
+// everyYears phrases "every year" versus "every N years".
+func everyYears(interval int) string {
+	if interval == 1 {
+		return "каждый год"
+	}
+	return fmt.Sprintf("каждые %d %s", interval, plural(interval, "год", "года", "лет"))
+}
+
+// plural picks the Russian form for a number: 1 день, 2 дня, 5 дней.
+func plural(number int, one, few, many string) string {
+	mod100 := number % 100
+	if mod100 >= 11 && mod100 <= 14 {
+		return many
+	}
+	switch number % 10 {
+	case 1:
+		return one
+	case 2, 3, 4:
+		return few
+	default:
+		return many
+	}
+}
+
+// joinRussian joins phrases with commas and "и" before the last one.
+func joinRussian(items []string) string {
+	switch len(items) {
+	case 0:
+		return ""
+	case 1:
+		return items[0]
+	case 2:
+		return items[0] + " и " + items[1]
+	default:
+		return strings.Join(items[:len(items)-1], ", ") + " и " + items[len(items)-1]
+	}
+}
+
+// monthName returns the genitive Russian month name.
+func monthName(month time.Month) string {
+	if month < time.January || month > time.December {
+		return ""
+	}
+	return monthGenitive[month-1]
+}
+
+// formatCivilDate renders a civil date as дд.мм.гггг.
+func formatCivilDate(date schedule.Date) string {
+	return fmt.Sprintf("%02d.%02d.%04d", date.Day, int(date.Month), date.Year)
 }

@@ -80,7 +80,7 @@ describe("RemindersScreen", () => {
 
     expect(screen.getByText("09:30")).toBeInTheDocument();
     expect(screen.getByText("Выпить таблетку")).toBeInTheDocument();
-    expect(screen.getByText("Пн, Ср, Пт · повтор каждые 10 мин")).toBeInTheDocument();
+    expect(screen.getByText("каждую неделю по пн, ср, пт в 09:30 · повтор каждые 10 мин")).toBeInTheDocument();
     expect(screen.getByText("Следующее: 12.01 09:30")).toBeInTheDocument();
     expect(screen.getByRole("switch")).toBeChecked();
     expect(screen.getByRole("button", { name: "Новое напоминание" })).toBeInTheDocument();
@@ -119,26 +119,27 @@ describe("RemindersScreen", () => {
     );
   });
 
-  it("filters the list by schedule kind", () => {
+  it("filters the list by one-time reminders", () => {
     queryMock.mockReturnValue(
       queryResult({
         data: [
           makeReminder(),
           makeReminder({
             id: "44444444-4444-4444-8444-444444444444",
-            message: "Показания счётчиков",
-            schedule_kind: "monthly",
-            schedule_days: [20],
+            message: "Записаться к врачу",
+            schedule_kind: "once",
+            schedule_days: [],
+            start_date: "2027-03-20",
           }),
         ],
       }),
     );
     renderScreen();
 
-    fireEvent.click(screen.getByRole("button", { name: "По числам" }));
+    fireEvent.click(screen.getByRole("button", { name: "Один раз" }));
 
     expect(screen.queryByText("Выпить таблетку")).not.toBeInTheDocument();
-    expect(screen.getByText("Показания счётчиков")).toBeInTheDocument();
+    expect(screen.getByText("Записаться к врачу")).toBeInTheDocument();
   });
 
   it("shows the empty state", () => {

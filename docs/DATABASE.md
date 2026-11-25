@@ -40,8 +40,9 @@ cublyverse migrate status
 | 00011 | `00011_craft.sql` | «Бусинки»: `craft_manufacturers`, `craft_categories` (13 типов материалов), `craft_catalog_items` (глобальные и частные позиции каталога), `craft_inventory` и `craft_inventory_log` (остатки workspace и их история), `craft_projects`, `craft_project_materials`, `craft_wishlist_items`, `craft_wishlist_links`. |
 | 00012 | `00012_oauth.sql` | `oauth_clients`, `oauth_codes`, `oauth_tokens` — собственный OAuth 2.1 сервер для MCP: клиенты (DCR и CIMD), одноразовые коды с PKCE, пары access/refresh с ротацией. |
 | 00013 | `00013_catalog_sync.sql` | `craft_catalog_sync_runs` — журнал запусков скраперов глобального каталога: источник, статус `running`/`ok`/`failed`, счётчики `created`/`updated`/`unchanged`, текст ошибки. |
+| 00014 | `00014_reminders_recurrence.sql` | Гибкое повторение напоминаний: `interval_count`, `month_week_position`, `month_weekday`, `start_date`, `end_kind`, `end_date`, `end_count`, `occurrences_fired`, `finished_at`; новые `CHECK` и бэкфилл старых строк под прежнее поведение. |
 
-Нумерация не переиспользуется: следующая миграция — `00010_<тема>.sql`.
+Нумерация не переиспользуется: следующая миграция — `00015_<тема>.sql`.
 `make check` сверяет, что каждый файл из `internal/store/migrations/*.sql`
 упомянут в этом документе.
 
@@ -263,12 +264,21 @@ WebApp. Реестр `api_tokens` чистится фоновой задачей
 | `user_id` | `uuid` → `users` | владелец, `ON DELETE CASCADE` |
 | `message` | `text` | текст напоминания, 1..1500 символов |
 | `timezone` | `text` | IANA-имя, в котором трактуется время |
-| `schedule_kind` | `text` | `weekly` или `monthly` |
-| `schedule_days` | `smallint[]` | 1..7 для `weekly`, 1..31 для `monthly` |
+| `schedule_kind` | `text` | `once`, `daily`, `weekly`, `monthly` или `yearly` |
+| `schedule_days` | `smallint[]` | 1..7 для `weekly`, 1..31 для `monthly` по числам; пусто у остальных видов |
+| `interval_count` | `integer` | каждые N дней/недель/месяцев/лет, 1..1000; отсчёт от `start_date` |
+| `month_week_position` | `smallint` | для месячного правила «n-й день недели»: 1..4 или `-1` (последний) |
+| `month_weekday` | `smallint` | день недели для `month_week_position`, 1..7 |
+| `start_date` | `date` | первый возможный день в `timezone`; дата разового напоминания |
+| `end_kind` | `text` | `none`, `until` (по `end_date`) или `count` (по `end_count`) |
+| `end_date` | `date` | последний разрешённый день для `until` |
+| `end_count` | `integer` | всего срабатываний для `count` |
+| `occurrences_fired` | `integer` | сколько срабатываний уже было; сбрасывается при правке |
+| `finished_at` | `timestamptz` | когда подтвердили последнее срабатывание конечного правила |
 | `time_hhmm` | `text` | локальное время `HH:MM`, 24 часа |
 | `repeat_minutes` | `integer` | интервал повтора, 1..1440 |
 | `enabled` | `boolean` | выключенное напоминание не планируется |
-| `next_due_at` | `timestamptz` | ближайшее срабатывание в UTC; `NULL` у выключенного |
+| `next_due_at` | `timestamptz` | ближайшее срабатывание в UTC; `NULL` у выключенного, завершённого или исчерпанного |
 | `last_error` | `text` | последняя ошибка доставки, очищается после успешной отправки |
 | `lock_until` | `timestamptz` | аренда планировщика (M3-3) |
 | `created_at`, `updated_at` | `timestamptz` | |
@@ -277,8 +287,11 @@ WebApp. Реестр `api_tokens` чистится фоновой задачей
 могла появиться в обход кода: длина сообщения считается в символах
 (`char_length`), `time_hhmm` соответствует регулярному выражению
 `^([01][0-9]|2[0-3]):[0-5][0-9]$`, `repeat_minutes` в диапазоне 1..1440,
-`schedule_kind` — одно из двух значений, `schedule_days` не пуст и является
-подмножеством 1..7 (для `weekly`) либо 1..31 (для `monthly`).
+`interval_count` — 1..1000, `schedule_kind` — одно из пяти значений.
+`schedule_days` непуст и является подмножеством 1..7 для `weekly` и 1..31 для
+месячного правила по числам; у `monthly` с `month_week_position` дни пусты, а
+позиция и день недели заполнены парой. `end_kind` согласован с `end_date` и
+`end_count`, `occurrences_fired` неотрицателен.
 
 Индексы:
 

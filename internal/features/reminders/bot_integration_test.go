@@ -288,8 +288,8 @@ func TestReminderListCommand(t *testing.T) {
 	message = h.command(t, "/reminders")
 	want := []string{
 		"Ваши напоминания:",
-		"12:00 Пн, Ср, Пт — Выпить таблетку",
-		"18:30 15, 31 числа — Оплатить счёт (выключено)",
+		"• каждую неделю по пн, ср, пт в 12:00 — Выпить таблетку",
+		"• каждый месяц 15 и 31 числа в 18:30 — Оплатить счёт (выключено)",
 	}
 	for _, part := range want {
 		if !strings.Contains(message.Text, part) {

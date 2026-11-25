@@ -99,12 +99,13 @@ func listText(items []Reminder) string {
 	text.WriteString(listHeaderText)
 	for _, item := range items[:listed] {
 		text.WriteString("\n• ")
-		text.WriteString(item.TimeHHMM)
-		text.WriteString(" ")
-		text.WriteString(scheduleSummary(item))
+		text.WriteString(ScheduleDescription(item))
 		text.WriteString(" — ")
 		text.WriteString(truncateRunes(item.Message, maxListedMessageRunes))
-		if !item.Enabled {
+		switch {
+		case item.Finished():
+			text.WriteString(" (завершено)")
+		case !item.Enabled:
 			text.WriteString(" (выключено)")
 		}
 	}

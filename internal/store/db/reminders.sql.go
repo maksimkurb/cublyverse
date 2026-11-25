@@ -63,7 +63,7 @@ UPDATE reminders r
 SET lock_until = $1::timestamptz
 FROM due
 WHERE r.id = due.id
-RETURNING r.id, r.user_id, r.message, r.timezone, r.schedule_kind, r.schedule_days, r.time_hhmm, r.repeat_minutes, r.enabled, r.next_due_at, r.last_error, r.lock_until, r.created_at, r.updated_at
+RETURNING r.id, r.user_id, r.message, r.timezone, r.schedule_kind, r.schedule_days, r.time_hhmm, r.repeat_minutes, r.enabled, r.next_due_at, r.last_error, r.lock_until, r.created_at, r.updated_at, r.interval_count, r.month_week_position, r.month_weekday, r.start_date, r.end_kind, r.end_date, r.end_count, r.occurrences_fired, r.finished_at
 `
 
 type ClaimDueRemindersParams struct {
@@ -101,6 +101,15 @@ func (q *Queries) ClaimDueReminders(ctx context.Context, arg ClaimDueRemindersPa
 			&i.LockUntil,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IntervalCount,
+			&i.MonthWeekPosition,
+			&i.MonthWeekday,
+			&i.StartDate,
+			&i.EndKind,
+			&i.EndDate,
+			&i.EndCount,
+			&i.OccurrencesFired,
+			&i.FinishedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -263,23 +272,37 @@ INSERT INTO reminders (
     time_hhmm,
     repeat_minutes,
     enabled,
-    next_due_at
+    next_due_at,
+    interval_count,
+    month_week_position,
+    month_weekday,
+    start_date,
+    end_kind,
+    end_date,
+    end_count
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 )
-RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at
 `
 
 type CreateReminderParams struct {
-	UserID        pgtype.UUID        `json:"user_id"`
-	Message       string             `json:"message"`
-	Timezone      string             `json:"timezone"`
-	ScheduleKind  string             `json:"schedule_kind"`
-	ScheduleDays  []int16            `json:"schedule_days"`
-	TimeHhmm      string             `json:"time_hhmm"`
-	RepeatMinutes int32              `json:"repeat_minutes"`
-	Enabled       bool               `json:"enabled"`
-	NextDueAt     pgtype.Timestamptz `json:"next_due_at"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	Message           string             `json:"message"`
+	Timezone          string             `json:"timezone"`
+	ScheduleKind      string             `json:"schedule_kind"`
+	ScheduleDays      []int16            `json:"schedule_days"`
+	TimeHhmm          string             `json:"time_hhmm"`
+	RepeatMinutes     int32              `json:"repeat_minutes"`
+	Enabled           bool               `json:"enabled"`
+	NextDueAt         pgtype.Timestamptz `json:"next_due_at"`
+	IntervalCount     int32              `json:"interval_count"`
+	MonthWeekPosition *int16             `json:"month_week_position"`
+	MonthWeekday      *int16             `json:"month_weekday"`
+	StartDate         pgtype.Date        `json:"start_date"`
+	EndKind           string             `json:"end_kind"`
+	EndDate           pgtype.Date        `json:"end_date"`
+	EndCount          *int32             `json:"end_count"`
 }
 
 func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) (Reminder, error) {
@@ -293,6 +316,13 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 		arg.RepeatMinutes,
 		arg.Enabled,
 		arg.NextDueAt,
+		arg.IntervalCount,
+		arg.MonthWeekPosition,
+		arg.MonthWeekday,
+		arg.StartDate,
+		arg.EndKind,
+		arg.EndDate,
+		arg.EndCount,
 	)
 	var i Reminder
 	err := row.Scan(
@@ -310,6 +340,15 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 		&i.LockUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IntervalCount,
+		&i.MonthWeekPosition,
+		&i.MonthWeekday,
+		&i.StartDate,
+		&i.EndKind,
+		&i.EndDate,
+		&i.EndCount,
+		&i.OccurrencesFired,
+		&i.FinishedAt,
 	)
 	return i, err
 }
@@ -333,27 +372,80 @@ func (q *Queries) DeleteReminder(ctx context.Context, arg DeleteReminderParams) 
 	return result.RowsAffected(), nil
 }
 
+const finishReminder = `-- name: FinishReminder :one
+UPDATE reminders
+SET enabled     = false,
+    next_due_at = NULL,
+    finished_at = $1::timestamptz,
+    updated_at  = $1::timestamptz
+WHERE id = $2::uuid
+  AND user_id = $3::uuid
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at
+`
+
+type FinishReminderParams struct {
+	FinishedAt time.Time   `json:"finished_at"`
+	ReminderID pgtype.UUID `json:"reminder_id"`
+	UserID     pgtype.UUID `json:"user_id"`
+}
+
+// Closes a rule whose recurrence has no future occurrence: the last occurrence
+// was confirmed and the reminder must never fire again. It stays visible as
+// «завершено», so only `enabled` and `next_due_at` change, not the rule itself.
+func (q *Queries) FinishReminder(ctx context.Context, arg FinishReminderParams) (Reminder, error) {
+	row := q.db.QueryRow(ctx, finishReminder, arg.FinishedAt, arg.ReminderID, arg.UserID)
+	var i Reminder
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Message,
+		&i.Timezone,
+		&i.ScheduleKind,
+		&i.ScheduleDays,
+		&i.TimeHhmm,
+		&i.RepeatMinutes,
+		&i.Enabled,
+		&i.NextDueAt,
+		&i.LastError,
+		&i.LockUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IntervalCount,
+		&i.MonthWeekPosition,
+		&i.MonthWeekday,
+		&i.StartDate,
+		&i.EndKind,
+		&i.EndDate,
+		&i.EndCount,
+		&i.OccurrencesFired,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
 const finishReminderFirstFire = `-- name: FinishReminderFirstFire :one
 UPDATE reminders
-SET next_due_at = $1::timestamptz,
-    last_error  = NULL,
-    lock_until  = NULL,
-    updated_at  = $2::timestamptz
+SET next_due_at       = $1,
+    occurrences_fired = occurrences_fired + 1,
+    last_error        = NULL,
+    lock_until        = NULL,
+    updated_at        = $2::timestamptz
 WHERE id = $3::uuid
   AND lock_until = $4::timestamptz
   AND updated_at = $5::timestamptz
-RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at
 `
 
 type FinishReminderFirstFireParams struct {
-	NextDueAt      time.Time   `json:"next_due_at"`
-	Now            time.Time   `json:"now"`
-	ReminderID     pgtype.UUID `json:"reminder_id"`
-	LockUntil      time.Time   `json:"lock_until"`
-	UnchangedSince time.Time   `json:"unchanged_since"`
+	NextDueAt      pgtype.Timestamptz `json:"next_due_at"`
+	Now            time.Time          `json:"now"`
+	ReminderID     pgtype.UUID        `json:"reminder_id"`
+	LockUntil      time.Time          `json:"lock_until"`
+	UnchangedSince time.Time          `json:"unchanged_since"`
 }
 
-// Persists a successful first firing: the next due time moves from "now", the
+// Persists a successful first firing: the next due time moves from "now" (NULL
+// when the recurrence has no future occurrence), the fired counter grows, the
 // delivery error is gone and the lease is released. updated_at is part of the
 // guard, so a rule the user changed while the message was in flight is never
 // overwritten by the stale worker.
@@ -381,6 +473,15 @@ func (q *Queries) FinishReminderFirstFire(ctx context.Context, arg FinishReminde
 		&i.LockUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IntervalCount,
+		&i.MonthWeekPosition,
+		&i.MonthWeekday,
+		&i.StartDate,
+		&i.EndKind,
+		&i.EndDate,
+		&i.EndCount,
+		&i.OccurrencesFired,
+		&i.FinishedAt,
 	)
 	return i, err
 }
@@ -392,7 +493,7 @@ SET last_error = NULL,
     updated_at = $1::timestamptz
 WHERE id = $2::uuid
   AND lock_until = $3::timestamptz
-RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at
 `
 
 type FinishReminderRepeatParams struct {
@@ -421,6 +522,15 @@ func (q *Queries) FinishReminderRepeat(ctx context.Context, arg FinishReminderRe
 		&i.LockUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IntervalCount,
+		&i.MonthWeekPosition,
+		&i.MonthWeekday,
+		&i.StartDate,
+		&i.EndKind,
+		&i.EndDate,
+		&i.EndCount,
+		&i.OccurrencesFired,
+		&i.FinishedAt,
 	)
 	return i, err
 }
@@ -483,7 +593,7 @@ func (q *Queries) GetOccurrence(ctx context.Context, arg GetOccurrenceParams) (R
 }
 
 const getReminder = `-- name: GetReminder :one
-SELECT id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at FROM reminders
+SELECT id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at FROM reminders
 WHERE id = $1
   AND user_id = $2
 `
@@ -513,6 +623,15 @@ func (q *Queries) GetReminder(ctx context.Context, arg GetReminderParams) (Remin
 		&i.LockUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IntervalCount,
+		&i.MonthWeekPosition,
+		&i.MonthWeekday,
+		&i.StartDate,
+		&i.EndKind,
+		&i.EndDate,
+		&i.EndCount,
+		&i.OccurrencesFired,
+		&i.FinishedAt,
 	)
 	return i, err
 }
@@ -574,7 +693,7 @@ func (q *Queries) ListActiveOccurrencesByUser(ctx context.Context, userID pgtype
 }
 
 const listReminders = `-- name: ListReminders :many
-SELECT id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at FROM reminders
+SELECT id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at FROM reminders
 WHERE user_id = $1
 ORDER BY time_hhmm, created_at, id
 `
@@ -603,6 +722,15 @@ func (q *Queries) ListReminders(ctx context.Context, userID pgtype.UUID) ([]Remi
 			&i.LockUntil,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IntervalCount,
+			&i.MonthWeekPosition,
+			&i.MonthWeekday,
+			&i.StartDate,
+			&i.EndKind,
+			&i.EndDate,
+			&i.EndCount,
+			&i.OccurrencesFired,
+			&i.FinishedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -694,35 +822,52 @@ func (q *Queries) ReleaseReminderLease(ctx context.Context, arg ReleaseReminderL
 
 const updateReminder = `-- name: UpdateReminder :one
 UPDATE reminders
-SET message        = $3,
-    timezone       = $4,
-    schedule_kind  = $5,
-    schedule_days  = $6,
-    time_hhmm      = $7,
-    repeat_minutes = $8,
-    enabled        = $9,
-    next_due_at    = $10,
-    updated_at     = now()
+SET message             = $3,
+    timezone            = $4,
+    schedule_kind       = $5,
+    schedule_days       = $6,
+    time_hhmm           = $7,
+    repeat_minutes      = $8,
+    enabled             = $9,
+    next_due_at         = $10,
+    interval_count      = $11,
+    month_week_position = $12,
+    month_weekday       = $13,
+    start_date          = $14,
+    end_kind            = $15,
+    end_date            = $16,
+    end_count           = $17,
+    occurrences_fired   = 0,
+    finished_at         = NULL,
+    updated_at          = now()
 WHERE id = $1
   AND user_id = $2
-RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at
 `
 
 type UpdateReminderParams struct {
-	ID            pgtype.UUID        `json:"id"`
-	UserID        pgtype.UUID        `json:"user_id"`
-	Message       string             `json:"message"`
-	Timezone      string             `json:"timezone"`
-	ScheduleKind  string             `json:"schedule_kind"`
-	ScheduleDays  []int16            `json:"schedule_days"`
-	TimeHhmm      string             `json:"time_hhmm"`
-	RepeatMinutes int32              `json:"repeat_minutes"`
-	Enabled       bool               `json:"enabled"`
-	NextDueAt     pgtype.Timestamptz `json:"next_due_at"`
+	ID                pgtype.UUID        `json:"id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	Message           string             `json:"message"`
+	Timezone          string             `json:"timezone"`
+	ScheduleKind      string             `json:"schedule_kind"`
+	ScheduleDays      []int16            `json:"schedule_days"`
+	TimeHhmm          string             `json:"time_hhmm"`
+	RepeatMinutes     int32              `json:"repeat_minutes"`
+	Enabled           bool               `json:"enabled"`
+	NextDueAt         pgtype.Timestamptz `json:"next_due_at"`
+	IntervalCount     int32              `json:"interval_count"`
+	MonthWeekPosition *int16             `json:"month_week_position"`
+	MonthWeekday      *int16             `json:"month_weekday"`
+	StartDate         pgtype.Date        `json:"start_date"`
+	EndKind           string             `json:"end_kind"`
+	EndDate           pgtype.Date        `json:"end_date"`
+	EndCount          *int32             `json:"end_count"`
 }
 
 // A full replacement of the rule (PUT semantics). The owner check makes a
-// foreign id answer with no rows.
+// foreign id answer with no rows. The fired counter and the finished marker are
+// reset: a changed recurrence is a new cycle, exactly as the first one.
 func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) (Reminder, error) {
 	row := q.db.QueryRow(ctx, updateReminder,
 		arg.ID,
@@ -735,6 +880,13 @@ func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) 
 		arg.RepeatMinutes,
 		arg.Enabled,
 		arg.NextDueAt,
+		arg.IntervalCount,
+		arg.MonthWeekPosition,
+		arg.MonthWeekday,
+		arg.StartDate,
+		arg.EndKind,
+		arg.EndDate,
+		arg.EndCount,
 	)
 	var i Reminder
 	err := row.Scan(
@@ -752,6 +904,15 @@ func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) 
 		&i.LockUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IntervalCount,
+		&i.MonthWeekPosition,
+		&i.MonthWeekday,
+		&i.StartDate,
+		&i.EndKind,
+		&i.EndDate,
+		&i.EndCount,
+		&i.OccurrencesFired,
+		&i.FinishedAt,
 	)
 	return i, err
 }

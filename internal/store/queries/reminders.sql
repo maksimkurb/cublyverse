@@ -8,9 +8,16 @@ INSERT INTO reminders (
     time_hhmm,
     repeat_minutes,
     enabled,
-    next_due_at
+    next_due_at,
+    interval_count,
+    month_week_position,
+    month_weekday,
+    start_date,
+    end_kind,
+    end_date,
+    end_count
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 )
 RETURNING *;
 
@@ -28,17 +35,27 @@ ORDER BY time_hhmm, created_at, id;
 
 -- name: UpdateReminder :one
 -- A full replacement of the rule (PUT semantics). The owner check makes a
--- foreign id answer with no rows.
+-- foreign id answer with no rows. The fired counter and the finished marker are
+-- reset: a changed recurrence is a new cycle, exactly as the first one.
 UPDATE reminders
-SET message        = $3,
-    timezone       = $4,
-    schedule_kind  = $5,
-    schedule_days  = $6,
-    time_hhmm      = $7,
-    repeat_minutes = $8,
-    enabled        = $9,
-    next_due_at    = $10,
-    updated_at     = now()
+SET message             = $3,
+    timezone            = $4,
+    schedule_kind       = $5,
+    schedule_days       = $6,
+    time_hhmm           = $7,
+    repeat_minutes      = $8,
+    enabled             = $9,
+    next_due_at         = $10,
+    interval_count      = $11,
+    month_week_position = $12,
+    month_weekday       = $13,
+    start_date          = $14,
+    end_kind            = $15,
+    end_date            = $16,
+    end_count           = $17,
+    occurrences_fired   = 0,
+    finished_at         = NULL,
+    updated_at          = now()
 WHERE id = $1
   AND user_id = $2
 RETURNING *;
@@ -187,15 +204,17 @@ WHERE r.id = due.id
 RETURNING r.*;
 
 -- name: FinishReminderFirstFire :one
--- Persists a successful first firing: the next due time moves from "now", the
+-- Persists a successful first firing: the next due time moves from "now" (NULL
+-- when the recurrence has no future occurrence), the fired counter grows, the
 -- delivery error is gone and the lease is released. updated_at is part of the
 -- guard, so a rule the user changed while the message was in flight is never
 -- overwritten by the stale worker.
 UPDATE reminders
-SET next_due_at = sqlc.arg(next_due_at)::timestamptz,
-    last_error  = NULL,
-    lock_until  = NULL,
-    updated_at  = sqlc.arg(now)::timestamptz
+SET next_due_at       = sqlc.arg(next_due_at),
+    occurrences_fired = occurrences_fired + 1,
+    last_error        = NULL,
+    lock_until        = NULL,
+    updated_at        = sqlc.arg(now)::timestamptz
 WHERE id = sqlc.arg(reminder_id)::uuid
   AND lock_until = sqlc.arg(lock_until)::timestamptz
   AND updated_at = sqlc.arg(unchanged_since)::timestamptz
@@ -210,6 +229,19 @@ SET last_error = NULL,
     updated_at = sqlc.arg(now)::timestamptz
 WHERE id = sqlc.arg(reminder_id)::uuid
   AND lock_until = sqlc.arg(lock_until)::timestamptz
+RETURNING *;
+
+-- name: FinishReminder :one
+-- Closes a rule whose recurrence has no future occurrence: the last occurrence
+-- was confirmed and the reminder must never fire again. It stays visible as
+-- «завершено», so only `enabled` and `next_due_at` change, not the rule itself.
+UPDATE reminders
+SET enabled     = false,
+    next_due_at = NULL,
+    finished_at = sqlc.arg(finished_at)::timestamptz,
+    updated_at  = sqlc.arg(finished_at)::timestamptz
+WHERE id = sqlc.arg(reminder_id)::uuid
+  AND user_id = sqlc.arg(user_id)::uuid
 RETURNING *;
 
 -- name: ReleaseReminderLease :execrows

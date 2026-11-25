@@ -2548,16 +2548,24 @@ components:
     ScheduleKind:
       type: string
       description: |
-        Shape of the schedule.
+        Shape of the recurrence.
 
-        * `weekly` — `schedule_days` are ISO weekdays, 1 is Monday and 7 is
-          Sunday.
-        * `monthly` — `schedule_days` are days of month 1..31. A day the month
-          does not have means the last day of that month: 31 is 28 or 29
-          February, 31 is 30 April.
+        * `once` — a single occurrence on `start_date` at `time`; the reminder
+          is finished after the occurrence is confirmed.
+        * `daily` — every `interval` days (1 means every day) at `time`.
+        * `weekly` — every `interval` weeks on `schedule_days`, ISO weekdays 1..7
+          (1 = Monday, 7 = Sunday).
+        * `monthly` — every `interval` months, either on `schedule_days` (days of
+          month 1..31, a day the month does not have means its last day) or on
+          the nth weekday given by `month_week_position` and `month_weekday`.
+        * `yearly` — every `interval` years on the month and day of `start_date`;
+          29 February becomes 28 February in a non-leap year.
       enum:
+        - once
+        - daily
         - weekly
         - monthly
+        - yearly
       example: weekly
 
     Reminder:
@@ -2580,6 +2588,16 @@ components:
         - timezone
         - schedule_kind
         - schedule_days
+        - interval
+        - month_week_position
+        - month_weekday
+        - start_date
+        - end_kind
+        - end_date
+        - end_count
+        - occurrences_fired
+        - finished
+        - finished_at
         - time
         - repeat_minutes
         - enabled
@@ -2610,7 +2628,6 @@ components:
           $ref: "#/components/schemas/ScheduleKind"
         schedule_days:
           type: array
-          minItems: 1
           maxItems: 31
           items:
             type: integer
@@ -2618,9 +2635,99 @@ components:
             maximum: 31
             description: One ISO weekday (1..7) or one day of month (1..31).
           description: |
-            Days of the schedule, sorted and without duplicates. Weekly days are
-            1..7 (Monday..Sunday), monthly days are 1..31.
+            Days of a `weekly` or `monthly` day-of-month rule, sorted and without
+            duplicates. Weekly days are 1..7 (Monday..Sunday), monthly days are
+            1..31. Empty for `once`, `daily`, `yearly` and an nth-weekday
+            `monthly` rule.
           example: [1, 3, 5]
+        interval:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: |
+            Gap between occurrences in units of `schedule_kind`: every N days,
+            weeks, months or years. `1` means every day/week/month/year. It is
+            always relative to `start_date`; ignored by `once`.
+          example: 1
+        month_week_position:
+          type: integer
+          minimum: -1
+          maximum: 4
+          nullable: true
+          description: |
+            Position of the weekday in a monthly rule: 1..4 for the first through
+            fourth, or -1 for the last one. `null` means the rule uses
+            `schedule_days` (days of month) instead.
+          example: null
+        month_weekday:
+          type: integer
+          minimum: 1
+          maximum: 7
+          nullable: true
+          description: |
+            ISO weekday of an nth-weekday monthly rule: 1 is Monday, 7 is Sunday.
+            `null` unless `month_week_position` is set.
+          example: null
+        start_date:
+          type: string
+          format: date
+          description: |
+            First possible day of the recurrence as `YYYY-MM-DD` in `timezone`.
+            For `once` it is the date of the single occurrence; for `yearly` its
+            month and day are the anniversary. A new reminder defaults to today in
+            its time zone.
+          example: "2026-01-05"
+        end_kind:
+          type: string
+          enum:
+            - none
+            - until
+            - count
+          description: |
+            How a repeating recurrence stops: `none` repeats forever, `until`
+            repeats through `end_date`, `count` repeats `end_count` times in
+            total. A `once` reminder always has `none`.
+          example: none
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          description: |
+            Last allowed day for `end_kind` `until`, as `YYYY-MM-DD` in
+            `timezone`; `null` for the other end kinds.
+          example: null
+        end_count:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          nullable: true
+          description: |
+            Total number of occurrences for `end_kind` `count`; `null` for the
+            other end kinds.
+          example: null
+        occurrences_fired:
+          type: integer
+          minimum: 0
+          description: |
+            How many occurrences already fired. Editing the rule resets it to 0;
+            a `count` end compares it with `end_count`.
+          example: 0
+        finished:
+          type: boolean
+          description: |
+            Whether a finite recurrence is over: a `once` reminder or one whose
+            end date or occurrence count was reached and the last occurrence was
+            confirmed. A finished reminder is not scheduled and is shown as
+            «завершено».
+          example: false
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When the last occurrence of a finite recurrence was confirmed, or
+            `null` while the reminder still has a future occurrence.
+          example: null
         time:
           type: string
           pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
@@ -2742,13 +2849,14 @@ components:
       type: object
       additionalProperties: false
       description: |
-        Fields of a new reminder. `repeat_minutes` defaults to 10 and `enabled`
-        to `true`, so the common case needs neither.
+        Fields of a new reminder. `repeat_minutes` defaults to 10, `enabled` to
+        `true`, `interval` to 1, `end_kind` to `none` and `start_date` to today
+        in `timezone`, so a request that only names `schedule_kind`,
+        `schedule_days` and `time` keeps the old weekly/monthly behaviour.
       required:
         - message
         - timezone
         - schedule_kind
-        - schedule_days
         - time
       properties:
         message:
@@ -2765,7 +2873,6 @@ components:
           $ref: "#/components/schemas/ScheduleKind"
         schedule_days:
           type: array
-          minItems: 1
           maxItems: 31
           items:
             type: integer
@@ -2773,8 +2880,69 @@ components:
             maximum: 31
             description: One ISO weekday (1..7) or one day of month (1..31).
           description: |
-            At least one day. Weekly days are 1..7, monthly days are 1..31.
+            Days of a `weekly` or `monthly` day-of-month rule. Weekly days are
+            1..7, monthly days are 1..31. Omit for `once`, `daily`, `yearly` and
+            an nth-weekday `monthly` rule.
           example: [1, 3, 5]
+        interval:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 1
+          description: |
+            Every N days/weeks/months/years, relative to `start_date`. Omitted
+            means 1.
+          example: 1
+        month_week_position:
+          type: integer
+          minimum: -1
+          maximum: 4
+          nullable: true
+          description: |
+            For a monthly nth-weekday rule: 1..4 for the first through fourth
+            weekday, or -1 for the last one. Omit for a day-of-month rule.
+          example: null
+        month_weekday:
+          type: integer
+          minimum: 1
+          maximum: 7
+          nullable: true
+          description: |
+            ISO weekday (1 = Monday, 7 = Sunday) of an nth-weekday monthly rule.
+            Required together with `month_week_position`.
+          example: null
+        start_date:
+          type: string
+          format: date
+          description: |
+            First possible day as `YYYY-MM-DD` in `timezone`; the date of a
+            `once` reminder and the anniversary of a `yearly` one. Omitted means
+            today in `timezone`.
+          example: "2026-01-05"
+        end_kind:
+          type: string
+          enum:
+            - none
+            - until
+            - count
+          default: none
+          description: |
+            Stop condition of a repeating rule: never, until `end_date`, or after
+            `end_count` occurrences. Omitted means `none`; `once` ignores it.
+          example: none
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          description: Last allowed day for `until`, as `YYYY-MM-DD` in `timezone`.
+          example: null
+        end_count:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          nullable: true
+          description: Total number of occurrences for `count`.
+          example: null
         time:
           type: string
           pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
@@ -2799,13 +2967,14 @@ components:
       type: object
       additionalProperties: false
       description: |
-        The whole rule: `PUT` replaces every field, so all of them are required.
-        An omitted field is not kept from the previous version.
+        The whole rule: `PUT` replaces every field, so the rule fields are
+        required. Recurrence additions are optional with the same defaults as a
+        create: `interval` 1, `end_kind` `none` and `start_date` today in
+        `timezone`. Editing the rule resets the fired counter.
       required:
         - message
         - timezone
         - schedule_kind
-        - schedule_days
         - time
         - repeat_minutes
         - enabled
@@ -2824,7 +2993,6 @@ components:
           $ref: "#/components/schemas/ScheduleKind"
         schedule_days:
           type: array
-          minItems: 1
           maxItems: 31
           items:
             type: integer
@@ -2832,8 +3000,62 @@ components:
             maximum: 31
             description: One ISO weekday (1..7) or one day of month (1..31).
           description: |
-            At least one day. Weekly days are 1..7, monthly days are 1..31.
+            Days of a `weekly` or `monthly` day-of-month rule. Weekly days are
+            1..7, monthly days are 1..31. Empty for `once`, `daily`, `yearly` and
+            an nth-weekday `monthly` rule.
           example: [2, 4]
+        interval:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 1
+          description: Every N days/weeks/months/years, relative to `start_date`.
+          example: 1
+        month_week_position:
+          type: integer
+          minimum: -1
+          maximum: 4
+          nullable: true
+          description: |
+            For a monthly nth-weekday rule: 1..4 or -1 for the last weekday.
+          example: null
+        month_weekday:
+          type: integer
+          minimum: 1
+          maximum: 7
+          nullable: true
+          description: |
+            ISO weekday (1 = Monday, 7 = Sunday) of an nth-weekday monthly rule.
+          example: null
+        start_date:
+          type: string
+          format: date
+          description: |
+            First possible day as `YYYY-MM-DD` in `timezone`. Omitted means today
+            in `timezone`.
+          example: "2026-01-05"
+        end_kind:
+          type: string
+          enum:
+            - none
+            - until
+            - count
+          default: none
+          description: "Stop condition: never, until `end_date`, or after `end_count`."
+          example: none
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          description: Last allowed day for `until`.
+          example: null
+        end_count:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          nullable: true
+          description: Total number of occurrences for `count`.
+          example: null
         time:
           type: string
           pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"

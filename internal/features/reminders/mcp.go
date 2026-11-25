@@ -60,12 +60,14 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 	mcpserver.AddTool(server, &mcp.Tool{
 		Name:  toolCreate,
 		Title: "Create a reminder",
-		Description: "Create a recurring reminder for the current user. Give either " +
-			"weekdays (mon..sun or 1..7) or month_days (1..31), a local time HH:MM " +
-			"and optionally an IANA time zone; without a time zone the user's " +
-			"profile time zone is used. The reminder is enabled by default and " +
-			"repeats an unconfirmed occurrence every repeat_minutes (default 10). " +
-			"Returns the stored reminder with its next due time in UTC.",
+		Description: "Create a reminder for the current user. The recurrence is chosen " +
+			"with repeat: once (needs date), daily, weekly (needs weekdays), monthly " +
+			"(month_days or nth_weekday such as the second Tuesday or the last Friday) " +
+			"or yearly. interval makes it every N days/weeks/months/years and is " +
+			"relative to start_date; until or count stops the repetition. The old " +
+			"shape without repeat still works: weekdays means weekly and month_days " +
+			"means monthly. Without a time zone the user's profile time zone is " +
+			"used. Returns the stored reminder with its next due time in UTC.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Create a reminder",
 			DestructiveHint: boolPtr(false),
@@ -77,10 +79,11 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Name:  toolUpdate,
 		Title: "Update a reminder",
 		Description: "Change a reminder. Omitted fields keep their current values: " +
-			"message, time, weekdays or month_days, time_zone, repeat_minutes and " +
-			"enabled are all optional apart from the id. A change cancels the " +
-			"pending occurrence and recomputes the next due time. Returns the " +
-			"updated reminder.",
+			"message, repeat and its interval/weekdays/month_days/nth_weekday/date/" +
+			"start_date/until/count, time, time_zone, repeat_minutes and enabled are " +
+			"all optional apart from the id. A recurrence change cancels the pending " +
+			"occurrence, resets the fired counter and recomputes the next due time. " +
+			"Returns the updated reminder.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Update a reminder",
 			DestructiveHint: boolPtr(false),
@@ -130,15 +133,30 @@ type mcpGetInput struct {
 	ID string `json:"id" jsonschema:"reminder id (UUID) returned by reminders_list or reminders_create"`
 }
 
-// mcpCreateInput is the LLM-friendly form of a new reminder. Weekdays accept
-// both names and ISO numbers; exactly one of weekdays and month_days is used.
+// mcpCreateInput is the LLM-friendly form of a new reminder. The recurrence is
+// described by `repeat` plus the fields of that kind; the old shape (weekdays or
+// month_days without `repeat`) still works and means weekly or monthly.
 type mcpCreateInput struct {
 	// Message is the text the user receives.
 	Message string `json:"message" jsonschema:"reminder text in the user's language, 1 to 1500 characters"`
+	// Repeat is the recurrence kind.
+	Repeat string `json:"repeat,omitempty" jsonschema:"recurrence kind: once, daily, weekly, monthly or yearly. Omit it to use the old shape: weekdays means weekly, month_days means monthly"`
+	// Interval is the period in repeat units.
+	Interval int `json:"interval,omitempty" jsonschema:"every N days/weeks/months/years, 1..1000. Default 1, for example interval=2 with repeat=weekly means every second week"`
 	// Weekdays are the days of a weekly schedule.
-	Weekdays []string `json:"weekdays,omitempty" jsonschema:"weekly schedule: day names mon,tue,wed,thu,fri,sat,sun or ISO numbers 1..7 (1 = Monday). Use either weekdays or month_days"`
-	// MonthDays are the days of a monthly schedule.
-	MonthDays []int `json:"month_days,omitempty" jsonschema:"monthly schedule: days of month 1..31. A day the month does not have means its last day. Use either weekdays or month_days"`
+	Weekdays []string `json:"weekdays,omitempty" jsonschema:"weekly schedule: day names mon,tue,wed,thu,fri,sat,sun or ISO numbers 1..7 (1 = Monday). Use either weekdays, month_days or nth_weekday"`
+	// MonthDays are the days of a monthly day-of-month schedule.
+	MonthDays []int `json:"month_days,omitempty" jsonschema:"monthly day-of-month schedule: days 1..31. A day the month does not have means its last day. Use either weekdays, month_days or nth_weekday"`
+	// NthWeekday is the nth weekday of a monthly schedule.
+	NthWeekday *mcpNthWeekday `json:"nth_weekday,omitempty" jsonschema:"monthly nth-weekday schedule, for example the second Tuesday. Use either weekdays, month_days or nth_weekday"`
+	// Date is the day of a one-time reminder.
+	Date string `json:"date,omitempty" jsonschema:"date of a one-time reminder as YYYY-MM-DD in the reminder time zone. Also accepted as start_date for repeat=once"`
+	// StartDate is the first possible day of a repeating schedule.
+	StartDate string `json:"start_date,omitempty" jsonschema:"first possible day as YYYY-MM-DD in the reminder time zone; defaults to today. For repeat=yearly its month and day are the anniversary"`
+	// Until is the last allowed day of a repeating schedule.
+	Until string `json:"until,omitempty" jsonschema:"last allowed day as YYYY-MM-DD; the reminder stops after it. Do not combine with count"`
+	// Count is the total number of occurrences of a repeating schedule.
+	Count int `json:"count,omitempty" jsonschema:"total number of occurrences, 1..10000; the reminder stops after them. Do not combine with until"`
 	// Time is the local wall clock time.
 	Time string `json:"time" jsonschema:"local wall clock time as HH:MM in 24-hour form, for example 09:30"`
 	// Timezone is the IANA time zone of the schedule.
@@ -149,16 +167,38 @@ type mcpCreateInput struct {
 	Enabled *bool `json:"enabled,omitempty" jsonschema:"create the reminder already scheduled. Default true"`
 }
 
+// mcpNthWeekday selects the nth weekday of a month.
+type mcpNthWeekday struct {
+	// Position is 1..4, or -1 for the last weekday.
+	Position int `json:"position" jsonschema:"position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last"`
+	// Weekday is the weekday name or ISO number.
+	Weekday string `json:"weekday" jsonschema:"weekday name mon..sun or ISO number 1..7 (1 = Monday)"`
+}
+
 // mcpUpdateInput is a partial update: omitted fields keep their current value.
 type mcpUpdateInput struct {
 	// ID is the reminder UUID.
 	ID string `json:"id" jsonschema:"reminder id (UUID) to change"`
 	// Message replaces the text.
 	Message string `json:"message,omitempty" jsonschema:"new reminder text, 1 to 1500 characters. Omit to keep the current text"`
+	// Repeat replaces the recurrence kind.
+	Repeat string `json:"repeat,omitempty" jsonschema:"new recurrence kind: once, daily, weekly, monthly or yearly. Omit to keep the current one"`
+	// Interval replaces the period.
+	Interval *int `json:"interval,omitempty" jsonschema:"every N days/weeks/months/years, 1..1000. Omit to keep the current interval"`
 	// Weekdays replaces a weekly schedule.
-	Weekdays []string `json:"weekdays,omitempty" jsonschema:"weekly schedule: day names mon..sun or ISO numbers 1..7. Omit to keep the current schedule; do not combine with month_days"`
-	// MonthDays replaces a monthly schedule.
-	MonthDays []int `json:"month_days,omitempty" jsonschema:"monthly schedule: days of month 1..31. Omit to keep the current schedule; do not combine with weekdays"`
+	Weekdays []string `json:"weekdays,omitempty" jsonschema:"weekly schedule: day names mon..sun or ISO numbers 1..7. Omit to keep the current schedule"`
+	// MonthDays replaces a monthly day-of-month schedule.
+	MonthDays []int `json:"month_days,omitempty" jsonschema:"monthly day-of-month schedule: days 1..31. Omit to keep the current schedule"`
+	// NthWeekday replaces a monthly schedule with the nth weekday.
+	NthWeekday *mcpNthWeekday `json:"nth_weekday,omitempty" jsonschema:"monthly nth-weekday schedule. Omit to keep the current schedule"`
+	// Date replaces the day of a one-time reminder.
+	Date string `json:"date,omitempty" jsonschema:"new date of a one-time reminder as YYYY-MM-DD. Omit to keep the current date"`
+	// StartDate replaces the first possible day.
+	StartDate string `json:"start_date,omitempty" jsonschema:"new first possible day as YYYY-MM-DD. Omit to keep the current one"`
+	// Until replaces the last allowed day.
+	Until string `json:"until,omitempty" jsonschema:"new last allowed day as YYYY-MM-DD; removes a count end. Omit to keep the current end"`
+	// Count replaces the total number of occurrences.
+	Count *int `json:"count,omitempty" jsonschema:"new total number of occurrences 1..10000; removes an until end. Omit to keep the current end"`
 	// Time replaces the local wall clock time.
 	Time string `json:"time,omitempty" jsonschema:"new local wall clock time HH:MM. Omit to keep the current time"`
 	// Timezone replaces the IANA time zone.
@@ -202,12 +242,33 @@ type mcpReminder struct {
 	ID string `json:"id" jsonschema:"reminder id (UUID)"`
 	// Message is the reminder text.
 	Message string `json:"message" jsonschema:"reminder text"`
-	// ScheduleKind is weekly or monthly.
-	ScheduleKind string `json:"schedule_kind" jsonschema:"weekly or monthly"`
+	// Repeat is the recurrence kind.
+	Repeat string `json:"repeat" jsonschema:"once, daily, weekly, monthly or yearly"`
+	// ScheduleKind is kept for clients of the first schema: the same value as
+	// repeat.
+	ScheduleKind string `json:"schedule_kind" jsonschema:"alias of repeat, kept for older clients"`
+	// Interval is the period in repeat units.
+	Interval int `json:"interval" jsonschema:"every N days/weeks/months/years"`
 	// Weekdays are the weekly days as names, present for a weekly schedule.
-	Weekdays []string `json:"weekdays,omitempty" jsonschema:"weekly days as mon..sun, present when schedule_kind is weekly"`
-	// MonthDays are the monthly days, present for a monthly schedule.
-	MonthDays []int `json:"month_days,omitempty" jsonschema:"days of month, present when schedule_kind is monthly"`
+	Weekdays []string `json:"weekdays,omitempty" jsonschema:"weekly days as mon..sun, present when repeat is weekly"`
+	// MonthDays are the monthly days, present for a day-of-month schedule.
+	MonthDays []int `json:"month_days,omitempty" jsonschema:"days of month, present when repeat is monthly and nth_weekday is absent"`
+	// NthWeekday is the nth weekday, present for an nth-weekday monthly schedule.
+	NthWeekday *mcpNthWeekday `json:"nth_weekday,omitempty" jsonschema:"nth weekday of the month, present when repeat is monthly and month_days is absent"`
+	// StartDate is the first possible day of the recurrence.
+	StartDate string `json:"start_date" jsonschema:"first possible day as YYYY-MM-DD in the reminder time zone"`
+	// Until is the last allowed day, empty when the recurrence does not end by
+	// date.
+	Until string `json:"until,omitempty" jsonschema:"last allowed day as YYYY-MM-DD, empty when there is no date end"`
+	// Count is the total number of occurrences, zero when the recurrence does
+	// not end by count.
+	Count int `json:"count,omitempty" jsonschema:"total number of occurrences, zero when there is no count end"`
+	// OccurrencesFired is how many occurrences already fired.
+	OccurrencesFired int `json:"occurrences_fired" jsonschema:"how many occurrences already fired; editing resets it"`
+	// Finished reports whether a finite recurrence is over.
+	Finished bool `json:"finished" jsonschema:"true when the recurrence has no future occurrence and the last one was confirmed"`
+	// FinishedAt is when the recurrence was finished.
+	FinishedAt string `json:"finished_at,omitempty" jsonschema:"finish time in RFC 3339 UTC, empty while not finished"`
 	// Time is the local wall clock time.
 	Time string `json:"time" jsonschema:"local wall clock time HH:MM"`
 	// Timezone is the IANA time zone the schedule is interpreted in.
@@ -217,7 +278,7 @@ type mcpReminder struct {
 	// Enabled reports whether the reminder is scheduled.
 	Enabled bool `json:"enabled" jsonschema:"whether the reminder is scheduled"`
 	// NextDueAt is the next firing in UTC, or empty when disabled.
-	NextDueAt string `json:"next_due_at,omitempty" jsonschema:"next firing in RFC 3339 UTC, empty while the reminder is disabled"`
+	NextDueAt string `json:"next_due_at,omitempty" jsonschema:"next firing in RFC 3339 UTC, empty while the reminder is disabled or finished"`
 	// LastError is the last delivery error, empty when deliveries work.
 	LastError string `json:"last_error,omitempty" jsonschema:"last delivery error, empty when the reminder is delivered"`
 	// ActiveOccurrence is the firing that waits for confirmation, if any.
@@ -279,7 +340,21 @@ func (f *Feature) mcpCreate(ctx context.Context, _ *mcp.CallToolRequest, input m
 	if err != nil {
 		return nil, mcpReminder{}, err
 	}
-	kind, days, err := parseSchedule(input.Weekdays, input.MonthDays, false)
+	kind, days, position, weekday, err := parseMCPRecurrence(input.Repeat, input.Weekdays, input.MonthDays, input.NthWeekday)
+	if err != nil {
+		return nil, mcpReminder{}, err
+	}
+	startDate := strings.TrimSpace(input.StartDate)
+	if date := strings.TrimSpace(input.Date); date != "" {
+		if kind != Once {
+			return nil, mcpReminder{}, errors.New("date is only for repeat=once; use start_date for a repeating reminder")
+		}
+		startDate = date
+	}
+	if kind == Once && startDate == "" {
+		return nil, mcpReminder{}, errors.New("repeat=once requires date as YYYY-MM-DD")
+	}
+	endKind, endDate, endCount, err := parseMCPEnd(input.Until, input.Count)
 	if err != nil {
 		return nil, mcpReminder{}, err
 	}
@@ -296,13 +371,20 @@ func (f *Feature) mcpCreate(ctx context.Context, _ *mcp.CallToolRequest, input m
 		enabled = *input.Enabled
 	}
 	reminder, err := f.service.Create(ctx, principal.ID, Input{
-		Message:       input.Message,
-		Timezone:      timezone,
-		Kind:          kind,
-		Days:          days,
-		TimeHHMM:      input.Time,
-		RepeatMinutes: repeatMinutes,
-		Enabled:       enabled,
+		Message:           input.Message,
+		Timezone:          timezone,
+		Kind:              kind,
+		Days:              days,
+		Interval:          input.Interval,
+		MonthWeekPosition: position,
+		MonthWeekday:      weekday,
+		StartDate:         startDate,
+		EndKind:           endKind,
+		EndDate:           endDate,
+		EndCount:          endCount,
+		TimeHHMM:          input.Time,
+		RepeatMinutes:     repeatMinutes,
+		Enabled:           enabled,
 	})
 	if err != nil {
 		return nil, mcpReminder{}, mcpServiceError(err)
@@ -322,45 +404,71 @@ func (f *Feature) mcpUpdate(ctx context.Context, _ *mcp.CallToolRequest, input m
 	if err != nil {
 		return nil, mcpReminder{}, mcpServiceError(err)
 	}
+	rule := inputFromReminder(current)
 
-	kind, days := current.Kind, current.Days
-	if len(input.Weekdays) > 0 || len(input.MonthDays) > 0 {
-		kind, days, err = parseSchedule(input.Weekdays, input.MonthDays, true)
+	// A shape change is recognised by any recurrence field. Without one the
+	// current schedule is kept, so an update of the text does not touch it.
+	if input.Repeat != "" || len(input.Weekdays) > 0 || len(input.MonthDays) > 0 || input.NthWeekday != nil {
+		repeat := input.Repeat
+		if repeat == "" {
+			// The old shape: weekdays or month_days alone imply the kind.
+			switch {
+			case input.NthWeekday != nil:
+				repeat = string(Monthly)
+			case len(input.MonthDays) > 0:
+				repeat = string(Monthly)
+			case len(input.Weekdays) > 0:
+				repeat = string(Weekly)
+			default:
+				repeat = string(current.Kind)
+			}
+		}
+		kind, days, position, weekday, err := parseMCPRecurrence(repeat, input.Weekdays, input.MonthDays, input.NthWeekday)
 		if err != nil {
 			return nil, mcpReminder{}, err
 		}
+		rule.Kind = kind
+		rule.Days = days
+		rule.MonthWeekPosition = position
+		rule.MonthWeekday = weekday
+	}
+	if input.Interval != nil {
+		rule.Interval = *input.Interval
+	}
+	if date := strings.TrimSpace(input.Date); date != "" {
+		if rule.Kind != Once {
+			return nil, mcpReminder{}, errors.New("date is only for repeat=once; use start_date for a repeating reminder")
+		}
+		rule.StartDate = date
+	}
+	if startDate := strings.TrimSpace(input.StartDate); startDate != "" {
+		rule.StartDate = startDate
+	}
+	if input.Until != "" || input.Count != nil {
+		endKind, endDate, endCount, err := parseMCPEnd(input.Until, valueOrZero(input.Count))
+		if err != nil {
+			return nil, mcpReminder{}, err
+		}
+		rule.EndKind, rule.EndDate, rule.EndCount = endKind, endDate, endCount
 	}
 
-	message := current.Message
 	if strings.TrimSpace(input.Message) != "" {
-		message = input.Message
+		rule.Message = input.Message
 	}
-	timeOfDay := current.TimeHHMM
 	if strings.TrimSpace(input.Time) != "" {
-		timeOfDay = input.Time
+		rule.TimeHHMM = input.Time
 	}
-	timezone := current.Timezone
 	if strings.TrimSpace(input.Timezone) != "" {
-		timezone = input.Timezone
+		rule.Timezone = input.Timezone
 	}
-	repeatMinutes := current.RepeatMinutes
 	if input.RepeatMinutes != nil {
-		repeatMinutes = *input.RepeatMinutes
+		rule.RepeatMinutes = *input.RepeatMinutes
 	}
-	enabled := current.Enabled
 	if input.Enabled != nil {
-		enabled = *input.Enabled
+		rule.Enabled = *input.Enabled
 	}
 
-	reminder, err := f.service.Update(ctx, principal.ID, input.ID, Input{
-		Message:       message,
-		Timezone:      timezone,
-		Kind:          kind,
-		Days:          days,
-		TimeHHMM:      timeOfDay,
-		RepeatMinutes: repeatMinutes,
-		Enabled:       enabled,
-	})
+	reminder, err := f.service.Update(ctx, principal.ID, input.ID, rule)
 	if err != nil {
 		return nil, mcpReminder{}, mcpServiceError(err)
 	}
@@ -417,32 +525,121 @@ func (f *Feature) defaultTimezone(ctx context.Context, principalID string) strin
 	return timezone
 }
 
-// parseSchedule turns the LLM-facing schedule fields into the service form.
-// requireOne makes an empty schedule an error; the update tool already checked
-// that at least one of the two lists is present.
-func parseSchedule(weekdays []string, monthDays []int, requireOne bool) (Kind, []int, error) {
-	switch {
-	case len(weekdays) > 0 && len(monthDays) > 0:
-		return "", nil, errors.New("give either weekdays or month_days, not both")
-	case len(weekdays) > 0:
+// parseMCPRecurrence turns the LLM-facing recurrence fields into the service
+// form. An empty repeat keeps the old shape: weekdays means weekly, month_days
+// means monthly, nth_weekday means a monthly nth weekday.
+func parseMCPRecurrence(repeat string, weekdays []string, monthDays []int, nth *mcpNthWeekday) (Kind, []int, int, int, error) {
+	kind := Kind(strings.ToLower(strings.TrimSpace(repeat)))
+	if kind == "" {
+		switch {
+		case nth != nil:
+			kind = Monthly
+		case len(monthDays) > 0 && len(weekdays) > 0:
+			return "", nil, 0, 0, errors.New("give either weekdays, month_days or nth_weekday, not several")
+		case len(monthDays) > 0:
+			kind = Monthly
+		case len(weekdays) > 0:
+			kind = Weekly
+		default:
+			return "", nil, 0, 0, errors.New("give a repeat kind or weekdays, month_days or nth_weekday")
+		}
+	}
+	switch kind {
+	case Once, Daily, Weekly, Monthly, Yearly:
+	default:
+		return "", nil, 0, 0, fmt.Errorf("repeat %q is not once, daily, weekly, monthly or yearly", repeat)
+	}
+
+	if kind != Weekly && len(weekdays) > 0 {
+		return "", nil, 0, 0, fmt.Errorf("weekdays are only for repeat=weekly, got %s", kind)
+	}
+	if kind != Monthly && (len(monthDays) > 0 || nth != nil) {
+		return "", nil, 0, 0, fmt.Errorf("month_days and nth_weekday are only for repeat=monthly, got %s", kind)
+	}
+
+	switch kind {
+	case Weekly:
 		days, err := parseWeekdays(weekdays)
 		if err != nil {
-			return "", nil, err
+			return "", nil, 0, 0, err
 		}
-		return Weekly, days, nil
-	case len(monthDays) > 0:
+		return kind, days, 0, 0, nil
+	case Monthly:
+		if nth != nil && len(monthDays) > 0 {
+			return "", nil, 0, 0, errors.New("give either month_days or nth_weekday, not both")
+		}
+		if nth != nil {
+			position := nth.Position
+			if position < -1 || position == 0 || position > 4 {
+				return "", nil, 0, 0, fmt.Errorf("nth_weekday.position must be 1..4 or -1, got %d", position)
+			}
+			days, err := parseWeekdays([]string{nth.Weekday})
+			if err != nil || len(days) != 1 {
+				return "", nil, 0, 0, fmt.Errorf("nth_weekday.weekday %q is not recognised", nth.Weekday)
+			}
+			return kind, nil, position, days[0], nil
+		}
 		days := append([]int(nil), monthDays...)
 		for _, day := range days {
 			if day < 1 || day > 31 {
-				return "", nil, fmt.Errorf("month_days must be between 1 and 31, got %d", day)
+				return "", nil, 0, 0, fmt.Errorf("month_days must be between 1 and 31, got %d", day)
 			}
 		}
-		return Monthly, days, nil
-	case requireOne:
-		return "", nil, nil
+		return kind, days, 0, 0, nil
 	default:
-		return "", nil, errors.New("give either weekdays (mon..sun or 1..7) or month_days (1..31)")
+		return kind, nil, 0, 0, nil
 	}
+}
+
+// parseMCPEnd maps until/count to the service end condition. Neither means "keep
+// the current end" for an update and "never" for a create.
+func parseMCPEnd(until string, count int) (EndKind, string, int, error) {
+	until = strings.TrimSpace(until)
+	if until != "" && count > 0 {
+		return "", "", 0, errors.New("give either until or count, not both")
+	}
+	switch {
+	case until != "":
+		return EndUntil, until, 0, nil
+	case count > 0:
+		return EndCount, "", count, nil
+	default:
+		return "", "", 0, nil
+	}
+}
+
+// inputFromReminder rebuilds the full service input of a stored reminder, which
+// is the base of a partial update.
+func inputFromReminder(reminder Reminder) Input {
+	input := Input{
+		Message:           reminder.Message,
+		Timezone:          reminder.Timezone,
+		Kind:              reminder.Kind,
+		Days:              append([]int(nil), reminder.Days...),
+		Interval:          reminder.Interval,
+		MonthWeekPosition: reminder.MonthWeekPosition,
+		MonthWeekday:      reminder.MonthWeekday,
+		EndKind:           reminder.End.Kind,
+		EndCount:          reminder.End.Count,
+		TimeHHMM:          reminder.TimeHHMM,
+		RepeatMinutes:     reminder.RepeatMinutes,
+		Enabled:           reminder.Enabled,
+	}
+	if !reminder.StartDate.IsZero() {
+		input.StartDate = reminder.StartDate.String()
+	}
+	if !reminder.End.Date.IsZero() {
+		input.EndDate = reminder.End.Date.String()
+	}
+	return input
+}
+
+// valueOrZero unwraps an optional count.
+func valueOrZero(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 // parseWeekdays accepts the short day names and ISO numbers.
@@ -485,26 +682,46 @@ func mcpServiceError(err error) error {
 // reminderToMCP maps a service reminder to the tool answer.
 func reminderToMCP(reminder Reminder) mcpReminder {
 	out := mcpReminder{
-		ID:            reminder.ID,
-		Message:       reminder.Message,
-		ScheduleKind:  string(reminder.Kind),
-		Time:          reminder.TimeHHMM,
-		Timezone:      reminder.Timezone,
-		RepeatMinutes: reminder.RepeatMinutes,
-		Enabled:       reminder.Enabled,
-		CreatedAt:     formatMCPTime(reminder.CreatedAt),
-		UpdatedAt:     formatMCPTime(reminder.UpdatedAt),
+		ID:               reminder.ID,
+		Message:          reminder.Message,
+		Repeat:           string(reminder.Kind),
+		ScheduleKind:     string(reminder.Kind),
+		Interval:         reminder.Interval,
+		StartDate:        reminder.StartDate.String(),
+		OccurrencesFired: reminder.OccurrencesFired,
+		Finished:         reminder.Finished(),
+		Time:             reminder.TimeHHMM,
+		Timezone:         reminder.Timezone,
+		RepeatMinutes:    reminder.RepeatMinutes,
+		Enabled:          reminder.Enabled,
+		CreatedAt:        formatMCPTime(reminder.CreatedAt),
+		UpdatedAt:        formatMCPTime(reminder.UpdatedAt),
 	}
-	if reminder.Kind == Weekly {
+	switch {
+	case reminder.Kind == Weekly:
 		out.Weekdays = weekdayList(reminder.Days)
-	} else {
+	case reminder.Kind == Monthly && reminder.MonthWeekPosition != 0:
+		out.NthWeekday = &mcpNthWeekday{
+			Position: reminder.MonthWeekPosition,
+			Weekday:  weekdayList([]int{reminder.MonthWeekday})[0],
+		}
+	case reminder.Kind == Monthly:
 		out.MonthDays = append([]int(nil), reminder.Days...)
+	}
+	if reminder.End.Kind == EndUntil {
+		out.Until = reminder.End.Date.String()
+	}
+	if reminder.End.Kind == EndCount {
+		out.Count = reminder.End.Count
 	}
 	if reminder.NextDueAt != nil {
 		out.NextDueAt = formatMCPTime(*reminder.NextDueAt)
 	}
 	if reminder.LastError != nil {
 		out.LastError = *reminder.LastError
+	}
+	if reminder.FinishedAt != nil {
+		out.FinishedAt = formatMCPTime(*reminder.FinishedAt)
 	}
 	if reminder.ActiveOccurrence != nil {
 		occurrence := occurrenceToMCP(*reminder.ActiveOccurrence)

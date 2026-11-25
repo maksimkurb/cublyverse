@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { formatSchedule, formatDateTime, reminderScheduleLine, reminderStatusLine } from "./format";
+import {
+  describeSchedule,
+  formatSchedule,
+  formatDateTime,
+  reminderScheduleLine,
+  reminderStatusLine,
+  scheduleChipLabel,
+} from "./format";
 import { makeReminder } from "../../test/fixtures";
 
 describe("formatSchedule", () => {
@@ -21,6 +28,74 @@ describe("formatSchedule", () => {
   });
 });
 
+describe("describeSchedule", () => {
+  it("describes a weekly rule", () => {
+    expect(describeSchedule(makeReminder())).toBe("каждую неделю по пн, ср, пт в 09:30");
+  });
+
+  it("describes a weekly rule every N weeks", () => {
+    expect(describeSchedule(makeReminder({ interval: 2 }))).toBe("каждые 2 недели по пн, ср, пт в 09:30");
+  });
+
+  it("describes a monthly day-of-month rule", () => {
+    expect(
+      describeSchedule(makeReminder({ schedule_kind: "monthly", schedule_days: [15] })),
+    ).toBe("каждое 15-е число месяца в 09:30");
+  });
+
+  it("describes an nth-weekday rule", () => {
+    expect(
+      describeSchedule(
+        makeReminder({
+          schedule_kind: "monthly",
+          schedule_days: [],
+          month_week_position: 2,
+          month_weekday: 2,
+        }),
+      ),
+    ).toBe("каждый второй вторник месяца в 09:30");
+  });
+
+  it("describes the last weekday of the month", () => {
+    expect(
+      describeSchedule(
+        makeReminder({
+          schedule_kind: "monthly",
+          schedule_days: [],
+          month_week_position: -1,
+          month_weekday: 5,
+        }),
+      ),
+    ).toBe("каждую последнюю пятницу месяца в 09:30");
+  });
+
+  it("describes a one-time rule and a yearly rule", () => {
+    expect(
+      describeSchedule(makeReminder({ schedule_kind: "once", schedule_days: [], start_date: "2027-03-20" })),
+    ).toBe("20.03.2027 в 09:30 (один раз)");
+    expect(
+      describeSchedule(makeReminder({ schedule_kind: "yearly", schedule_days: [], start_date: "2026-03-20" })),
+    ).toBe("каждый год 20 марта в 09:30");
+  });
+
+  it("adds the end condition", () => {
+    expect(
+      describeSchedule(makeReminder({ end_kind: "until", end_date: "2026-12-31" })),
+    ).toBe("каждую неделю по пн, ср, пт в 09:30 до 31.12.2026");
+    expect(
+      describeSchedule(makeReminder({ end_kind: "count", end_count: 3 })),
+    ).toBe("каждую неделю по пн, ср, пт в 09:30 (всего 3 раза)");
+  });
+});
+
+describe("scheduleChipLabel", () => {
+  it("labels the kinds without a day grid", () => {
+    expect(scheduleChipLabel(makeReminder({ schedule_kind: "once", schedule_days: [] }))).toBe("Один раз");
+    expect(scheduleChipLabel(makeReminder({ schedule_kind: "daily", schedule_days: [] }))).toBe("Каждый день");
+    expect(scheduleChipLabel(makeReminder({ schedule_kind: "yearly", schedule_days: [] }))).toBe("Каждый год");
+  });
+});
+
 describe("formatDateTime", () => {
   it("renders dd.mm hh:mm in the reminder time zone", () => {
     expect(formatDateTime("2026-01-12T06:30:00Z", "Europe/Moscow")).toBe("12.01 09:30");
@@ -33,7 +108,7 @@ describe("formatDateTime", () => {
 
 describe("reminder lines", () => {
   it("builds the schedule line with the repeat interval", () => {
-    expect(reminderScheduleLine(makeReminder())).toBe("Пн, Ср, Пт · повтор каждые 10 мин");
+    expect(reminderScheduleLine(makeReminder())).toBe("каждую неделю по пн, ср, пт в 09:30 · повтор каждые 10 мин");
   });
 
   it("shows the next firing", () => {
@@ -54,6 +129,19 @@ describe("reminder lines", () => {
       },
     });
     expect(reminderStatusLine(reminder)).toBe("Ждёт подтверждения · следующий повтор 12.01 09:40");
+  });
+
+  it("says the reminder is finished", () => {
+    expect(
+      reminderStatusLine(
+        makeReminder({
+          enabled: false,
+          next_due_at: null,
+          finished: true,
+          finished_at: "2026-01-12T06:30:00Z",
+        }),
+      ),
+    ).toBe("Завершено");
   });
 
   it("says the reminder is off when nothing is scheduled", () => {

@@ -181,6 +181,8 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		Auth:        authService,
 		AuthPages:   authService.Handler(),
 		Reminders:   reminderService,
+		Workspaces:  workspaces,
+		Craft:       craftService,
 		MCP:         mcpServer.Handler(),
 	})
 

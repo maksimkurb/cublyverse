@@ -1146,6 +1146,192 @@ ul {
   user-select: all;
 }
 
+/* ---------- Workspaces and craft ---------- */
+
+.ws-switcher {
+  max-width: 380px;
+}
+
+.ws-current {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.ws-current__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ws-current__name {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.ws-current__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.person__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.person__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.person__badge {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.person__meta {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.avatar {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: var(--border);
+  border-radius: 50%;
+  background: var(--track);
+  object-fit: cover;
+}
+
+.craft-filters {
+  display: grid;
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .craft-filters {
+    grid-template-columns: repeat(3, 1fr);
+    align-items: end;
+  }
+}
+
+.craft-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.craft-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+}
+
+.craft-swatch {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: var(--border);
+  border-radius: 8px;
+  background: var(--track);
+}
+
+.craft-swatch--large {
+  width: 44px;
+  height: 44px;
+}
+
+.craft-row__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+}
+
+.craft-row__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.craft-row__badge {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.craft-row__meta,
+.craft-row__notes {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.craft-row__notes {
+  font-style: italic;
+}
+
+.craft-row__side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.craft-qty {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.craft-stepper {
+  display: flex;
+  gap: 4px;
+}
+
+.craft-stepper .cv-iconbtn {
+  width: 44px;
+  height: 44px;
+}
+
+.craft-color {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.craft-color .cv-field {
+  flex: 1;
+}
+
 /* ---------- Profile ---------- */
 
 .facts {

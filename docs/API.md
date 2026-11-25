@@ -52,6 +52,8 @@ api/openapi.yaml ──┬─ oapi-codegen ───────→ internal/htt
 | `reminders` | `GET/POST /reminders`, `GET/PUT/DELETE /reminders/{id}`, `POST /reminders/{id}/complete` | правила напоминаний и подтверждение активного срабатывания. |
 | `tokens` | `GET/POST /tokens`, `DELETE /tokens/{id}` | персональные токены для MCP и скриптов; только сессия. |
 | `connections` | `GET /connections`, `DELETE /connections/{id}` | приложения, подключённые через OAuth (MCP-клиенты); только сессия. Протокольные адреса `/oauth/*` и `/.well-known/*` в OpenAPI не входят: они описаны в `docs/MCP.md`. |
+| `workspaces` | `GET/POST /workspaces`, `PATCH/DELETE /workspaces/{id}`, `GET/POST /workspaces/{id}/members`, `DELETE /workspaces/{id}/members/{user_id}`, `GET /workspaces/{id}/member-candidates` | общие пространства и их участники; только сессия. |
+| `craft` | `GET /craft/categories`, `GET /craft/manufacturers`, `GET/POST /workspaces/{id}/catalog`, `GET/PUT/DELETE /workspaces/{id}/catalog/{item_id}`, `POST /workspaces/{id}/catalog/{item_id}/link`, `GET /workspaces/{id}/inventory`, `PUT/PATCH/DELETE /workspaces/{id}/inventory/{item_id}`, `POST /workspaces/{id}/inventory/{item_id}/adjust` | каталог материалов и запасы пространства; только сессия. |
 
 Все операции, кроме `GET /health` и `POST /auth/telegram`, требуют
 `bearerAuth` или `cookieAuth`; `POST /auth/logout` тоже работает без сессии,
@@ -143,6 +145,11 @@ Authorization: Bearer cv_pat_…
 | `profile:read` | `GET /me` (выдаётся неявно при любом другом scope) |
 | `reminders:read` | `GET /reminders`, `GET /reminders/{id}` |
 | `reminders:write` | `POST/PUT/DELETE /reminders`, `POST /reminders/{id}/complete` |
+
+Операции тегов `workspaces` и `craft` доступны только интерактивной сессии:
+`patPermission` не маппит их на области токена, поэтому токен получает `403`.
+MCP-доступ к «Бусинкам» идёт через отдельный endpoint `/mcp/w/{id}` с
+областями `craft:read`/`craft:write` (`docs/MCP.md`).
 
 Правила:
 
@@ -325,6 +332,66 @@ POST /auth/confirm (form: state, token)
   изменяющих запросов, включая `DELETE` и `complete` без тела, иначе `403
   forbidden`.
 
+
+## Пространства
+
+Пространство (workspace) — именованное место, все участники которого имеют
+одинаковые права на его данные. Пользователь может состоять в нескольких
+пространствах. Приглашений по ссылке нет: участника добавляют, выбирая
+пользователя, который хотя бы раз входил в Cublyverse.
+
+| Метод и путь | Назначение |
+|---|---|
+| `GET /workspaces` | пространства пользователя, по имени |
+| `POST /workspaces` | создать (`201`); создатель становится первым участником |
+| `PATCH /workspaces/{id}` | переименовать (`name`, 1..80 символов) |
+| `DELETE /workspaces/{id}` | удалить пространство со всеми данными (`204`) |
+| `GET /workspaces/{id}/members` | участники с `avatar_url` (Gravatar) |
+| `POST /workspaces/{id}/members` | добавить участника (`user_id`); повторное добавление — успех |
+| `DELETE /workspaces/{id}/members/{user_id}` | убрать участника; себя — «выйти» |
+| `GET /workspaces/{id}/member-candidates?query=` | кто ещё может войти; фильтр по имени или e-mail |
+
+Правила:
+
+- чужое пространство неотличимо от несуществующего: `404 not_found`;
+- последнего участника удалить нельзя — `409 conflict`, удаляйте пространство;
+- у участников и кандидатов есть `avatar_url` — Gravatar от e-mail с
+  identicon-фолбэком;
+- добавление уже состоящего участника идемпотентно.
+
+## Каталог и запасы
+
+Операции тега `craft`. Справочники (`GET /craft/categories`,
+`GET /craft/manufacturers`) общие для всех пространств. Позиция каталога либо
+общая (её пишут скраперы, менять нельзя), либо частная для пространства.
+
+| Метод и путь | Назначение |
+|---|---|
+| `GET /craft/categories` | категории: `slug`, имя, единица по умолчанию |
+| `GET /craft/manufacturers` | известные производители |
+| `GET /workspaces/{id}/catalog?category=&manufacturer=&q=&only_in_stock=&limit=&offset=` | поиск по общему каталогу и частным позициям; в ответе остаток пространства |
+| `POST /workspaces/{id}/catalog` | создать частную позицию (`201`) |
+| `GET/PUT/DELETE /workspaces/{id}/catalog/{item_id}` | одна позиция; менять и удалять можно только частную |
+| `POST /workspaces/{id}/catalog/{item_id}/link` | связать частную позицию с каталожной: остаток переезжает, частная запись удаляется |
+| `GET /workspaces/{id}/inventory?category=&manufacturer=&q=&max_qty=&limit=&offset=` | запасы пространства |
+| `PUT /workspaces/{id}/inventory/{item_id}` | поставить точное количество (пересчёт) |
+| `POST /workspaces/{id}/inventory/{item_id}/adjust` | изменить на `delta`: плюс — добавить, минус — списать |
+| `PATCH /workspaces/{id}/inventory/{item_id}` | заменить `location` и `notes` строки запаса |
+| `DELETE /workspaces/{id}/inventory/{item_id}` | убрать со склада; позиция каталога остаётся |
+
+Ответы об ошибках:
+
+| Ошибка сервиса | HTTP |
+|---|---|
+| `workspace.ErrNotFound`, `craft.ErrNotFound` | `404 not_found` |
+| `workspace.ValidationError`, `craft.ValidationError` | `400 bad_request`, текст на русском в `message` |
+| `craft.ErrReadOnly` | `403 forbidden` |
+| `craft.ErrInsufficientStock` | `409 conflict` |
+
+Списание больше остатка — `409 conflict`; строка запаса создаётся при первом
+изменении, поэтому «добавить на склад» — это `adjust` с положительной дельтой.
+Единицы частной и целевой позиции при связывании должны совпадать, иначе
+`400 bad_request`.
 
 ## TypeScript-клиент
 

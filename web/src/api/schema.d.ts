@@ -360,6 +360,423 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the workspaces of the user
+         * @description Returns every workspace the signed-in user is a member of, ordered by
+         *     name. A user who has not created or joined one gets an empty list.
+         */
+        get: operations["listWorkspaces"];
+        put?: never;
+        /**
+         * Create a workspace
+         * @description Creates a workspace and makes the signed-in user its first member. A
+         *     user may belong to any number of workspaces.
+         */
+        post: operations["createWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a workspace
+         * @description Deletes the workspace together with its catalogue items, stock and
+         *     projects. Any member may do it. A request authenticated with the browser
+         *     cookie must declare `Content-Type: application/json` even though there is
+         *     no body.
+         */
+        delete: operations["deleteWorkspace"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a workspace
+         * @description Changes the name every member sees. Any member may rename a workspace:
+         *     membership is full access.
+         */
+        patch: operations["renameWorkspace"];
+        trace?: never;
+    };
+    "/workspaces/{id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the members of a workspace
+         * @description Returns everyone who belongs to the workspace, oldest member first.
+         *     Each member carries the Gravatar URL of their e-mail, so the WebApp can
+         *     show an avatar without a separate request.
+         */
+        get: operations["listWorkspaceMembers"];
+        put?: never;
+        /**
+         * Add a member to a workspace
+         * @description Adds an existing user to the workspace. The caller must be a member. The
+         *     operation is idempotent: adding someone who is already a member succeeds
+         *     without changing anything.
+         */
+        post: operations["addWorkspaceMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Id of the user to remove from the workspace. A malformed id is reported
+                 *     as `404`, exactly like a user who is not a member.
+                 */
+                user_id: components["parameters"]["WorkspaceUserID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a member from a workspace
+         * @description Removes a member; a user may remove themselves (leave). The last member
+         *     cannot be removed, because a workspace without members could never be
+         *     managed again: delete the workspace instead. A request authenticated with
+         *     the browser cookie must declare `Content-Type: application/json` even
+         *     though there is no body.
+         */
+        delete: operations["removeWorkspaceMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/member-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List users who can be added to a workspace
+         * @description Returns users who have signed in at least once and are not members of the
+         *     workspace yet. `query` filters by display name or e-mail. The list is
+         *     capped at 50 rows; a shorter search narrows it.
+         */
+        get: operations["listWorkspaceMemberCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/craft/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List material categories
+         * @description Returns the reference categories of the craft catalogue with their slug,
+         *     Russian name and default unit. They are the same for every workspace.
+         */
+        get: operations["listCraftCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/craft/manufacturers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List manufacturers
+         * @description Returns the known manufacturers of craft materials. A workspace may also
+         *     create a manufacturer implicitly by naming it in a private item.
+         */
+        get: operations["listCraftManufacturers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Search the catalogue
+         * @description Searches the shared catalogue and the private items of the workspace.
+         *     Filters combine with AND; an empty filter means "any". `q` matches an
+         *     article prefix or a part of the item or colour name. Every result carries
+         *     the quantity this workspace holds.
+         */
+        get: operations["searchCraftCatalog"];
+        put?: never;
+        /**
+         * Create a private catalogue item
+         * @description Adds a catalogue item visible only in this workspace, for material that is
+         *     in no manufacturer catalogue. The unit defaults to the category default
+         *     unit, and the name defaults to manufacturer plus article. An unknown
+         *     manufacturer name is created.
+         */
+        post: operations["createCraftItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/catalog/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get a catalogue item
+         * @description Returns one item visible to the workspace: a global catalogue item or a
+         *     private one. An item of another workspace looks unknown.
+         */
+        get: operations["getCraftItem"];
+        /**
+         * Replace a private catalogue item
+         * @description Replaces every field of a private item; omitted fields are not kept.
+         *     Global catalogue items are read-only and answer `403`.
+         */
+        put: operations["updateCraftItem"];
+        post?: never;
+        /**
+         * Delete a private catalogue item
+         * @description Deletes a private item together with its stock. Global catalogue items
+         *     answer `403`. A request authenticated with the browser cookie must declare
+         *     `Content-Type: application/json` even though there is no body.
+         */
+        delete: operations["deleteCraftItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/catalog/{item_id}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link a private item to a catalogue item
+         * @description Moves the stock of a private item to another catalogue item, usually the
+         *     official one found later, and deletes the private item. Quantities are
+         *     summed when the target is already in stock. Units must match.
+         */
+        post: operations["linkCraftItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the stock of a workspace
+         * @description Returns the stock rows of the workspace with their catalogue item,
+         *     quantity, location and notes. Filters combine with AND. `max_qty` keeps
+         *     rows at or below a threshold, which is how the WebApp finds low stock.
+         */
+        get: operations["listCraftInventory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{id}/inventory/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the stock of an item
+         * @description Sets the quantity of an item to an absolute value, as a stocktake does.
+         *     The stock row is created when it does not exist yet. The change is logged
+         *     with the optional reason.
+         */
+        put: operations["setCraftInventoryQty"];
+        post?: never;
+        /**
+         * Remove an item from stock
+         * @description Deletes the stock row of an item; the catalogue item itself stays. A
+         *     request authenticated with the browser cookie must declare
+         *     `Content-Type: application/json` even though there is no body.
+         */
+        delete: operations["removeCraftInventory"];
+        options?: never;
+        head?: never;
+        /**
+         * Change where an item is stored
+         * @description Replaces the location and notes of a stock row. Both fields are sent in
+         *     full; an omitted field is stored as empty.
+         */
+        patch: operations["updateCraftInventoryMeta"];
+        trace?: never;
+    };
+    "/workspaces/{id}/inventory/{item_id}/adjust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add to or use up stock
+         * @description Changes the stock of an item by `delta`: positive adds material, negative
+         *     uses it up. The stock row is created on first use. A withdrawal larger
+         *     than the stock is a conflict. The change is logged with the optional
+         *     reason.
+         */
+        post: operations["adjustCraftInventoryQty"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -914,6 +1331,439 @@ export interface components {
              */
             enabled: boolean;
         };
+        /**
+         * @description A shared workspace. Every member has the same rights; data of a
+         *     workspace is visible to its members only.
+         */
+        Workspace: {
+            /**
+             * @description Workspace id (UUID), used in every workspace-scoped path.
+             * @example 44444444-4444-4444-8444-444444444444
+             */
+            id: string;
+            /**
+             * @description Name every member sees.
+             * @example Дом
+             */
+            name: string;
+            /**
+             * Format: date-time
+             * @description When the workspace was created.
+             * @example 2026-01-15T09:30:00Z
+             */
+            created_at: string;
+        };
+        /**
+         * @description A member of a workspace together with the information the member list
+         *     shows.
+         */
+        WorkspaceMember: {
+            /**
+             * @description Principal id of the member, the same value as `Me.id`.
+             * @example 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+             */
+            user_id: string;
+            /**
+             * @description Display name from the SSO provider; empty when unknown.
+             * @example Иван Петров
+             */
+            display_name: string;
+            /**
+             * @description E-mail from the SSO provider; empty when unknown.
+             * @example user@example.com
+             */
+            email: string;
+            /**
+             * @description Gravatar image of the e-mail; addresses without a Gravatar fall back
+             *     to a generated identicon.
+             * @example https://www.gravatar.com/avatar/abc?s=96&d=identicon
+             */
+            avatar_url: string;
+            /**
+             * Format: date-time
+             * @description When the user joined the workspace.
+             * @example 2026-01-15T09:30:00Z
+             */
+            joined_at: string;
+        };
+        /**
+         * @description A user who has signed in at least once and is not a member of the
+         *     workspace yet.
+         */
+        WorkspaceCandidate: {
+            /**
+             * @description Principal id of the user to add.
+             * @example 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+             */
+            user_id: string;
+            /**
+             * @description Display name from the SSO provider; empty when unknown.
+             * @example Иван Петров
+             */
+            display_name: string;
+            /**
+             * @description E-mail from the SSO provider; empty when unknown.
+             * @example user@example.com
+             */
+            email: string;
+            /**
+             * @description Gravatar image of the e-mail, with an identicon fallback.
+             * @example https://www.gravatar.com/avatar/abc?s=96&d=identicon
+             */
+            avatar_url: string;
+        };
+        /** @description Name of a new workspace. */
+        CreateWorkspaceRequest: {
+            /**
+             * @description Name of the workspace, 1..80 characters. Leading and trailing
+             *     whitespace is trimmed.
+             * @example Дом
+             */
+            name: string;
+        };
+        /** @description New name of a workspace. */
+        RenameWorkspaceRequest: {
+            /**
+             * @description New name, 1..80 characters. Leading and trailing whitespace is
+             *     trimmed.
+             * @example Мастерская
+             */
+            name: string;
+        };
+        /** @description User to add to a workspace. */
+        AddWorkspaceMemberRequest: {
+            /**
+             * @description Principal id of a user who has signed in at least once. Adding a
+             *     current member again succeeds without a change.
+             * @example 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
+             */
+            user_id: string;
+        };
+        /** @description A kind of craft material. */
+        CraftCategory: {
+            /**
+             * @description Category id (UUID).
+             * @example 8a3b1c2d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+             */
+            id: string;
+            /**
+             * @description Stable slug used in filters and item data.
+             * @example pearls
+             */
+            slug: string;
+            /**
+             * @description Russian name shown to the user.
+             * @example Жемчуг
+             */
+            name: string;
+            /**
+             * @description Unit an item of this category is counted in when it does not name
+             *     one.
+             * @example шт
+             */
+            default_unit: string;
+        };
+        /** @description A producer of craft material. */
+        CraftManufacturer: {
+            /**
+             * @description Manufacturer id (UUID).
+             * @example 9b4c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e
+             */
+            id: string;
+            /**
+             * @description Manufacturer name.
+             * @example PRECIOSA
+             */
+            name: string;
+            /**
+             * @description Manufacturer website; empty when unknown.
+             * @example https://www.preciosa.com
+             */
+            website: string;
+        };
+        /**
+         * @description A catalogue entry: either a global item shared by every workspace or a
+         *     private item of one workspace. `stock_qty` and `in_inventory` describe
+         *     what the requested workspace holds.
+         */
+        CraftItem: {
+            /**
+             * @description Catalogue item id (UUID).
+             * @example 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+             */
+            id: string;
+            /**
+             * @description Workspace that owns a private item, or `null` for a global catalogue
+             *     item.
+             * @example 44444444-4444-4444-8444-444444444444
+             */
+            workspace_id: string | null;
+            /**
+             * @description True when the item belongs to this workspace and can be edited or
+             *     deleted; false for a read-only global item.
+             * @example true
+             */
+            private: boolean;
+            /**
+             * @description Category slug.
+             * @example pearls
+             */
+            category: string;
+            /**
+             * @description Russian category name.
+             * @example Жемчуг
+             */
+            category_name: string;
+            /**
+             * @description Manufacturer name; empty when none.
+             * @example PRECIOSA
+             */
+            manufacturer: string;
+            /**
+             * @description Manufacturer article number; empty when none.
+             * @example 111 39 001
+             */
+            article: string;
+            /**
+             * @description Series or variety; empty when none.
+             * @example Rondelle
+             */
+            series: string;
+            /**
+             * @description Item name.
+             * @example Жемчуг Майорка айвори 2 мм
+             */
+            name: string;
+            /**
+             * @description Colour name; empty when unknown.
+             * @example айвори
+             */
+            color_name: string;
+            /**
+             * @description Colour as `#RRGGBB`; empty when unknown.
+             * @example #F2E8D5
+             */
+            color_hex: string;
+            /**
+             * @description How trustworthy `color_hex` is: `official` (published by the
+             *     manufacturer), `approx` (estimated) or empty.
+             * @example approx
+             */
+            color_source: string;
+            /**
+             * @description Size as free text; empty when unknown.
+             * @example 2 мм
+             */
+            size: string;
+            /**
+             * @description Finish or coating as free text; empty when unknown.
+             * @example матовый
+             */
+            finish: string;
+            /**
+             * @description Unit the quantity is counted in.
+             * @example шт
+             */
+            unit: string;
+            /**
+             * Format: double
+             * @description How many base units one pack holds, or `null` when unknown or not
+             *     applicable.
+             * @example 100
+             */
+            pack_size: number | null;
+            /**
+             * @description Category specific attributes; an empty object when there are none.
+             * @example {}
+             */
+            attrs: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description Where the row came from: `manual`, a scraper name or an import.
+             * @example manual
+             */
+            source: string;
+            /**
+             * @description Page the data came from; empty for manual items.
+             * @example
+             */
+            source_url: string;
+            /**
+             * @description Product image URL; empty when there is none.
+             * @example
+             */
+            image_url: string;
+            /**
+             * Format: double
+             * @description Quantity the workspace holds, in `unit`.
+             * @example 12
+             */
+            stock_qty: number;
+            /**
+             * @description Whether the workspace has a stock row for the item.
+             * @example true
+             */
+            in_inventory: boolean;
+        };
+        /**
+         * @description Data of a private catalogue item. `PUT` replaces every field, so an
+         *     omitted field is not kept from the previous version.
+         */
+        CraftItemInput: {
+            /**
+             * @description Category slug, see `/craft/categories`.
+             * @example pearls
+             */
+            category: string;
+            /**
+             * @description Manufacturer name; an unknown name is created.
+             * @example PRECIOSA
+             */
+            manufacturer?: string;
+            /**
+             * @description Manufacturer article number.
+             * @example 111 39 001
+             */
+            article?: string;
+            /**
+             * @description Series or variety.
+             * @example Rondelle
+             */
+            series?: string;
+            /**
+             * @description Item name, up to 200 characters. Defaults to the manufacturer and
+             *     the article when omitted.
+             * @example Жемчуг Майорка айвори 2 мм
+             */
+            name?: string;
+            /**
+             * @description Colour name.
+             * @example айвори
+             */
+            color_name?: string;
+            /**
+             * @description Colour as `#RRGGBB`.
+             * @example #F2E8D5
+             */
+            color_hex?: string;
+            /**
+             * @description How trustworthy the colour is. Defaults to `approx` when
+             *     `color_hex` is set and this field is omitted.
+             * @example approx
+             * @enum {string}
+             */
+            color_source?: "official" | "approx";
+            /**
+             * @description Size as free text.
+             * @example 2 мм
+             */
+            size?: string;
+            /**
+             * @description Finish or coating as free text.
+             * @example матовый
+             */
+            finish?: string;
+            /**
+             * @description Unit the quantity is counted in. Defaults to the default unit of
+             *     the category.
+             * @example шт
+             */
+            unit?: string;
+            /**
+             * Format: double
+             * @description How many base units one pack holds; must be positive.
+             * @example 100
+             */
+            pack_size?: number | null;
+            /**
+             * @description Category specific attributes.
+             * @example {}
+             */
+            attrs?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description One stock row of a workspace with its catalogue item. */
+        CraftStockEntry: {
+            item: components["schemas"]["CraftItem"];
+            /**
+             * Format: double
+             * @description Quantity held, in the unit of the item.
+             * @example 12
+             */
+            qty: number;
+            /**
+             * @description Where the material is stored; empty when unspecified.
+             * @example Ящик 2
+             */
+            location: string;
+            /**
+             * @description Free-form notes about this stock; empty when none.
+             * @example Куплено на ярмарке
+             */
+            notes: string;
+            /**
+             * Format: date-time
+             * @description When the stock row last changed.
+             * @example 2026-01-16T08:00:00Z
+             */
+            updated_at: string;
+        };
+        /** @description Absolute quantity of a stocktake. */
+        SetCraftStockRequest: {
+            /**
+             * Format: double
+             * @description New absolute quantity, zero or more.
+             * @example 12
+             */
+            qty: number;
+            /**
+             * @description Why the quantity changed; stored in the stock log.
+             * @example Пересчёт
+             */
+            reason?: string;
+        };
+        /** @description Relative change of the stock. */
+        AdjustCraftStockRequest: {
+            /**
+             * Format: double
+             * @description Change of the quantity in the unit of the item: positive adds,
+             *     negative uses up. Zero is rejected.
+             * @example -1
+             */
+            delta: number;
+            /**
+             * @description Why the quantity changed; stored in the stock log.
+             * @example Проект «Серьги»
+             */
+            reason?: string;
+        };
+        /**
+         * @description Where a stock row is stored. Both fields are sent in full; a missing
+         *     field is stored as empty.
+         */
+        UpdateCraftStockMetaRequest: {
+            /**
+             * @description Where the material is stored.
+             * @example Ящик 2
+             */
+            location: string;
+            /**
+             * @description Free-form notes about this stock.
+             * @example Куплено на ярмарке
+             */
+            notes: string;
+        };
+        /** @description Target of a link operation. */
+        LinkCraftItemRequest: {
+            /**
+             * @description Catalogue item that receives the stock of the private item. Its unit
+             *     must match the unit of the private item.
+             * @example 7d2e5c1a-8b3f-4c6d-9e0a-1b2c3d4e5f60
+             */
+            target_item_id: string;
+        };
     };
     responses: {
         /** @description Error response. */
@@ -973,6 +1823,21 @@ export interface components {
          *     exactly like a token that does not exist or belongs to another user.
          */
         TokenID: string;
+        /**
+         * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+         *     workspace that does not exist or that the caller does not belong to.
+         */
+        WorkspaceID: string;
+        /**
+         * @description Id of the user to remove from the workspace. A malformed id is reported
+         *     as `404`, exactly like a user who is not a member.
+         */
+        WorkspaceUserID: string;
+        /**
+         * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+         *     like an item that does not exist or is not visible to the workspace.
+         */
+        CraftItemID: string;
     };
     requestBodies: never;
     headers: never;
@@ -1465,6 +2330,857 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listWorkspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspaces of the user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workspace"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description The workspace was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workspace"];
+                };
+            };
+            /** @description The name is empty or longer than 80 characters. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The workspace is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    renameWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description The renamed workspace. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workspace"];
+                };
+            };
+            /** @description The name is empty or longer than 80 characters. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listWorkspaceMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Members of the workspace. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceMember"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    addWorkspaceMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddWorkspaceMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description The user is a member of the workspace. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request body is missing or has no `user_id`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description The workspace does not exist or the user is not a member of it, or
+             *     the user to add does not exist.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    removeWorkspaceMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Id of the user to remove from the workspace. A malformed id is reported
+                 *     as `404`, exactly like a user who is not a member.
+                 */
+                user_id: components["parameters"]["WorkspaceUserID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The user is no longer a member. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description The workspace or the member does not exist, or the caller is not a
+             *     member of the workspace.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The workspace has only one member left; delete it instead. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listWorkspaceMemberCandidates: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring of the display name or e-mail. */
+                query?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Users who can be added. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceCandidate"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listCraftCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Material categories. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftCategory"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listCraftManufacturers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Known manufacturers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftManufacturer"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    searchCraftCatalog: {
+        parameters: {
+            query?: {
+                /** @description Category slug, for example `pearls`. */
+                category?: string;
+                /** @description Manufacturer name, case-insensitive exact match. */
+                manufacturer?: string;
+                /** @description Article prefix, or part of the item or colour name. */
+                q?: string;
+                /** @description Keep only items the workspace holds. */
+                only_in_stock?: boolean;
+                /** @description Page size, 1..200; the default is 50. */
+                limit?: number;
+                /** @description Number of matching items to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching catalogue items. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftItem"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createCraftItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CraftItemInput"];
+            };
+        };
+        responses: {
+            /** @description The item was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftItem"];
+                };
+            };
+            /**
+             * @description A field is invalid: unknown category or unit, empty name, bad colour
+             *     or a duplicate article of the same manufacturer.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getCraftItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The catalogue item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftItem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateCraftItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CraftItemInput"];
+            };
+        };
+        responses: {
+            /** @description The updated item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftItem"];
+                };
+            };
+            /** @description A field is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The item belongs to the shared catalogue and is read-only. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteCraftItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The item belongs to the shared catalogue and is read-only. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    linkCraftItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkCraftItemRequest"];
+            };
+        };
+        responses: {
+            /** @description The stock row of the target item after the merge. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftStockEntry"];
+                };
+            };
+            /** @description The units differ or the item is linked to itself. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The source item belongs to the shared catalogue. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The private item or the target item is unknown. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCraftInventory: {
+        parameters: {
+            query?: {
+                /** @description Category slug, for example `floss`. */
+                category?: string;
+                /** @description Manufacturer name, case-insensitive exact match. */
+                manufacturer?: string;
+                /** @description Article prefix, or part of the item or colour name. */
+                q?: string;
+                /** @description Keep rows whose quantity is at most this value. */
+                max_qty?: number;
+                /** @description Page size, 1..200; the default is 50. */
+                limit?: number;
+                /** @description Number of matching rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stock rows of the workspace. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftStockEntry"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setCraftInventoryQty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetCraftStockRequest"];
+            };
+        };
+        responses: {
+            /** @description The stock row after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftStockEntry"];
+                };
+            };
+            /** @description The quantity is negative or not a finite number. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeCraftInventory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item is no longer in stock. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The item has no stock row in this workspace. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateCraftInventoryMeta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCraftStockMetaRequest"];
+            };
+        };
+        responses: {
+            /** @description The stock row is updated. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request body is missing. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The item has no stock row in this workspace. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adjustCraftInventoryQty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Workspace id (UUID). A malformed id is reported as `404`, exactly like a
+                 *     workspace that does not exist or that the caller does not belong to.
+                 */
+                id: components["parameters"]["WorkspaceID"];
+                /**
+                 * @description Catalogue item id (UUID). A malformed id is reported as `404`, exactly
+                 *     like an item that does not exist or is not visible to the workspace.
+                 */
+                item_id: components["parameters"]["CraftItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustCraftStockRequest"];
+            };
+        };
+        responses: {
+            /** @description The stock row after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CraftStockEntry"];
+                };
+            };
+            /** @description The delta is zero or not a finite number. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The withdrawal exceeds the quantity in stock. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

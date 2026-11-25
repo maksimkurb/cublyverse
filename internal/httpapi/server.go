@@ -12,9 +12,11 @@ import (
 	"net/http"
 
 	"github.com/maksimkurb/cublyverse/internal/auth"
+	"github.com/maksimkurb/cublyverse/internal/features/craft"
 	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/httpapi/gen"
 	"github.com/maksimkurb/cublyverse/internal/oauthserver"
+	"github.com/maksimkurb/cublyverse/internal/workspace"
 )
 
 const (
@@ -70,6 +72,58 @@ type ConnectionService interface {
 	RevokeGrant(ctx context.Context, userID, grantID string) (bool, error)
 }
 
+// WorkspaceService is the workspace business logic. The real implementation is
+// *workspace.Service.
+type WorkspaceService interface {
+	// Create makes a workspace owned by the user.
+	Create(ctx context.Context, userID, name string) (workspace.Workspace, error)
+	// List returns the workspaces of the user.
+	List(ctx context.Context, userID string) ([]workspace.Workspace, error)
+	// Rename changes the name of a workspace.
+	Rename(ctx context.Context, userID, workspaceID, name string) (workspace.Workspace, error)
+	// Delete removes a workspace with everything in it.
+	Delete(ctx context.Context, userID, workspaceID string) error
+	// Members lists the members of a workspace.
+	Members(ctx context.Context, userID, workspaceID string) ([]workspace.Member, error)
+	// Candidates lists users who can still be added.
+	Candidates(ctx context.Context, userID, workspaceID, query string) ([]workspace.Candidate, error)
+	// AddMember adds an existing user; a repeated add is a no-op.
+	AddMember(ctx context.Context, userID, workspaceID, newUserID string) error
+	// RemoveMember removes one; the last member cannot be removed.
+	RemoveMember(ctx context.Context, userID, workspaceID, memberID string) error
+}
+
+// CraftService is the craft supplies business logic. The real implementation is
+// *craft.Service.
+type CraftService interface {
+	// Categories lists the material categories.
+	Categories(ctx context.Context) ([]craft.Category, error)
+	// Manufacturers lists the known manufacturers.
+	Manufacturers(ctx context.Context) ([]craft.Manufacturer, error)
+	// SearchCatalog searches the global catalogue and private items.
+	SearchCatalog(ctx context.Context, userID, workspaceID string, filter craft.CatalogFilter) ([]craft.Item, error)
+	// GetItem returns one visible catalogue item.
+	GetItem(ctx context.Context, userID, workspaceID, itemID string) (craft.Item, error)
+	// CreateItem adds a private catalogue item.
+	CreateItem(ctx context.Context, userID, workspaceID string, input craft.ItemInput) (craft.Item, error)
+	// UpdateItem replaces a private catalogue item.
+	UpdateItem(ctx context.Context, userID, workspaceID, itemID string, input craft.ItemInput) (craft.Item, error)
+	// DeleteItem removes a private item with its stock.
+	DeleteItem(ctx context.Context, userID, workspaceID, itemID string) error
+	// LinkToCatalog moves the stock of a private item to another item.
+	LinkToCatalog(ctx context.Context, userID, workspaceID, privateID, targetID string) (craft.StockEntry, error)
+	// ListInventory lists the stock of the workspace.
+	ListInventory(ctx context.Context, userID, workspaceID string, filter craft.CatalogFilter) ([]craft.StockEntry, error)
+	// SetQty sets the stock to an absolute value.
+	SetQty(ctx context.Context, userID, workspaceID, itemID string, qty float64, reason string) (craft.StockEntry, error)
+	// Adjust changes the stock by a delta.
+	Adjust(ctx context.Context, userID, workspaceID, itemID string, delta float64, reason string) (craft.StockEntry, error)
+	// UpdateStockMeta changes the location and notes of a stock row.
+	UpdateStockMeta(ctx context.Context, userID, workspaceID, itemID, location, notes string) error
+	// RemoveFromInventory removes a stock row.
+	RemoveFromInventory(ctx context.Context, userID, workspaceID, itemID string) error
+}
+
 // Deps are the collaborators the HTTP layer needs.
 type Deps struct {
 	// Version is reported by GET /api/v1/health.
@@ -104,6 +158,12 @@ type Deps struct {
 	// Connections backs the list of connected applications. Nil (OAuth
 	// disabled) makes the list empty.
 	Connections ConnectionService
+	// Workspaces backs the workspace and member operations. It is always wired
+	// by internal/app.
+	Workspaces WorkspaceService
+	// Craft backs the catalogue, stock and reference operations. It is always
+	// wired by internal/app.
+	Craft CraftService
 }
 
 // New builds the root HTTP handler: API, probes, documentation and the WebApp.

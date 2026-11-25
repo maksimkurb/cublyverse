@@ -15,6 +15,21 @@ export type Connection = components["schemas"]["Connection"];
 export type APITokenScope = components["schemas"]["APITokenScope"];
 export type CreateTokenRequest = components["schemas"]["CreateTokenRequest"];
 export type CreatedToken = components["schemas"]["CreatedToken"];
+export type Workspace = components["schemas"]["Workspace"];
+export type WorkspaceMember = components["schemas"]["WorkspaceMember"];
+export type WorkspaceCandidate = components["schemas"]["WorkspaceCandidate"];
+export type CreateWorkspaceRequest = components["schemas"]["CreateWorkspaceRequest"];
+export type RenameWorkspaceRequest = components["schemas"]["RenameWorkspaceRequest"];
+export type AddWorkspaceMemberRequest = components["schemas"]["AddWorkspaceMemberRequest"];
+export type CraftCategory = components["schemas"]["CraftCategory"];
+export type CraftManufacturer = components["schemas"]["CraftManufacturer"];
+export type CraftItem = components["schemas"]["CraftItem"];
+export type CraftItemInput = components["schemas"]["CraftItemInput"];
+export type CraftStockEntry = components["schemas"]["CraftStockEntry"];
+export type SetCraftStockRequest = components["schemas"]["SetCraftStockRequest"];
+export type AdjustCraftStockRequest = components["schemas"]["AdjustCraftStockRequest"];
+export type UpdateCraftStockMetaRequest = components["schemas"]["UpdateCraftStockMetaRequest"];
+export type LinkCraftItemRequest = components["schemas"]["LinkCraftItemRequest"];
 export type ApiError = components["schemas"]["Error"];
 
 /** Fetch implementation accepted by the client factory (injectable in tests). */

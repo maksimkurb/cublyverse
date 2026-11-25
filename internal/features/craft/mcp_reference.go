@@ -53,6 +53,14 @@ func (f *Feature) registerReferenceMCP(server *mcpserver.Server) {
 		Annotations: writeAnnotations("Delete a unit", true, true),
 	}, f.mcpUnitDelete)
 	mcpserver.AddTool(server, &mcp.Tool{
+		Name: "craft_item_color_set", Title: "Record the colour of an item",
+		Description: "Record an approximate colour of an item with the source it comes from. An own " +
+			"item is changed itself. An official item is read-only: the colour is kept with this " +
+			"warehouse's stock (the item must be in stock) and is shown only while the official " +
+			"catalogue has no colour. Never invent a value: give the page or method it came from.",
+		Annotations: writeAnnotations("Record the colour of an item", false, true),
+	}, f.mcpColorSet)
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: "craft_catalogs_set", Title: "Connect official catalogues",
 		Description: "Replace the set of official catalogues the warehouse searches (see " +
 			"craft_reference for the available sources). Stock already held stays when a " +
@@ -288,4 +296,24 @@ func (f *Feature) mcpCatalogsSet(ctx context.Context, _ *mcp.CallToolRequest, in
 		return nil, mcpCatalogsOutput{}, mcpError(err)
 	}
 	return nil, mcpCatalogsOutput{Catalogs: catalogsToMCP(sources)}, nil
+}
+
+type mcpColorSetInput struct {
+	mcpSpace
+	ItemID    string `json:"item_id" jsonschema:"catalogue item id (UUID)"`
+	ColorHex  string `json:"color_hex" jsonschema:"colour as #RRGGBB"`
+	ColorName string `json:"color_name,omitempty" jsonschema:"colour name; omit to keep the current one"`
+	Source    string `json:"source" jsonschema:"where the colour comes from: a page address or the method, up to 500 characters"`
+}
+
+func (f *Feature) mcpColorSet(ctx context.Context, _ *mcp.CallToolRequest, in mcpColorSetInput) (*mcp.CallToolResult, mcpItem, error) {
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
+	if err != nil {
+		return nil, mcpItem{}, err
+	}
+	item, err := f.service.SetColor(ctx, user, ws, in.ItemID, ColorInput{ColorHex: in.ColorHex, ColorName: in.ColorName, Origin: in.Source})
+	if err != nil {
+		return nil, mcpItem{}, mcpError(err)
+	}
+	return nil, itemToMCP(item), nil
 }

@@ -142,6 +142,7 @@ reverse proxy (в бэклоге — `docs/PLAN.md` §7).
 | `craft_category_delete` | Delete a category | изменяет и удаляет |
 | `craft_category_save` | Create or change a category | изменяет |
 | `craft_inventory_list` | List stock | только чтение |
+| `craft_item_color_set` | Record the colour of an item | изменяет |
 | `craft_item_create` | Create a private item | изменяет |
 | `craft_item_delete` | Delete a private item | изменяет и удаляет |
 | `craft_item_link` | Link a private item to the catalogue | изменяет и удаляет |
@@ -820,6 +821,151 @@ List what the workspace holds: items with quantity and unit, optionally filtered
   },
   "required": [
     "stock"
+  ],
+  "type": "object"
+}
+```
+
+### `craft_item_color_set`
+
+Record the colour of an item
+
+Record an approximate colour of an item with the source it comes from. An own item is changed itself. An official item is read-only: the colour is kept with this warehouse's stock (the item must be in stock) and is shown only while the official catalogue has no colour. Never invent a value: give the page or method it came from.
+
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "color_hex": {
+      "description": "colour as #RRGGBB",
+      "type": "string"
+    },
+    "color_name": {
+      "description": "colour name; omit to keep the current one",
+      "type": "string"
+    },
+    "item_id": {
+      "description": "catalogue item id (UUID)",
+      "type": "string"
+    },
+    "source": {
+      "description": "where the colour comes from: a page address or the method, up to 500 characters",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_id",
+    "color_hex",
+    "source"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "article": {
+      "description": "manufacturer article number",
+      "type": "string"
+    },
+    "attrs": {
+      "additionalProperties": true,
+      "description": "category specific attributes",
+      "type": "object"
+    },
+    "category": {
+      "description": "category slug",
+      "type": "string"
+    },
+    "category_name": {
+      "description": "category name in Russian",
+      "type": "string"
+    },
+    "color_hex": {
+      "description": "colour as #RRGGBB",
+      "type": "string"
+    },
+    "color_name": {
+      "description": "colour name",
+      "type": "string"
+    },
+    "color_source": {
+      "description": "official or approx: how trustworthy color_hex is",
+      "type": "string"
+    },
+    "finish": {
+      "description": "finish or coating, free text",
+      "type": "string"
+    },
+    "id": {
+      "description": "catalogue item id (UUID)",
+      "type": "string"
+    },
+    "image_url": {
+      "description": "link to a photo of the item",
+      "type": "string"
+    },
+    "in_inventory": {
+      "description": "whether the workspace has a stock row for the item",
+      "type": "boolean"
+    },
+    "manufacturer": {
+      "description": "manufacturer name",
+      "type": "string"
+    },
+    "name": {
+      "description": "item name",
+      "type": "string"
+    },
+    "pack_size": {
+      "description": "how many base units one pack holds, when known",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "private": {
+      "description": "true for an item private to this workspace, false for a global catalogue item",
+      "type": "boolean"
+    },
+    "series": {
+      "description": "series or variety",
+      "type": "string"
+    },
+    "size": {
+      "description": "size, free text",
+      "type": "string"
+    },
+    "stock_qty": {
+      "description": "quantity this workspace holds, in unit",
+      "type": "number"
+    },
+    "unit": {
+      "description": "unit the quantity is counted in",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "private",
+    "category",
+    "category_name",
+    "name",
+    "unit",
+    "stock_qty",
+    "in_inventory"
   ],
   "type": "object"
 }

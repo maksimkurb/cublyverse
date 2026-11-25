@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"regexp"
 	"strings"
@@ -19,6 +20,9 @@ import (
 const (
 	DefaultDMCPageURL   = "https://www.dmc.com/GB/en-GB/products/mouline-special"
 	DefaultDMCColorsURL = "https://raw.githubusercontent.com/nathantspencer/DMC-ColorCodes/master/result.csv"
+	// DefaultDMCSupplementURL is a second community chart that also knows the
+	// newer shades (01-35) the CSV lacks. It only fills gaps.
+	DefaultDMCSupplementURL = "https://stitchland.com/tools/dmc-color-chart/"
 )
 
 // DefaultInterval is the pause between two requests to one manufacturer. One
@@ -41,6 +45,8 @@ type DMC struct {
 	// ColorsURL is the CSV with shade names and approximate hex values. Empty
 	// means DefaultDMCColorsURL.
 	ColorsURL string
+	// SupplementURL is the second chart; empty skips it.
+	SupplementURL string
 	// Interval is the pause between the two requests. Zero means no pause;
 	// production sources use DefaultInterval.
 	Interval time.Duration
@@ -54,10 +60,11 @@ func NewDMC(client *http.Client) *DMC {
 		client = NewHTTPClient()
 	}
 	return &DMC{
-		client:    client,
-		PageURL:   DefaultDMCPageURL,
-		ColorsURL: DefaultDMCColorsURL,
-		Interval:  DefaultInterval,
+		client:        client,
+		PageURL:       DefaultDMCPageURL,
+		ColorsURL:     DefaultDMCColorsURL,
+		SupplementURL: DefaultDMCSupplementURL,
+		Interval:      DefaultInterval,
 	}
 }
 
@@ -96,6 +103,23 @@ func (d *DMC) Fetch(ctx context.Context) ([]Entry, error) {
 	chart, err := parseDMCChart(rawChart)
 	if err != nil {
 		return nil, err
+	}
+
+	if d.SupplementURL != "" {
+		// A failure fails the whole run: going on without the second chart
+		// would erase the colours it filled before.
+		if err := wait(ctx, d.Interval); err != nil {
+			return nil, err
+		}
+		rawSupplement, err := get(ctx, d.client, d.SupplementURL)
+		if err != nil {
+			return nil, fmt.Errorf("dmc: read supplement chart: %w", err)
+		}
+		supplement, err := parseDMCSupplement(rawSupplement)
+		if err != nil {
+			return nil, err
+		}
+		fillGaps(chart, supplement)
 	}
 
 	entries := make([]Entry, 0, len(articles))
@@ -209,6 +233,42 @@ func parseDMCChart(raw []byte) (map[string]dmcShade, error) {
 		return nil, errors.New("dmc: colour chart has no rows")
 	}
 	return chart, nil
+}
+
+// dmcSupplementRow matches one row of the supplement chart's table.
+var dmcSupplementRow = regexp.MustCompile(
+	`stl-dmcc-code-cell">DMC ([^<]+)</td><td class="stl-dmcc-name-cell">([^<]*)</td>.*?stl-dmcc-hex-cell">(#[0-9A-Fa-f]{6})<`)
+
+// parseDMCSupplement reads the HTML table of the second chart.
+func parseDMCSupplement(page []byte) (map[string]dmcShade, error) {
+	matches := dmcSupplementRow.FindAllSubmatch(page, -1)
+	if len(matches) == 0 {
+		return nil, errors.New("dmc: supplement chart has no rows; the page layout changed")
+	}
+	chart := make(map[string]dmcShade, len(matches))
+	for _, match := range matches {
+		code := strings.ToUpper(strings.TrimSpace(string(match[1])))
+		chart[code] = dmcShade{
+			name: strings.TrimSpace(html.UnescapeString(string(match[2]))),
+			hex:  normalizeHex(string(match[3])),
+		}
+	}
+	return chart, nil
+}
+
+// fillGaps completes the first chart with the second; what the first chart
+// knows stays.
+func fillGaps(chart, supplement map[string]dmcShade) {
+	for code, extra := range supplement {
+		shade := chart[code]
+		if shade.name == "" {
+			shade.name = extra.name
+		}
+		if shade.hex == "" {
+			shade.hex = extra.hex
+		}
+		chart[code] = shade
+	}
 }
 
 // dmcArticle normalises the three special shade codes to the spelling DMC uses

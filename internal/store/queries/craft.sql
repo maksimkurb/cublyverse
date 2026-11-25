@@ -207,3 +207,14 @@ UPDATE craft_inventory
 SET attrs = $3
 WHERE workspace_id = $1
   AND catalog_item_id = $2;
+
+-- name: SetCraftItemColor :exec
+-- Changes only the colour of an own item; an empty name keeps the current one.
+UPDATE craft_catalog_items
+SET color_hex    = sqlc.arg(color_hex),
+    color_source = 'approx',
+    color_name   = CASE WHEN sqlc.arg(color_name)::text <> '' THEN sqlc.arg(color_name)::text ELSE color_name END,
+    attrs        = sqlc.arg(attrs),
+    updated_at   = now()
+WHERE id = sqlc.arg(id)::uuid
+  AND workspace_id = sqlc.arg(workspace_id)::uuid;

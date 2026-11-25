@@ -750,6 +750,37 @@ func (q *Queries) SetCraftInventoryQty(ctx context.Context, arg SetCraftInventor
 	return i, err
 }
 
+const setCraftItemColor = `-- name: SetCraftItemColor :exec
+UPDATE craft_catalog_items
+SET color_hex    = $1,
+    color_source = 'approx',
+    color_name   = CASE WHEN $2::text <> '' THEN $2::text ELSE color_name END,
+    attrs        = $3,
+    updated_at   = now()
+WHERE id = $4::uuid
+  AND workspace_id = $5::uuid
+`
+
+type SetCraftItemColorParams struct {
+	ColorHex    string      `json:"color_hex"`
+	ColorName   string      `json:"color_name"`
+	Attrs       []byte      `json:"attrs"`
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+// Changes only the colour of an own item; an empty name keeps the current one.
+func (q *Queries) SetCraftItemColor(ctx context.Context, arg SetCraftItemColorParams) error {
+	_, err := q.db.Exec(ctx, setCraftItemColor,
+		arg.ColorHex,
+		arg.ColorName,
+		arg.Attrs,
+		arg.ID,
+		arg.WorkspaceID,
+	)
+	return err
+}
+
 const updateCraftCatalogItem = `-- name: UpdateCraftCatalogItem :one
 UPDATE craft_catalog_items
 SET category_id     = $3,

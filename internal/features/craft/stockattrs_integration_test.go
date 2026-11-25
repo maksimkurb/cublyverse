@@ -57,4 +57,20 @@ func TestLinkKeepsColour(t *testing.T) {
 		t.Fatalf("wish: %v", err)
 	}
 	check("wish", *wish.Item)
+
+	// A colour found later replaces the remembered one and keeps the old values.
+	if _, err := e.craft.SetColor(ctx, user, home.ID, official, craft.ColorInput{ColorHex: "#abcdef"}); err == nil {
+		t.Fatal("a colour without a source must be refused")
+	}
+	recoloured, err := e.craft.SetColor(ctx, user, home.ID, official, craft.ColorInput{ColorHex: "#abcdef", Origin: "https://example.com"})
+	if err != nil || recoloured.ColorHex != "#ABCDEF" || recoloured.ColorName != "салатовый" {
+		t.Fatalf("set colour: %+v %v", recoloured, err)
+	}
+	var kept string
+	if err := e.st.Pool().QueryRow(ctx, "SELECT attrs->'legacy'->>'name' FROM craft_inventory").Scan(&kept); err != nil || kept != "Старый бисер" {
+		t.Fatalf("legacy values lost: %q %v", kept, err)
+	}
+	other := e.globalItem(t, "311-19002")
+	_, err = e.craft.SetColor(ctx, user, home.ID, other, craft.ColorInput{ColorHex: "#000000", Origin: "тест"})
+	wantInvalid(t, "official item outside the stock", err)
 }

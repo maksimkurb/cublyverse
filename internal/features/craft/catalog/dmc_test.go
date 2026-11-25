@@ -129,3 +129,46 @@ func TestNormalizeHex(t *testing.T) {
 		}
 	}
 }
+
+// TestDMCSupplementFillsOnlyGaps proves the second chart completes the newer
+// shades and never replaces what the first chart knows.
+func TestDMCSupplementFillsOnlyGaps(t *testing.T) {
+	server := fixtureServer(t, map[string]string{
+		"/page":   "dmc_page.html",
+		"/colors": "dmc_colors.csv",
+		"/extra":  "dmc_supplement.html",
+	})
+	source := &DMC{client: server.Client(), PageURL: server.URL + "/page", ColorsURL: server.URL + "/colors"}
+	byArticle := func() map[string]Entry {
+		t.Helper()
+		entries, err := source.Fetch(context.Background())
+		if err != nil {
+			t.Fatalf("Fetch() error = %v", err)
+		}
+		out := make(map[string]Entry, len(entries))
+		for _, entry := range entries {
+			out[entry.Article] = entry
+		}
+		return out
+	}
+	without := byArticle()
+	source.SupplementURL = server.URL + "/extra"
+	with := byArticle()
+
+	if got := with["02"]; got.ColorHex != "#ABABAB" || got.ColorName != "Mist" || got.ColorSource != "approx" {
+		t.Fatalf("shade 02 = %q %q %q", got.ColorHex, got.ColorName, got.ColorSource)
+	}
+	if without["02"].ColorHex != "" {
+		t.Fatalf("fixture is stale: the first chart now has 02 = %q", without["02"].ColorHex)
+	}
+	for _, article := range []string{"310", "666", "B5200"} {
+		if with[article].ColorHex != without[article].ColorHex || with[article].ColorName != without[article].ColorName {
+			t.Fatalf("shade %s changed: %+v -> %+v", article, without[article], with[article])
+		}
+	}
+
+	source.SupplementURL = server.URL + "/missing"
+	if _, err := source.Fetch(context.Background()); err == nil {
+		t.Fatal("a broken supplement must fail the run, not erase colours")
+	}
+}

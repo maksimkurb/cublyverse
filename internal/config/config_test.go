@@ -95,6 +95,28 @@ func TestLoadFromValues(t *testing.T) {
 	}
 }
 
+func TestCraftCatalogSyncFlag(t *testing.T) {
+	tests := map[string]bool{
+		"":     false,
+		"0":    false,
+		"true": false,
+		"1":    true,
+		" 1 ":  true,
+	}
+	for value, want := range tests {
+		cfg, err := LoadFrom(env(map[string]string{
+			"DATABASE_URL":       "postgres://localhost/cublyverse",
+			"CRAFT_CATALOG_SYNC": value,
+		}))
+		if err != nil {
+			t.Fatalf("LoadFrom(%q): %v", value, err)
+		}
+		if got := cfg.Craft.CatalogSync; got != want {
+			t.Errorf("CRAFT_CATALOG_SYNC=%q: CatalogSync = %v, want %v", value, got, want)
+		}
+	}
+}
+
 func TestLoadFromErrors(t *testing.T) {
 	tests := []struct {
 		name    string

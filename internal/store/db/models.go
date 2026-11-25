@@ -69,6 +69,18 @@ type CraftCatalogItem struct {
 	UpdatedAt      time.Time          `json:"updated_at"`
 }
 
+type CraftCatalogSyncRun struct {
+	ID         int64              `json:"id"`
+	Source     string             `json:"source"`
+	StartedAt  time.Time          `json:"started_at"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+	Status     string             `json:"status"`
+	Created    int32              `json:"created"`
+	Updated    int32              `json:"updated"`
+	Unchanged  int32              `json:"unchanged"`
+	Error      string             `json:"error"`
+}
+
 type CraftCategory struct {
 	ID          pgtype.UUID `json:"id"`
 	Slug        string      `json:"slug"`

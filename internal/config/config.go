@@ -53,6 +53,7 @@ type Config struct {
 	Matrix    MatrixConfig
 	Bot       BotConfig
 	Reminders RemindersConfig
+	Craft     CraftConfig
 }
 
 // BotConfig holds messenger-runtime settings.
@@ -66,6 +67,14 @@ type RemindersConfig struct {
 	// TickInterval is how often the scheduler looks for due reminders. Default
 	// 15 seconds.
 	TickInterval time.Duration
+}
+
+// CraftConfig holds the craft feature settings.
+type CraftConfig struct {
+	// CatalogSync enables the weekly refresh of the global craft catalogue from
+	// the manufacturers' public data. It is off unless CRAFT_CATALOG_SYNC=1:
+	// scraping is an operator decision, not a default of a local instance.
+	CatalogSync bool
 }
 
 // OIDCConfig holds the OpenID Connect client settings used for sign in.
@@ -120,6 +129,9 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 			Password:     strings.TrimSpace(getenv("MATRIX_PASSWORD")),
 			CryptoDBPath: defaultString(getenv("MATRIX_CRYPTO_DB"), "matrix-crypto.db"),
 			PickleKey:    getenv("MATRIX_PICKLE_KEY"),
+		},
+		Craft: CraftConfig{
+			CatalogSync: strings.TrimSpace(getenv("CRAFT_CATALOG_SYNC")) == "1",
 		},
 	}
 	handlerTimeout, err := durationFromEnv(getenv, "BOT_HANDLER_TIMEOUT", DefaultBotHandlerTimeout)

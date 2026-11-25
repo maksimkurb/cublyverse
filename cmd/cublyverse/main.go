@@ -4,6 +4,8 @@
 //
 //	serve     start the HTTP server (and, later, the messenger transports)
 //	migrate   apply or inspect the embedded database migrations
+//	import-n8n import reminders from the old n8n export
+//	catalog   refresh the global craft catalogue from a manufacturer
 package main
 
 import (
@@ -37,6 +39,9 @@ commands:
   import-n8n <file>
                    import reminders of the old n8n workflow from a CSV or JSON
                    export of its Data Table into the table of waiting rows
+  catalog sync <source>
+                   refresh the global craft catalogue from an official source
+                   (dmc, preciosa or all)
   docs mcp [--write] [--names]
                    print the MCP tool reference, rewrite docs/MCP.md between
                    the generated markers, or list the registered tool names
@@ -72,6 +77,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runMigrate(ctx, args[1:], stdout, stderr)
 	case "import-n8n":
 		return runImportN8N(ctx, args[1:], stdout, stderr)
+	case "catalog":
+		return runCatalog(ctx, args[1:], stdout, stderr)
 	case "docs":
 		return runDocs(ctx, args[1:], stdout, stderr)
 	case "help", "-h", "--help":

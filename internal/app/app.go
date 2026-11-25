@@ -17,6 +17,7 @@ import (
 	"github.com/maksimkurb/cublyverse/internal/bot"
 	"github.com/maksimkurb/cublyverse/internal/config"
 	"github.com/maksimkurb/cublyverse/internal/features/craft"
+	"github.com/maksimkurb/cublyverse/internal/features/craft/catalog"
 	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/httpapi"
 	"github.com/maksimkurb/cublyverse/internal/interaction/postgres"
@@ -111,8 +112,13 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 
 	workspaces := workspace.New(st)
 	craftService := craft.New(st, workspaces)
+	craftOpts := []craft.Option{}
+	if cfg.Craft.CatalogSync {
+		craftOpts = append(craftOpts, craft.WithCatalogSync(catalog.NewSyncer(st, logger), logger))
+		logger.Info("craft catalogue sync enabled: official sources refresh weekly")
+	}
 
-	registry := NewRegistry(craft.NewFeature(craftService), reminders.NewFeature(reminderService, logger,
+	registry := NewRegistry(craft.NewFeature(craftService, craftOpts...), reminders.NewFeature(reminderService, logger,
 		reminders.WithTickInterval(cfg.RemindersTickIntervalOr()),
 		reminders.WithTimezoneLookup(func(ctx context.Context, principalID string) (string, error) {
 			profile, err := authService.Profile(ctx, principalID)

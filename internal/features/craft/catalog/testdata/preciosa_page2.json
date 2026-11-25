@@ -1,0 +1,31 @@
+{
+  "results": [
+    {
+      "href": "/detail/1526",
+      "colour": "20010",
+      "article": "311-19001",
+      "size": "10/0",
+      "photoView": "/produkty/perlicky/fotky/311-19001-10_0-20010.webp?v=1793709269",
+      "product": [
+        "311-19001-10_0-20010",
+        "311-19001-10/0-20010"
+      ]
+    },
+    {
+      "href": "/detail/1527",
+      "colour": "20060",
+      "article": "311-19001",
+      "size": "10/0",
+      "photoView": "/produkty/perlicky/fotky/311-19001-10_0-20060.webp?v=1793709269",
+      "product": [
+        "311-19001-10_0-20060",
+        "311-19001-10/0-20060"
+      ]
+    }
+  ],
+  "pages": [
+    1,
+    2
+  ],
+  "page": 2
+}

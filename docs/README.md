@@ -16,6 +16,7 @@
 | [`API.md`](API.md) | OpenAPI-конвейер, аутентификация (Bearer/cookie/PAT/scopes), формат ошибок, все группы эндпоинтов. |
 | [`MCP.md`](MCP.md) | MCP-эндпоинт `/mcp`, авторизация PAT, все инструменты со схемами и примерами, подключение клиентов. |
 | [`DATABASE.md`](DATABASE.md) | Все таблицы и колонки, миграции goose, запросы sqlc, совместимость, бэкап и восстановление. |
+| [`CATALOG_SCRAPERS.md`](CATALOG_SCRAPERS.md) | Глобальный каталог «Бусинок»: официальные источники DMC и PRECIOSA, лицензионные оговорки, запуск синхронизации и правила `manual_override`/`deprecated_at`. |
 | [`WEBAPP.md`](WEBAPP.md) | Устройство WebApp, мост к Telegram/браузеру, вход, маршрутизация, экраны. |
 | [`DEPLOY.md`](DEPLOY.md) | Боевая установка: переменные окружения, compose, OIDC, Telegram, прокси, обновление, бэкапы, диагностика. |
 | [`DEVELOPMENT.md`](DEVELOPMENT.md) | Локальная разработка: зависимости, `.env`, PostgreSQL в Docker, `make dev`, тесты без Docker, pnpm-сервер, кодогенерация, отладка, все make-цели. |

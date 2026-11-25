@@ -39,6 +39,7 @@ cublyverse migrate status
 | 00010 | `00010_workspaces.sql` | `workspaces`, `workspace_members` — общие пространства без ролей: участник имеет полный доступ. |
 | 00011 | `00011_craft.sql` | «Бусинки»: `craft_manufacturers`, `craft_categories` (13 типов материалов), `craft_catalog_items` (глобальные и частные позиции каталога), `craft_inventory` и `craft_inventory_log` (остатки workspace и их история), `craft_projects`, `craft_project_materials`, `craft_wishlist_items`, `craft_wishlist_links`. |
 | 00012 | `00012_oauth.sql` | `oauth_clients`, `oauth_codes`, `oauth_tokens` — собственный OAuth 2.1 сервер для MCP: клиенты (DCR и CIMD), одноразовые коды с PKCE, пары access/refresh с ротацией. |
+| 00013 | `00013_catalog_sync.sql` | `craft_catalog_sync_runs` — журнал запусков скраперов глобального каталога: источник, статус `running`/`ok`/`failed`, счётчики `created`/`updated`/`unchanged`, текст ошибки. |
 
 Нумерация не переиспользуется: следующая миграция — `00010_<тема>.sql`.
 `make check` сверяет, что каждый файл из `internal/store/migrations/*.sql`

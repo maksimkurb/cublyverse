@@ -7,7 +7,7 @@ import { useHost } from "../../host/HostContext";
 import { usePageTitle } from "../../router/router";
 import { Button, EmptyState, Notice, Segmented, Switch } from "../../ui/controls";
 import { IconCheck, IconPlus } from "../../ui/icons";
-import { SpaceBar } from "../workspaces/SpaceBar";
+import { SpaceButton, SpaceState } from "../workspaces/SpaceBar";
 import { useCurrentWorkspace } from "../workspaces/selection";
 import { ReminderEditor } from "./ReminderEditor";
 import { toggleBody, useCompleteReminder, useRemindersQuery, useUpdateReminder } from "./data";
@@ -149,15 +149,16 @@ export default function RemindersScreen() {
 
   return (
     <div className="page">
-      <header className="page__head">
+      <header className="page__head page__head--bar">
         <h1 className="page__title">Напоминания</h1>
-        <Button variant="primary" aria-label="Новое напоминание" disabled={!spaceId} onClick={() => setEditor({ mode: "create" })}>
+        <SpaceButton app="reminders" space={space} />
+        <Button variant="primary" className="craft-toolbar__add" aria-label="Новое напоминание" disabled={!spaceId} onClick={() => setEditor({ mode: "create" })}>
           <IconPlus />
-          Новое
+          <span className="craft-toolbar__label">Новое</span>
         </Button>
       </header>
 
-      <SpaceBar app="reminders" space={space} />
+      <SpaceState app="reminders" space={space} />
 
       {pending.map((reminder) => (
         <section className="pending" key={reminder.id} aria-label={`Ждёт отметки: ${reminder.message}`}>

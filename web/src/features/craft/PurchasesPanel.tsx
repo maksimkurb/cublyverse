@@ -4,6 +4,7 @@ import type { Wish } from "../../api/client";
 import { Button, EmptyState, Notice } from "../../ui/controls";
 import { IconPlus } from "../../ui/icons";
 import { useWishes } from "./data";
+import { Swatch } from "./Swatch";
 import { itemMeta } from "./format";
 import { BoughtDialog, CreateWishDialog, EditWishDialog } from "./WishlistDialogs";
 import { groupWishes, linkName, linkPriceLabel, linkStockLabel, priorityChip, wishQtyLabel, wishStockLabel } from "./wishlist";
@@ -17,6 +18,7 @@ function WishCard({ wish, onEdit, onBought }: { wish: Wish; onEdit: (wish: Wish)
   return (
     <li className="card wish-card">
       <div className="wish-card__head">
+        {item && <Swatch item={item} zoomable />}
         <span className="wish-card__title">{wish.title}</span>
         {chip && <span className={wish.priority >= 2 ? "badge wish-priority wish-priority--high" : "badge wish-priority"}>{chip}</span>}
       </div>

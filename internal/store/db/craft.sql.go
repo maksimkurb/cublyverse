@@ -765,6 +765,7 @@ SET category_id     = $3,
     unit            = $13,
     pack_size       = $14,
     attrs           = $15,
+    image_url       = $16,
     updated_at      = now()
 WHERE id = $1
   AND workspace_id = $2
@@ -787,6 +788,7 @@ type UpdateCraftCatalogItemParams struct {
 	Unit           string         `json:"unit"`
 	PackSize       pgtype.Numeric `json:"pack_size"`
 	Attrs          []byte         `json:"attrs"`
+	ImageUrl       string         `json:"image_url"`
 }
 
 // Only workspace-private items are editable through this query; global items
@@ -808,6 +810,7 @@ func (q *Queries) UpdateCraftCatalogItem(ctx context.Context, arg UpdateCraftCat
 		arg.Unit,
 		arg.PackSize,
 		arg.Attrs,
+		arg.ImageUrl,
 	)
 	var i CraftCatalogItem
 	err := row.Scan(

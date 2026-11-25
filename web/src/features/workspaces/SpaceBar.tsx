@@ -20,14 +20,38 @@ export interface SpaceBarProps {
 }
 
 /**
- * The space control every mini-app shows under its title: a button with the
- * current space that opens switching and sharing. Without any space it is the
- * onboarding of the mini-app; the screen shows its content only when
- * `space.current` is set.
+ * The button with the current space, made to sit next to the title of a
+ * mini-app. It opens switching and sharing; without a space it renders nothing.
  */
-export function SpaceBar({ app, space }: SpaceBarProps) {
+export function SpaceButton({ app, space }: SpaceBarProps) {
   const [open, setOpen] = useState(false);
-  const { query, workspaces, current } = space;
+  const { current } = space;
+  if (!current) {
+    return null;
+  }
+  return (
+    <>
+      <Button
+        size="s"
+        className="space-button"
+        aria-label={`Пространство: ${current.name}. Переключить и настроить`}
+        onClick={() => setOpen(true)}
+      >
+        <IconUsers />
+        <span className="space-button__name">{current.name}</span>
+        <span aria-hidden="true">▾</span>
+      </Button>
+      {open && <SpaceSheet app={app} space={space} current={current} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+/**
+ * What stands in place of a mini-app that has no space yet: loading, the error,
+ * or the onboarding. With spaces it renders nothing.
+ */
+export function SpaceState({ app, space }: SpaceBarProps) {
+  const { query, workspaces } = space;
 
   if (query.isPending) {
     return (
@@ -46,21 +70,7 @@ export function SpaceBar({ app, space }: SpaceBarProps) {
       </Notice>
     );
   }
-  if (workspaces.length === 0) {
-    return <Onboarding app={app} space={space} />;
-  }
-  if (!current) {
-    return null;
-  }
-  return (
-    <div className="space-bar">
-      <Button size="s" aria-label={`Пространство: ${current.name}. Переключить и настроить`} onClick={() => setOpen(true)}>
-        <IconUsers />
-        {current.name} ▾
-      </Button>
-      {open && <SpaceSheet app={app} space={space} current={current} onClose={() => setOpen(false)} />}
-    </div>
-  );
+  return workspaces.length === 0 ? <Onboarding app={app} space={space} /> : null;
 }
 
 /** First visit of a mini-app: create the first space. */

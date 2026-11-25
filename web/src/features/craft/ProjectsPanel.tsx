@@ -6,7 +6,8 @@ import { useHost, useHostBackButton } from "../../host/HostContext";
 import { Button, EmptyState, Notice } from "../../ui/controls";
 import { IconPlus } from "../../ui/icons";
 import { useProjects, useProject, useRemoveProjectMaterial, useShortageToWishlist } from "./data";
-import { itemMeta, swatchStyle } from "./format";
+import { Swatch } from "./Swatch";
+import { itemMeta } from "./format";
 import { AddMaterialDialog, CreateProjectDialog, EditProjectDialog, SetMaterialDialog, UseMaterialDialog } from "./ProjectDialogs";
 import { materialsCountLabel, plannedLabel, shortageLabel, stockLabel, usedLabel } from "./project";
 import { addedWishesLabel } from "./wishlist";
@@ -29,7 +30,7 @@ function MaterialRow({
   return (
     <li className="card material">
       <div className="material__head">
-        <span className="craft-swatch" style={swatchStyle(material.item)} aria-hidden="true" />
+        <Swatch item={material.item} zoomable />
         <div className="craft-row__text">
           <span className="craft-row__title">{name}</span>
           <span className="craft-row__meta">{[itemMeta(material.item), material.item.category_name].filter(Boolean).join(" · ")}</span>

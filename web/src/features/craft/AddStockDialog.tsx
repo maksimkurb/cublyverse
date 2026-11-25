@@ -6,7 +6,8 @@ import { useHost, useHostBackButton } from "../../host/HostContext";
 import { Button, Notice, Sheet, TextField } from "../../ui/controls";
 import { CraftItemDialog } from "./CraftDialogs";
 import { useAdjustCraftStock, useCraftCatalog, useUpdateCraftStockMeta } from "./data";
-import { formatQty, itemMeta, swatchStyle } from "./format";
+import { Swatch } from "./Swatch";
+import { formatQty, itemMeta } from "./format";
 import { parsePositiveQty } from "./wishlist";
 
 /** Props of the «add to stock» dialog. */
@@ -79,7 +80,7 @@ function PickStep({
           <ul className="card-list" aria-label="Позиции каталога">
             {items.map((candidate) => (
               <li className="card craft-row" key={candidate.id}>
-                <span className="craft-swatch" style={swatchStyle(candidate)} aria-hidden="true" />
+                <Swatch item={candidate} />
                 <div className="craft-row__text">
                   <span className="craft-row__title">{candidate.name}</span>
                   <span className="craft-row__meta">{[itemMeta(candidate), candidate.category_name].filter(Boolean).join(" · ")}</span>

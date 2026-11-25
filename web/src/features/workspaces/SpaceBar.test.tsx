@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeCandidate, makeMember, makeWorkspace } from "../../test/fixtures";
 import { renderWithHost } from "../../test/render";
-import { SpaceBar } from "./SpaceBar";
+import { SpaceButton, SpaceState } from "./SpaceBar";
 import {
   useAddWorkspaceMember,
   useCreateWorkspace,
@@ -67,7 +67,7 @@ describe("SpaceBar", () => {
     const create = mutation(makeWorkspace({ id: "new", app: "reminders" }));
     vi.mocked(useCreateWorkspace).mockReturnValue(create as never);
     const space = spaceState([]);
-    renderWithHost(<SpaceBar app="reminders" space={space} />);
+    renderWithHost(<SpaceState app="reminders" space={space} />);
 
     expect(screen.getByLabelText("Название")).toHaveValue("Личное");
     fireEvent.click(screen.getByRole("button", { name: "Начать" }));
@@ -79,7 +79,7 @@ describe("SpaceBar", () => {
   it("lists members of the current space and adds a candidate", async () => {
     const add = mutation();
     vi.mocked(useAddWorkspaceMember).mockReturnValue(add as never);
-    renderWithHost(<SpaceBar app="warehouse" space={spaceState()} />);
+    renderWithHost(<SpaceButton app="warehouse" space={spaceState()} />);
     openSheet();
 
     expect(screen.getByText("Иван Петров")).toBeInTheDocument();
@@ -98,7 +98,7 @@ describe("SpaceBar", () => {
     vi.mocked(useRemoveWorkspaceMember).mockReturnValue(removeMember as never);
     const removeSpace = mutation();
     vi.mocked(useDeleteWorkspace).mockReturnValue(removeSpace as never);
-    renderWithHost(<SpaceBar app="warehouse" space={spaceState()} />);
+    renderWithHost(<SpaceButton app="warehouse" space={spaceState()} />);
     openSheet();
 
     const members = screen.getByRole("list", { name: "Участники" });

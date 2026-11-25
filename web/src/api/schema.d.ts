@@ -2603,6 +2603,11 @@ export interface components {
              */
             unit?: string;
             /**
+             * @description An http(s) link to a photo of the item, or empty.
+             * @example https://example.com/bead.jpg
+             */
+            image_url?: string;
+            /**
              * Format: double
              * @description How many base units one pack holds; must be positive.
              * @example 100

@@ -271,6 +271,10 @@ Search the shared catalogue (manufacturer catalogues such as PRECIOSA or DMC) an
             "description": "catalogue item id (UUID)",
             "type": "string"
           },
+          "image_url": {
+            "description": "link to a photo of the item",
+            "type": "string"
+          },
           "in_inventory": {
             "description": "whether the workspace has a stock row for the item",
             "type": "boolean"
@@ -728,6 +732,10 @@ List what the workspace holds: items with quantity and unit, optionally filtered
                 "description": "catalogue item id (UUID)",
                 "type": "string"
               },
+              "image_url": {
+                "description": "link to a photo of the item",
+                "type": "string"
+              },
               "in_inventory": {
                 "description": "whether the workspace has a stock row for the item",
                 "type": "boolean"
@@ -860,6 +868,10 @@ Create a catalogue item private to this workspace, for material that is in no ma
       "description": "finish or coating, free text",
       "type": "string"
     },
+    "image_url": {
+      "description": "http(s) link to a photo of the item",
+      "type": "string"
+    },
     "manufacturer": {
       "description": "manufacturer name; created in the warehouse when unknown",
       "type": "string"
@@ -940,6 +952,10 @@ Create a catalogue item private to this workspace, for material that is in no ma
     },
     "id": {
       "description": "catalogue item id (UUID)",
+      "type": "string"
+    },
+    "image_url": {
+      "description": "link to a photo of the item",
       "type": "string"
     },
     "in_inventory": {
@@ -1131,6 +1147,10 @@ Move the stock of a private item to another catalogue item (usually the official
           "description": "catalogue item id (UUID)",
           "type": "string"
         },
+        "image_url": {
+          "description": "link to a photo of the item",
+          "type": "string"
+        },
         "in_inventory": {
           "description": "whether the workspace has a stock row for the item",
           "type": "boolean"
@@ -1252,6 +1272,10 @@ Replace the data of a private item of this workspace. All fields are replaced, s
       "description": "finish or coating, free text",
       "type": "string"
     },
+    "image_url": {
+      "description": "http(s) link to a photo of the item",
+      "type": "string"
+    },
     "item_id": {
       "description": "id of the private item to replace",
       "type": "string"
@@ -1337,6 +1361,10 @@ Replace the data of a private item of this workspace. All fields are replaced, s
     },
     "id": {
       "description": "catalogue item id (UUID)",
+      "type": "string"
+    },
+    "image_url": {
+      "description": "link to a photo of the item",
       "type": "string"
     },
     "in_inventory": {
@@ -1614,6 +1642,10 @@ Create a craft project with a name and optional notes. Materials are added with 
                 "description": "catalogue item id (UUID)",
                 "type": "string"
               },
+              "image_url": {
+                "description": "link to a photo of the item",
+                "type": "string"
+              },
               "in_inventory": {
                 "description": "whether the workspace has a stock row for the item",
                 "type": "boolean"
@@ -1808,6 +1840,10 @@ Return one project with its materials: planned quantity, quantity already used, 
                 "description": "catalogue item id (UUID)",
                 "type": "string"
               },
+              "image_url": {
+                "description": "link to a photo of the item",
+                "type": "string"
+              },
               "in_inventory": {
                 "description": "whether the workspace has a stock row for the item",
                 "type": "boolean"
@@ -1998,6 +2034,10 @@ List the craft projects of the workspace with the number of materials planned in
                     },
                     "id": {
                       "description": "catalogue item id (UUID)",
+                      "type": "string"
+                    },
+                    "image_url": {
+                      "description": "link to a photo of the item",
                       "type": "string"
                     },
                     "in_inventory": {
@@ -2228,6 +2268,10 @@ Add a catalogue item to the project plan or change its planned quantity. Identif
                 "description": "catalogue item id (UUID)",
                 "type": "string"
               },
+              "image_url": {
+                "description": "link to a photo of the item",
+                "type": "string"
+              },
               "in_inventory": {
                 "description": "whether the workspace has a stock row for the item",
                 "type": "boolean"
@@ -2420,6 +2464,10 @@ Add every material of the project whose shortage is positive (the quantity still
               },
               "id": {
                 "description": "catalogue item id (UUID)",
+                "type": "string"
+              },
+              "image_url": {
+                "description": "link to a photo of the item",
                 "type": "string"
               },
               "in_inventory": {
@@ -2694,6 +2742,10 @@ Withdraw material from the stock for a project: decreases the stock and increase
               },
               "id": {
                 "description": "catalogue item id (UUID)",
+                "type": "string"
+              },
+              "image_url": {
+                "description": "link to a photo of the item",
                 "type": "string"
               },
               "in_inventory": {
@@ -3107,6 +3159,10 @@ Add to or use up material: delta is positive to add and negative to use. Identif
           "description": "catalogue item id (UUID)",
           "type": "string"
         },
+        "image_url": {
+          "description": "link to a photo of the item",
+          "type": "string"
+        },
         "in_inventory": {
           "description": "whether the workspace has a stock row for the item",
           "type": "boolean"
@@ -3342,6 +3398,10 @@ Set the quantity of an item to an absolute value (a stocktake). Identify the ite
         },
         "id": {
           "description": "catalogue item id (UUID)",
+          "type": "string"
+        },
+        "image_url": {
+          "description": "link to a photo of the item",
           "type": "string"
         },
         "in_inventory": {
@@ -3635,6 +3695,10 @@ Add an entry to the wish list: either a catalogue item (catalog_item_id) or free
         },
         "id": {
           "description": "catalogue item id (UUID)",
+          "type": "string"
+        },
+        "image_url": {
+          "description": "link to a photo of the item",
           "type": "string"
         },
         "in_inventory": {
@@ -4046,6 +4110,10 @@ List what the workspace wants to buy. By default only entries with status wanted
                 "description": "catalogue item id (UUID)",
                 "type": "string"
               },
+              "image_url": {
+                "description": "link to a photo of the item",
+                "type": "string"
+              },
               "in_inventory": {
                 "description": "whether the workspace has a stock row for the item",
                 "type": "boolean"
@@ -4296,6 +4364,10 @@ Mark a wish list entry as bought. With add_to_stock set and a catalogue item, th
         },
         "id": {
           "description": "catalogue item id (UUID)",
+          "type": "string"
+        },
+        "image_url": {
+          "description": "link to a photo of the item",
           "type": "string"
         },
         "in_inventory": {
@@ -4611,6 +4683,10 @@ Change the quantity, priority, note or status of a wish list entry. Omitted fiel
         },
         "id": {
           "description": "catalogue item id (UUID)",
+          "type": "string"
+        },
+        "image_url": {
+          "description": "link to a photo of the item",
           "type": "string"
         },
         "in_inventory": {

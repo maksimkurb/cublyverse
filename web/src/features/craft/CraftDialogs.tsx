@@ -14,6 +14,7 @@ import {
   useUpdateCraftItem,
   useUpdateCraftStockMeta,
 } from "./data";
+import { Swatch } from "./Swatch";
 import { formatQty, itemMeta, normalizeHex, swatchStyle } from "./format";
 
 /** Props of the stock edit dialog. */
@@ -151,6 +152,7 @@ export function CraftItemDialog({ workspaceId, item, onClose, onSaved }: CraftIt
   const [colorName, setColorName] = useState(item?.color_name ?? "");
   const [colorHex, setColorHex] = useState(item?.color_hex ?? "");
   const [size, setSize] = useState(item?.size ?? "");
+  const [imageUrl, setImageUrl] = useState(item?.image_url ?? "");
   const [unit, setUnit] = useState(item?.unit ?? "");
   const [attrs, setAttrs] = useState<Record<string, unknown>>(item?.attrs ?? {});
   const [error, setError] = useState<string | null>(null);
@@ -235,6 +237,7 @@ export function CraftItemDialog({ workspaceId, item, onClose, onSaved }: CraftIt
       color_hex: hex || undefined,
       size: size.trim() || undefined,
       unit,
+      image_url: imageUrl.trim() || undefined,
       attrs: values,
     };
     try {
@@ -295,6 +298,7 @@ export function CraftItemDialog({ workspaceId, item, onClose, onSaved }: CraftIt
         </div>
         <TextField label="Название цвета" placeholder="Например: айвори" value={colorName} onChange={(event) => setColorName(event.target.value)} />
         <TextField label="Размер" placeholder="Необязательно" value={size} onChange={(event) => setSize(event.target.value)} />
+        <TextField label="Ссылка на фото" type="url" placeholder="https://… необязательно" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
         <SelectField label="Единица" hint={`По умолчанию для категории: ${selected?.default_unit ?? "—"}`} value={unit} onChange={(event) => setUnit(event.target.value)}>
           {units.map((entry) => (
             <option key={entry.id} value={entry.name}>
@@ -404,7 +408,7 @@ export function LinkCraftItemDialog({ workspaceId, item, onClose }: LinkCraftIte
           <ul className="card-list">
             {candidates.map((candidate) => (
               <li className="card craft-row" key={candidate.id}>
-                <span className="craft-swatch" style={swatchStyle(candidate)} aria-hidden="true" />
+                <Swatch item={candidate} />
                 <div className="craft-row__text">
                   <span className="craft-row__title">{candidate.name}</span>
                   <span className="craft-row__meta">

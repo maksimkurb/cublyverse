@@ -29,7 +29,7 @@ vi.mock("../workspaces/selection", () => ({
   writeStoredWorkspaceID: vi.fn(),
 }));
 
-vi.mock("../workspaces/SpaceBar", () => ({ SpaceBar: () => null }));
+vi.mock("../workspaces/SpaceBar", () => ({ SpaceButton: () => null, SpaceState: () => null }));
 vi.mock("./WarehouseSettings", () => ({ WarehouseSettings: () => null }));
 
 vi.mock("./data", async (importOriginal) => {

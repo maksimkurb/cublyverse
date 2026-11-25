@@ -113,6 +113,8 @@ type ItemInput struct {
 	// Source records where the data came from; defaults to "manual".
 	Source    string
 	SourceURL string
+	// ImageURL is an http(s) link to a photo of the item; empty for none.
+	ImageURL string
 }
 
 // StockEntry is one inventory row with its catalogue item.
@@ -213,7 +215,7 @@ func (s *Service) CreateItem(ctx context.Context, userID, workspaceID string, in
 			ColorName: in.ColorName, ColorHex: params.colorHex, ColorSource: params.colorSource,
 			Size: in.Size, Finish: in.Finish, Unit: params.unit, PackSize: params.packSize,
 			Attrs: params.attrs, Source: params.source, SourceUrl: in.SourceURL,
-			ImageUrl: "", ExternalID: "",
+			ImageUrl: params.imageURL, ExternalID: "",
 		})
 		return mapUnique(err, "create item")
 	})
@@ -249,7 +251,7 @@ func (s *Service) UpdateItem(ctx context.Context, userID, workspaceID, itemID st
 			ID: iid, WorkspaceID: wid, CategoryID: params.category.ID, ManufacturerID: params.manufacturerID,
 			Article: params.article, Series: in.Series, Name: params.name, ColorName: in.ColorName,
 			ColorHex: params.colorHex, ColorSource: params.colorSource, Size: in.Size, Finish: in.Finish,
-			Unit: params.unit, PackSize: params.packSize, Attrs: params.attrs,
+			Unit: params.unit, PackSize: params.packSize, Attrs: params.attrs, ImageUrl: params.imageURL,
 		})
 		return mapUnique(err, "update item")
 	})
@@ -536,6 +538,7 @@ type itemParamsResult struct {
 	packSize       pgtype.Numeric
 	attrs          []byte
 	source         string
+	imageURL       string
 }
 
 // itemParams validates an item input and resolves the category, manufacturer
@@ -611,6 +614,14 @@ func (s *Service) itemParams(ctx context.Context, q *db.Queries, wid pgtype.UUID
 	}
 	if out.attrs, err = json.Marshal(attrs); err != nil {
 		return out, invalid("Некорректные атрибуты.")
+	}
+	if out.imageURL = strings.TrimSpace(in.ImageURL); out.imageURL != "" {
+		if !strings.HasPrefix(out.imageURL, "http://") && !strings.HasPrefix(out.imageURL, "https://") {
+			return out, invalid("Ссылка на фото должна начинаться с http:// или https://.")
+		}
+		if len(out.imageURL) > 2000 {
+			return out, invalid("Ссылка на фото слишком длинная.")
+		}
 	}
 	out.source = in.Source
 	if out.source == "" {

@@ -12,7 +12,8 @@ import {
   useUpdateProject,
   useUseProjectMaterial,
 } from "./data";
-import { formatQty, itemMeta, swatchStyle } from "./format";
+import { Swatch } from "./Swatch";
+import { formatQty, itemMeta } from "./format";
 import { plannedLabel } from "./project";
 
 /** Props of the create dialog. */
@@ -235,7 +236,7 @@ export function AddMaterialDialog({ workspaceId, projectId, existingItemIds, onC
           <ul className="card-list" aria-label="Позиции каталога">
             {candidates.map((item) => (
               <li className="card craft-row" key={item.id}>
-                <span className="craft-swatch" style={swatchStyle(item)} aria-hidden="true" />
+                <Swatch item={item} />
                 <div className="craft-row__text">
                   <span className="craft-row__title">{item.name}</span>
                   <span className="craft-row__meta">

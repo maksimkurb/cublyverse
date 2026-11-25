@@ -7,11 +7,12 @@ import { usePageTitle } from "../../router/router";
 import { Button, EmptyState, Notice, Segmented, SelectField, Switch, TextField } from "../../ui/controls";
 import { IconPlus } from "../../ui/icons";
 import { useCurrentWorkspace } from "../workspaces/selection";
-import { SpaceBar } from "../workspaces/SpaceBar";
+import { SpaceButton, SpaceState } from "../workspaces/SpaceBar";
 import { AddStockDialog } from "./AddStockDialog";
 import { CraftItemDialog, LinkCraftItemDialog, StockEditDialog } from "./CraftDialogs";
 import { useAdjustCraftStock, useCraftCatalog, useCraftInventory, useCraftReference, useDeleteCraftItem } from "./data";
-import { formatQty, itemColorLabel, itemMeta, qtyLabel, swatchStyle } from "./format";
+import { Swatch } from "./Swatch";
+import { formatQty, itemColorLabel, itemMeta, qtyLabel } from "./format";
 import ProjectsPanel from "./ProjectsPanel";
 import PurchasesPanel from "./PurchasesPanel";
 import { WarehouseSettings } from "./WarehouseSettings";
@@ -55,7 +56,7 @@ function CraftFilters({
         ))}
       </SelectField>
       <SelectField label="Производитель" value={manufacturer} onChange={(event) => onManufacturer(event.target.value)}>
-        <option value="">Все производители</option>
+        <option value="">Все бренды</option>
         {(reference.data?.manufacturers ?? []).map((item) => (
           <option key={item.id} value={item.name}>
             {item.name}
@@ -81,7 +82,7 @@ function StockRow({
   const name = entry.item.name;
   return (
     <li className="card craft-row">
-      <span className="craft-swatch" style={swatchStyle(entry.item)} aria-hidden="true" />
+      <Swatch item={entry.item} zoomable />
       <div className="craft-row__text">
         <span className="craft-row__title">{name}</span>
         <span className="craft-row__meta">
@@ -160,15 +161,14 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
 
   return (
     <section className="page__section" aria-label="Запасы">
-      <div className="craft-actions">
-        <Button variant="primary" onClick={() => setAddOpen(true)}>
-          <IconPlus />
-          Добавить в запасы
-        </Button>
-      </div>
-
       <div className="craft-filters">
-        <TextField label="Поиск" placeholder="Название, цвет или артикул" value={q} onChange={(event) => setQ(event.target.value)} />
+        <div className="craft-toolbar">
+          <TextField label="Поиск" placeholder="Название, цвет или артикул" value={q} onChange={(event) => setQ(event.target.value)} />
+          <Button variant="primary" className="craft-toolbar__add" aria-label="Добавить в запасы" onClick={() => setAddOpen(true)}>
+            <IconPlus />
+            <span className="craft-toolbar__label">Добавить</span>
+          </Button>
+        </div>
         <CraftFilters workspaceId={workspaceId} category={category} manufacturer={manufacturer} onCategory={setCategory} onManufacturer={setManufacturer} />
       </div>
 
@@ -201,7 +201,7 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
         <EmptyState title={filtered ? "Ничего не найдено" : "Склад пуст"}>
           {filtered
             ? "Измените фильтры или строку поиска."
-            : "Нажмите «Добавить в запасы»: найдите позицию в каталоге или создайте свою."}
+            : "Нажмите «Добавить»: найдите позицию в каталоге или создайте свою."}
         </EmptyState>
       )}
 
@@ -239,37 +239,42 @@ function CatalogRow({
   onAdd: (item: CraftItem) => void;
   onLink: (item: CraftItem) => void;
 }) {
+  const stock = item.stock_qty > 0 ? `есть ${formatQty(item.stock_qty)} ${item.unit}` : "";
   return (
-    <li className="card craft-row">
-      <span className="craft-swatch" style={swatchStyle(item)} aria-hidden="true" />
+    <li className="card craft-row catalog-row">
+      <Swatch item={item} zoomable />
       <div className="craft-row__text">
         <span className="craft-row__title">
           {item.name}
           {item.private && <span className="badge craft-row__badge">Частная</span>}
         </span>
         <span className="craft-row__meta">
-          {[itemMeta(item), item.category_name, itemColorLabel(item)].filter(Boolean).join(" · ")}
+          {[itemColorLabel(item), itemMeta(item), item.category_name].filter(Boolean).join(" · ")}
         </span>
+        {stock && <span className="craft-qty">{stock}</span>}
       </div>
-      <div className="craft-row__side">
-        <span className="craft-qty">{`${formatQty(item.stock_qty)} ${item.unit}`}</span>
-        <Button size="s" variant="solid" aria-label={`Добавить на склад: ${item.name}`} onClick={() => onAdd(item)}>
-          На склад
-        </Button>
-        {item.private && (
-          <>
-            <Button size="s" aria-label={`Изменить позицию: ${item.name}`} onClick={() => onEdit(item)}>
-              Изменить
-            </Button>
-            <Button size="s" aria-label={`Связать с каталогом: ${item.name}`} onClick={() => onLink(item)}>
-              Связать
-            </Button>
-            <Button size="s" variant="danger" aria-label={`Удалить позицию: ${item.name}`} onClick={() => onDelete(item)}>
-              Удалить
-            </Button>
-          </>
-        )}
-      </div>
+      <button
+        type="button"
+        className="cv-iconbtn"
+        aria-label={`Добавить на склад: ${item.name}`}
+        title="Добавить на склад"
+        onClick={() => onAdd(item)}
+      >
+        <IconPlus />
+      </button>
+      {item.private && (
+        <div className="craft-row__side">
+          <Button size="s" aria-label={`Изменить позицию: ${item.name}`} onClick={() => onEdit(item)}>
+            Изменить
+          </Button>
+          <Button size="s" aria-label={`Связать с каталогом: ${item.name}`} onClick={() => onLink(item)}>
+            Связать
+          </Button>
+          <Button size="s" variant="danger" aria-label={`Удалить позицию: ${item.name}`} onClick={() => onDelete(item)}>
+            Удалить
+          </Button>
+        </div>
+      )}
     </li>
   );
 }
@@ -313,20 +318,19 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
   return (
     <section className="page__section" aria-label="Каталог">
       <div className="craft-filters">
-        <TextField label="Поиск" placeholder="Название, цвет или артикул" value={q} onChange={(event) => setQ(event.target.value)} />
+        <div className="craft-toolbar">
+          <TextField label="Поиск" placeholder="Название, цвет или артикул" value={q} onChange={(event) => setQ(event.target.value)} />
+          <Button variant="primary" className="craft-toolbar__add" aria-label="Новая позиция" onClick={() => setCreateOpen(true)}>
+            <IconPlus />
+            <span className="craft-toolbar__label">Новая</span>
+          </Button>
+        </div>
         <CraftFilters workspaceId={workspaceId} category={category} manufacturer={manufacturer} onCategory={setCategory} onManufacturer={setManufacturer} />
       </div>
 
       <div className="switch-row">
         <span aria-hidden="true">Только то, что есть в запасах</span>
         <Switch aria-label="Только то, что есть в запасах" checked={onlyInStock} onCheckedChange={setOnlyInStock} />
-      </div>
-
-      <div className="craft-actions">
-        <Button variant="primary" onClick={() => setCreateOpen(true)}>
-          <IconPlus />
-          Новая позиция
-        </Button>
       </div>
 
       {query.isPending && (
@@ -388,12 +392,13 @@ export default function CraftScreen() {
 
   return (
     <div className="page">
-      <header className="page__head">
+      <header className="page__head page__head--bar">
         <h1 className="page__title">Склад</h1>
+        <SpaceButton app="warehouse" space={space} />
+        {current && <WarehouseSettings key={`settings-${current.id}`} workspaceId={current.id} />}
       </header>
 
-      <SpaceBar app="warehouse" space={space} />
-      {current && <WarehouseSettings key={`settings-${current.id}`} workspaceId={current.id} />}
+      <SpaceState app="warehouse" space={space} />
 
       {current && (
         <>

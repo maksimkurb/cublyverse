@@ -13,7 +13,8 @@ import {
   useRemoveWishLink,
   useUpdateWish,
 } from "./data";
-import { formatQty, itemMeta, swatchStyle } from "./format";
+import { Swatch } from "./Swatch";
+import { formatQty, itemMeta } from "./format";
 import { PRIORITY_OPTIONS, WISH_STATUS_LABELS, WISH_STATUS_ORDER, isHttpURL, linkName, linkPriceLabel } from "./wishlist";
 
 type WishSource = "catalog" | "text";
@@ -116,7 +117,7 @@ export function CreateWishDialog({ workspaceId, onClose }: CreateWishDialogProps
               <ul className="card-list" aria-label="Позиции каталога">
                 {candidates.map((item) => (
                   <li className="card craft-row" key={item.id}>
-                    <span className="craft-swatch" style={swatchStyle(item)} aria-hidden="true" />
+                    <Swatch item={item} />
                     <div className="craft-row__text">
                       <span className="craft-row__title">{item.name}</span>
                       <span className="craft-row__meta">

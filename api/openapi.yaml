@@ -4090,6 +4090,10 @@ components:
             Unit the quantity is counted in. Defaults to the default unit of
             the category.
           example: шт
+        image_url:
+          type: string
+          description: An http(s) link to a photo of the item, or empty.
+          example: https://example.com/bead.jpg
         pack_size:
           type: number
           format: double

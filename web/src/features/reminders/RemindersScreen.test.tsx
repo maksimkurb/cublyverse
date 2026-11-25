@@ -21,7 +21,7 @@ vi.mock("./data", async (importOriginal) => {
 vi.mock("../workspaces/selection", () => ({
   useCurrentWorkspace: () => ({ current: { id: "44444444-4444-4444-8444-444444444444", name: "Личное" } }),
 }));
-vi.mock("../workspaces/SpaceBar", () => ({ SpaceBar: () => null }));
+vi.mock("../workspaces/SpaceBar", () => ({ SpaceButton: () => null, SpaceState: () => null }));
 vi.mock("../workspaces/data", () => ({ useWorkspaceMembers: () => ({ data: [] }) }));
 
 const user: Me = {

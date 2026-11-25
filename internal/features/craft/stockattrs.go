@@ -46,7 +46,7 @@ func rememberLinked(ctx context.Context, q *db.Queries, wid, target pgtype.UUID,
 		"name": private.Name, "article": private.Article, "series": private.Series,
 		"color_name": private.ColorName, "color_hex": private.ColorHex, "size": private.Size,
 		"finish": private.Finish, "unit": private.Unit, "source": private.Source,
-		"source_url": private.SourceUrl, "attrs": json.RawMessage(private.Attrs),
+		"source_url": private.SourceUrl, "image_url": private.ImageUrl, "attrs": json.RawMessage(private.Attrs),
 	}
 	encoded, err := json.Marshal(stockAttrs{ColorName: private.ColorName, ColorHex: private.ColorHex, Legacy: legacy})
 	if err != nil {

@@ -369,6 +369,7 @@ func craftItemInput(body gen.CraftItemInput) craft.ItemInput {
 		Finish:       stringParam(body.Finish),
 		Unit:         stringParam(body.Unit),
 		PackSize:     body.PackSize,
+		ImageURL:     stringParam(body.ImageUrl),
 	}
 	if body.ColorSource != nil {
 		input.ColorSource = string(*body.ColorSource)

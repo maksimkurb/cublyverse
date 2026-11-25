@@ -73,6 +73,33 @@ export function IconUsers(props: IconProps) {
   );
 }
 
+export function IconSettings(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+      <circle cx="16" cy="7" r="2.5" />
+      <circle cx="8" cy="17" r="2.5" />
+    </Icon>
+  );
+}
+
+export function IconEdit(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 20h4L19 9l-4-4L4 16Z" />
+      <path d="m13.5 6.5 4 4" />
+    </Icon>
+  );
+}
+
+export function IconTrash(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13" />
+    </Icon>
+  );
+}
+
 export function IconBox(props: IconProps) {
   return (
     <Icon {...props}>

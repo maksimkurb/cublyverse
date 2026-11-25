@@ -137,6 +137,7 @@ type mcpItem struct {
 	Unit         string         `json:"unit" jsonschema:"unit the quantity is counted in"`
 	PackSize     *float64       `json:"pack_size,omitempty" jsonschema:"how many base units one pack holds, when known"`
 	Attrs        map[string]any `json:"attrs,omitempty" jsonschema:"category specific attributes"`
+	ImageURL     string         `json:"image_url,omitempty" jsonschema:"link to a photo of the item"`
 	StockQty     float64        `json:"stock_qty" jsonschema:"quantity this workspace holds, in unit"`
 	InInventory  bool           `json:"in_inventory" jsonschema:"whether the workspace has a stock row for the item"`
 }
@@ -146,7 +147,7 @@ func itemToMCP(i Item) mcpItem {
 		ID: i.ID, Private: i.Private(), Category: i.Category, CategoryName: i.CategoryName,
 		Manufacturer: i.Manufacturer, Article: i.Article, Series: i.Series, Name: i.Name,
 		ColorName: i.ColorName, ColorHex: i.ColorHex, ColorSource: i.ColorSource, Size: i.Size,
-		Finish: i.Finish, Unit: i.Unit, PackSize: i.PackSize, Attrs: i.Attrs,
+		Finish: i.Finish, Unit: i.Unit, PackSize: i.PackSize, Attrs: i.Attrs, ImageURL: i.ImageURL,
 		StockQty: i.StockQty, InInventory: i.InInventory,
 	}
 }
@@ -237,13 +238,14 @@ type mcpItemData struct {
 	Unit         string         `json:"unit,omitempty" jsonschema:"unit; the category default when omitted"`
 	PackSize     *float64       `json:"pack_size,omitempty" jsonschema:"how many base units one pack holds"`
 	Attrs        map[string]any `json:"attrs,omitempty" jsonschema:"values of the category's extra fields by key, see craft_reference"`
+	ImageURL     string         `json:"image_url,omitempty" jsonschema:"http(s) link to a photo of the item"`
 }
 
 func (d mcpItemData) input() ItemInput {
 	return ItemInput{
 		Category: d.Category, Manufacturer: d.Manufacturer, Article: d.Article, Series: d.Series, Name: d.Name,
 		ColorName: d.ColorName, ColorHex: d.ColorHex, ColorSource: d.ColorSource, Size: d.Size, Finish: d.Finish,
-		Unit: d.Unit, PackSize: d.PackSize, Attrs: d.Attrs,
+		Unit: d.Unit, PackSize: d.PackSize, Attrs: d.Attrs, ImageURL: d.ImageURL,
 	}
 }
 

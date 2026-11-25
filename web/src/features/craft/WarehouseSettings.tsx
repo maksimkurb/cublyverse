@@ -4,7 +4,7 @@ import type { CraftCategory, CraftField, CraftReference } from "../../api/client
 import { describeApiError } from "../../api/errors";
 import { useHost, useHostBackButton } from "../../host/HostContext";
 import { Button, Checkbox, Notice, Segmented, SelectField, Sheet, TextField } from "../../ui/controls";
-import { IconPlus } from "../../ui/icons";
+import { IconEdit, IconPlus, IconSettings, IconTrash } from "../../ui/icons";
 import { useCraftReference, useReferenceMutations } from "./data";
 
 type Section = "categories" | "manufacturers" | "units" | "catalogs";
@@ -34,12 +34,12 @@ type Editing =
 export function WarehouseSettings({ workspaceId }: { workspaceId: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="space-bar">
-      <Button size="s" onClick={() => setOpen(true)}>
-        Настройки склада
-      </Button>
+    <>
+      <button type="button" className="cv-iconbtn" aria-label="Настройки склада" title="Настройки склада" onClick={() => setOpen(true)}>
+        <IconSettings />
+      </button>
       {open && <SettingsSheet workspaceId={workspaceId} onClose={() => setOpen(false)} />}
-    </div>
+    </>
   );
 }
 
@@ -88,18 +88,16 @@ function Row({ title, meta, onEdit, onDelete }: { title: string; meta: string; o
         <span className="craft-row__title">{title}</span>
         {meta && <span className="craft-row__meta">{meta}</span>}
       </div>
-      <div className="wish-actions">
-        {onEdit && (
-          <Button size="s" aria-label={`Изменить: ${title}`} onClick={onEdit}>
-            Изменить
-          </Button>
-        )}
-        {onDelete && (
-          <Button size="s" variant="danger" aria-label={`Удалить: ${title}`} onClick={onDelete}>
-            Удалить
-          </Button>
-        )}
-      </div>
+      {onEdit && (
+        <button type="button" className="cv-iconbtn" aria-label={`Изменить: ${title}`} title="Изменить" onClick={onEdit}>
+          <IconEdit />
+        </button>
+      )}
+      {onDelete && (
+        <button type="button" className="cv-iconbtn settings-row__delete" aria-label={`Удалить: ${title}`} title="Удалить" onClick={onDelete}>
+          <IconTrash />
+        </button>
+      )}
     </li>
   );
 }

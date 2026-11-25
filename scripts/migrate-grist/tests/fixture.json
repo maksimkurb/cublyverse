@@ -1,0 +1,370 @@
+{
+  "doc_id": "q8Q3PUwU5uHSnTD6bQo6xC",
+  "fetched_at": "2026-11-25T00:00:00+00:00",
+  "tables": {
+    "MaterialTypes": [
+      {"id": 1, "fields": {"Name": "Мулине", "Notes": ""}},
+      {"id": 2, "fields": {"Name": "Бисер", "Notes": ""}},
+      {"id": 3, "fields": {"Name": "Стразы", "Notes": ""}},
+      {"id": 4, "fields": {"Name": "Пайетки", "Notes": ""}},
+      {"id": 5, "fields": {"Name": "Фурнитура", "Notes": "нет в каталоге Cublyverse"}}
+    ],
+    "Manufacturers": [
+      {"id": 1, "fields": {"Name": "DMC", "Website": "https://www.dmc.com", "Notes": "Франция"}},
+      {"id": 2, "fields": {"Name": "Gamma", "Website": "", "Notes": ""}},
+      {"id": 3, "fields": {"Name": "PRECIOSA Ornela", "Website": "https://www.preciosa-ornela.com", "Notes": ""}}
+    ],
+    "Projects": [
+      {"id": 1, "fields": {"Name": "Серьги «Роза»", "Notes": "подарок"}},
+      {"id": 2, "fields": {"Name": "Браслет", "Notes": ""}},
+      {"id": 3, "fields": {"Name": "Закладка", "Notes": ""}}
+    ],
+    "Materials": [
+      {
+        "id": 101,
+        "fields": {
+          "Name": "Мулине DMC 321",
+          "Type": 1,
+          "Manufacturer": 1,
+          "Article": "321",
+          "Unit": "моток",
+          "CurrentStock": 5,
+          "Color": "красный",
+          "ColorHex": "#c8102e",
+          "ColorR": 200,
+          "ColorG": 16,
+          "ColorB": 46,
+          "ColorDataSource": "Representative chart",
+          "UsedIn": ["L", 1, 2],
+          "Series": "Mouliné Spécial",
+          "Size": "",
+          "Finish": "матовая",
+          "Notes": "подарок",
+          "SourceText": "старый текст",
+          "ManufacturerURL": "https://www.dmc.com/321"
+        }
+      },
+      {
+        "id": 102,
+        "fields": {
+          "Name": "Мулине DMC 321 (дубль)",
+          "Type": 1,
+          "Manufacturer": 1,
+          "Article": "321",
+          "Unit": "моток",
+          "CurrentStock": 2,
+          "Color": "алый",
+          "ColorHex": "",
+          "ColorR": null,
+          "ColorG": null,
+          "ColorB": null,
+          "ColorDataSource": "",
+          "UsedIn": ["L", 2, 3],
+          "Series": "",
+          "Size": "8 м",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 103,
+        "fields": {
+          "Name": "Бисер без производителя",
+          "Type": 2,
+          "Manufacturer": 0,
+          "Article": "",
+          "Unit": "",
+          "CurrentStock": 10,
+          "Color": "синий",
+          "ColorHex": "",
+          "ColorDataSource": "",
+          "UsedIn": null,
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 104,
+        "fields": {
+          "Name": "Стразы PRECIOSA X-1",
+          "Type": 3,
+          "Manufacturer": 3,
+          "Article": "X-1",
+          "Unit": "г",
+          "CurrentStock": 0,
+          "Color": "",
+          "ColorHex": "#D2D05",
+          "ColorDataSource": "Approximation",
+          "UsedIn": ["L", 3],
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 105,
+        "fields": {
+          "Name": "Пайетки ассорти",
+          "Type": 4,
+          "Manufacturer": null,
+          "Article": "",
+          "Unit": "упаковка",
+          "CurrentStock": 3,
+          "Color": "",
+          "ColorHex": "",
+          "ColorDataSource": "Gamma chart 2024",
+          "UsedIn": [],
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 106,
+        "fields": {
+          "Name": "Фурнитура непонятная",
+          "Type": 5,
+          "Manufacturer": 0,
+          "Article": "",
+          "Unit": "шт",
+          "CurrentStock": 1,
+          "Color": "",
+          "ColorHex": "",
+          "ColorDataSource": "",
+          "UsedIn": null,
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 107,
+        "fields": {
+          "Name": "",
+          "Type": 2,
+          "Manufacturer": 1,
+          "Article": " 1152 ",
+          "Unit": "г",
+          "CurrentStock": 8,
+          "Color": "светло-зелёный",
+          "ColorHex": "#aabbcc",
+          "ColorR": 170,
+          "ColorG": 187,
+          "ColorB": 204,
+          "ColorDataSource": "Approximation (chart)",
+          "UsedIn": ["L", 3],
+          "Series": "",
+          "Size": "",
+          "Finish": "прозрачный",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 108,
+        "fields": {
+          "Name": "Материал без типа",
+          "Type": null,
+          "Manufacturer": 1,
+          "Article": "NT-1",
+          "Unit": "г",
+          "CurrentStock": 1,
+          "Color": "",
+          "ColorHex": "",
+          "ColorDataSource": "",
+          "UsedIn": null,
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 109,
+        "fields": {
+          "Name": "Gamma GB-01",
+          "Type": 2,
+          "Manufacturer": 2,
+          "Article": "GB-01",
+          "Unit": "г",
+          "CurrentStock": "12.5",
+          "Color": "",
+          "ColorHex": "",
+          "ColorDataSource": "",
+          "UsedIn": null,
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 110,
+        "fields": {
+          "Name": "Стразы PR-9",
+          "Type": 3,
+          "Manufacturer": 3,
+          "Article": "PR-9",
+          "Unit": "шт",
+          "CurrentStock": -2,
+          "Color": "",
+          "ColorHex": "#123456",
+          "ColorDataSource": "Approximation",
+          "UsedIn": ["L", 2],
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 111,
+        "fields": {
+          "Name": "Мулине без артикула",
+          "Type": 1,
+          "Manufacturer": 0,
+          "Article": "",
+          "Unit": "моток",
+          "CurrentStock": 1,
+          "Color": "",
+          "ColorHex": "",
+          "ColorDataSource": "",
+          "UsedIn": ["L", 99],
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 112,
+        "fields": {
+          "Name": "Мулине МИКС-1",
+          "Type": 1,
+          "Manufacturer": 0,
+          "Article": "МИКС-1",
+          "Unit": "кг",
+          "CurrentStock": 1.5,
+          "Color": "",
+          "ColorHex": "",
+          "ColorDataSource": "",
+          "UsedIn": [],
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 113,
+        "fields": {
+          "Name": "   ",
+          "Type": 4,
+          "Manufacturer": 0,
+          "Article": "",
+          "Unit": "упаковка",
+          "CurrentStock": 0,
+          "Color": "",
+          "ColorHex": "",
+          "ColorDataSource": "",
+          "UsedIn": null,
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 114,
+        "fields": {
+          "Name": "Стразы PR-9 голубые",
+          "Type": 2,
+          "Manufacturer": 3,
+          "Article": "PR-9",
+          "Unit": "г",
+          "CurrentStock": 4,
+          "Color": "голубой",
+          "ColorHex": "",
+          "ColorDataSource": "",
+          "UsedIn": ["L", 1],
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 115,
+        "fields": {
+          "Name": "Бисер DMC 1152 (дубль)",
+          "Type": 2,
+          "Manufacturer": 1,
+          "Article": "1152",
+          "Unit": "г",
+          "CurrentStock": 4,
+          "Color": "зелёный",
+          "ColorHex": "",
+          "ColorDataSource": "",
+          "UsedIn": ["L", 1],
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      },
+      {
+        "id": 116,
+        "fields": {
+          "Name": "Стеклярус без числа",
+          "Type": 2,
+          "Manufacturer": 0,
+          "Article": "",
+          "Unit": "г",
+          "CurrentStock": "много",
+          "Color": "",
+          "ColorHex": "",
+          "ColorDataSource": "",
+          "UsedIn": null,
+          "Series": "",
+          "Size": "",
+          "Finish": "",
+          "Notes": "",
+          "SourceText": "",
+          "ManufacturerURL": ""
+        }
+      }
+    ]
+  }
+}

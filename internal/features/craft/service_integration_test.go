@@ -78,7 +78,7 @@ func TestWorkspaceMembershipIsolation(t *testing.T) {
 	maxim := e.user(t, "maxim", "maxim@example.com")
 	stranger := e.user(t, "stranger", "x@example.com")
 
-	home, err := e.workspaces.Create(ctx, lilya, "Дом")
+	home, err := e.workspaces.Create(ctx, lilya, workspace.AppWarehouse, "Дом")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,8 +122,8 @@ func TestInventoryAdjustAndLink(t *testing.T) {
 	ctx := context.Background()
 	user := e.user(t, "lilya", "lilya@example.com")
 	other := e.user(t, "other", "o@example.com")
-	ws, _ := e.workspaces.Create(ctx, user, "Дом")
-	otherWS, _ := e.workspaces.Create(ctx, other, "Чужой")
+	ws, _ := e.workspaces.Create(ctx, user, workspace.AppWarehouse, "Дом")
+	otherWS, _ := e.workspaces.Create(ctx, other, workspace.AppWarehouse, "Чужой")
 
 	// A private item for something not in any catalogue.
 	pearl, err := e.craft.CreateItem(ctx, user, ws.ID, craft.ItemInput{

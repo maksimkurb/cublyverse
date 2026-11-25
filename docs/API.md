@@ -148,8 +148,13 @@ Authorization: Bearer cv_pat_…
 
 Операции тегов `workspaces` и `craft` доступны только интерактивной сессии:
 `patPermission` не маппит их на области токена, поэтому токен получает `403`.
-MCP-доступ к «Бусинкам» идёт через отдельный endpoint `/mcp/w/{id}` с
-областями `craft:read`/`craft:write` (`docs/MCP.md`).
+MCP-доступ к складу идёт через `/mcp` с областями `craft:read`/`craft:write`
+(`docs/MCP.md`).
+
+Пространства принадлежат мини-аппу (`app`: `warehouse` или `reminders`).
+`GET /workspaces?app=…` фильтрует список, `POST /workspaces` требует `app`.
+У напоминания есть `space_id`, `author_id` и `recipient_ids`;
+`GET /reminders?space_id=…` показывает одно пространство.
 
 Правила:
 

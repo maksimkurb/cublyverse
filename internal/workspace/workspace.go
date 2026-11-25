@@ -1,6 +1,6 @@
-// Package workspace implements shared workspaces: a named space whose members
-// all have full, equal access to its data. A user can belong to several
-// workspaces. There are no roles and no invitation links; a member is added by
+// Package workspace implements shared spaces: a named space of one mini-app
+// whose members all have full, equal access to its data. A user can belong to
+// several spaces, and sharing a space of one mini-app shares nothing else. There are no roles and no invitation links; a member is added by
 // picking a user who has already signed in at least once.
 //
 // Features that keep data per workspace call Service.Require to authorise a
@@ -29,6 +29,18 @@ import (
 // MaxNameRunes bounds a workspace name.
 const MaxNameRunes = 80
 
+// Mini-apps that keep their data in spaces.
+const (
+	AppWarehouse = "warehouse"
+	AppReminders = "reminders"
+)
+
+// PersonalName is the name of the space created for a user who has none.
+const PersonalName = "Личное"
+
+// ValidApp reports whether app names a mini-app with spaces.
+func ValidApp(app string) bool { return app == AppWarehouse || app == AppReminders }
+
 var (
 	// ErrNotFound means the workspace does not exist or the user is not a
 	// member of it.
@@ -47,8 +59,12 @@ func (e *ValidationError) Error() string { return e.Message }
 
 // Workspace is a shared space.
 type Workspace struct {
-	ID        string
-	Name      string
+	ID   string
+	Name string
+	// App is the mini-app the space belongs to.
+	App string
+	// Personal marks the creator's own default space of the mini-app.
+	Personal  bool
 	CreatedAt time.Time
 }
 
@@ -79,11 +95,15 @@ type Service struct {
 // New returns the service.
 func New(st *store.Store) *Service { return &Service{st: st} }
 
-// Create makes a workspace owned by the user, who becomes its first member.
-func (s *Service) Create(ctx context.Context, userID, name string) (Workspace, error) {
+// Create makes a space of a mini-app owned by the user, who becomes its first
+// member. The first space a user creates for a mini-app is their personal one.
+func (s *Service) Create(ctx context.Context, userID, app, name string) (Workspace, error) {
 	uid, err := ParseID(userID)
 	if err != nil {
 		return Workspace{}, err
+	}
+	if !ValidApp(app) {
+		return Workspace{}, &ValidationError{Message: "Неизвестный мини-апп."}
 	}
 	name, err = canonicalName(name)
 	if err != nil {
@@ -92,13 +112,8 @@ func (s *Service) Create(ctx context.Context, userID, name string) (Workspace, e
 	var created db.Workspace
 	err = s.st.InTx(ctx, func(q *db.Queries) error {
 		var err error
-		created, err = q.CreateWorkspace(ctx, db.CreateWorkspaceParams{Name: name, CreatedBy: uid})
-		if err != nil {
-			return fmt.Errorf("create workspace: %w", err)
-		}
-		return q.AddWorkspaceMember(ctx, db.AddWorkspaceMemberParams{
-			WorkspaceID: created.ID, UserID: uid, AddedBy: uid,
-		})
+		created, err = CreateTx(ctx, q, uid, app, name)
+		return err
 	})
 	if err != nil {
 		return Workspace{}, err
@@ -106,13 +121,58 @@ func (s *Service) Create(ctx context.Context, userID, name string) (Workspace, e
 	return toWorkspace(created), nil
 }
 
-// List returns the workspaces of the user.
-func (s *Service) List(ctx context.Context, userID string) ([]Workspace, error) {
+// CreateTx is Create over an open transaction, so a mini-app can fill the new
+// space atomically. The name must already be valid.
+func CreateTx(ctx context.Context, q *db.Queries, userID pgtype.UUID, app, name string) (db.Workspace, error) {
+	has, err := q.HasPersonalWorkspace(ctx, db.HasPersonalWorkspaceParams{CreatedBy: userID, App: app})
+	if err != nil {
+		return db.Workspace{}, fmt.Errorf("check personal workspace: %w", err)
+	}
+	created, err := q.CreateWorkspace(ctx, db.CreateWorkspaceParams{Name: name, CreatedBy: userID, App: app, Personal: !has})
+	if err != nil {
+		return db.Workspace{}, fmt.Errorf("create workspace: %w", err)
+	}
+	if err := q.AddWorkspaceMember(ctx, db.AddWorkspaceMemberParams{WorkspaceID: created.ID, UserID: userID, AddedBy: userID}); err != nil {
+		return db.Workspace{}, fmt.Errorf("add owner: %w", err)
+	}
+	return created, nil
+}
+
+// DefaultTx returns the space of the mini-app things go to when none is named:
+// the user's personal space, else the oldest one they created. Without either a
+// «Личное» space is created.
+func DefaultTx(ctx context.Context, q *db.Queries, userID pgtype.UUID, app string) (db.Workspace, error) {
+	params := db.GetDefaultWorkspaceParams{UserID: userID, App: app}
+	row, err := q.GetDefaultWorkspace(ctx, params)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return row, err
+	}
+	// A personal space the user left must give up the flag, or it would block
+	// the new one.
+	if err := q.ClearPersonalWorkspace(ctx, db.ClearPersonalWorkspaceParams{CreatedBy: userID, App: app}); err != nil {
+		return db.Workspace{}, fmt.Errorf("clear personal workspace: %w", err)
+	}
+	row, err = q.CreatePersonalWorkspace(ctx, db.CreatePersonalWorkspaceParams{Name: PersonalName, CreatedBy: userID, App: app})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return q.GetDefaultWorkspace(ctx, params)
+	}
+	if err != nil {
+		return db.Workspace{}, fmt.Errorf("create personal workspace: %w", err)
+	}
+	if err := q.AddWorkspaceMember(ctx, db.AddWorkspaceMemberParams{WorkspaceID: row.ID, UserID: userID, AddedBy: userID}); err != nil {
+		return db.Workspace{}, fmt.Errorf("add owner: %w", err)
+	}
+	return row, nil
+}
+
+// List returns the spaces of the user, of one mini-app or of all of them when
+// app is empty.
+func (s *Service) List(ctx context.Context, userID, app string) ([]Workspace, error) {
 	uid, err := ParseID(userID)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.st.Queries().ListWorkspacesForUser(ctx, uid)
+	rows, err := s.st.Queries().ListWorkspacesForUser(ctx, db.ListWorkspacesForUserParams{UserID: uid, App: app})
 	if err != nil {
 		return nil, fmt.Errorf("list workspaces: %w", err)
 	}
@@ -121,6 +181,19 @@ func (s *Service) List(ctx context.Context, userID string) ([]Workspace, error) 
 		out = append(out, toWorkspace(row))
 	}
 	return out, nil
+}
+
+// RequireApp is Require that also demands a space of the given mini-app: a
+// reminders space is not a warehouse.
+func (s *Service) RequireApp(ctx context.Context, userID, workspaceID, app string) (Workspace, error) {
+	ws, err := s.Require(ctx, userID, workspaceID)
+	if err != nil {
+		return Workspace{}, err
+	}
+	if ws.App != app {
+		return Workspace{}, ErrNotFound
+	}
+	return ws, nil
 }
 
 // Require returns the workspace when the user is a member of it, ErrNotFound
@@ -315,7 +388,7 @@ func canonicalName(name string) (string, error) {
 }
 
 func toWorkspace(row db.Workspace) Workspace {
-	return Workspace{ID: FormatID(row.ID), Name: row.Name, CreatedAt: row.CreatedAt}
+	return Workspace{ID: FormatID(row.ID), Name: row.Name, App: row.App, Personal: row.Personal, CreatedAt: row.CreatedAt}
 }
 
 func deref(s *string) string {

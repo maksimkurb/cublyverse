@@ -53,10 +53,9 @@ type Deps struct {
 	// authorization server. Nil disables OAuth: only personal access tokens
 	// work and the 401 challenge carries no resource metadata.
 	OAuth OAuthVerifier
-	// WorkspaceAccess reports whether a user belongs to a workspace. It guards
-	// the per-workspace endpoint /mcp/w/{id}; nil denies every workspace
-	// endpoint.
-	WorkspaceAccess func(ctx context.Context, userID, workspaceID string) bool
+	// Spaces lists the spaces of a user for the spaces_list tool. Nil makes the
+	// tool answer with an empty list.
+	Spaces func(ctx context.Context, userID string) ([]Space, error)
 }
 
 // OAuthVerifier is the part of the authorization server the MCP endpoint needs.
@@ -64,7 +63,7 @@ type OAuthVerifier interface {
 	// Verify checks an access token.
 	Verify(ctx context.Context, raw string) (oauthserver.Token, error)
 	// ResourceMetadataURL is where clients find the protected resource metadata
-	// of an MCP path.
+	// of the MCP path.
 	ResourceMetadataURL(resourcePath string) string
 	// ResourceURL is the canonical resource identifier of an MCP path.
 	ResourceURL(resourcePath string) string
@@ -74,12 +73,7 @@ type OAuthVerifier interface {
 // once at startup.
 type Server struct {
 	deps Deps
-	// sdk serves /mcp (the user's own tools, such as reminders); wsSDK serves
-	// /mcp/w/{id} (the tools of one workspace). Two servers keep the tool lists
-	// apart: a workspace client does not see reminders and a user client does
-	// not see tools that need a workspace.
-	sdk   *mcp.Server
-	wsSDK *mcp.Server
+	sdk  *mcp.Server
 
 	mu    sync.Mutex
 	names []string
@@ -94,9 +88,8 @@ func New(deps Deps) *Server {
 		deps.Logger = slog.Default()
 	}
 	s := &Server{
-		deps:  deps,
-		sdk:   mcp.NewServer(&mcp.Implementation{Name: ImplementationName, Version: deps.Version}, nil),
-		wsSDK: mcp.NewServer(&mcp.Implementation{Name: ImplementationName, Version: deps.Version}, nil),
+		deps: deps,
+		sdk:  mcp.NewServer(&mcp.Implementation{Name: ImplementationName, Version: deps.Version}, nil),
 	}
 	s.registerCore()
 	return s
@@ -111,16 +104,6 @@ func (s *Server) Tools() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string(nil), s.names...)
-}
-
-// AddWorkspaceTool registers a typed tool on the per-workspace endpoint
-// /mcp/w/{id}. The handler finds the workspace in Principal.WorkspaceID, which
-// the endpoint has already checked for membership.
-func AddWorkspaceTool[In, Out any](s *Server, tool *mcp.Tool, handler mcp.ToolHandlerFor[In, Out]) {
-	s.mu.Lock()
-	s.names = append(s.names, tool.Name)
-	s.mu.Unlock()
-	mcp.AddTool(s.wsSDK, tool, handler)
 }
 
 // AddTool registers a typed tool. It is the one entry point features use, so
@@ -140,12 +123,7 @@ func (s *Server) Handler() http.Handler {
 		return s.handler
 	}
 	transport := mcp.NewStreamableHTTPHandler(
-		func(r *http.Request) *mcp.Server {
-			if workspaceID, ok := oauthserver.ParseResourcePath(strings.TrimSuffix(r.URL.Path, "/")); ok && workspaceID != "" {
-				return s.wsSDK
-			}
-			return s.sdk
-		},
+		func(*http.Request) *mcp.Server { return s.sdk },
 		&mcp.StreamableHTTPOptions{
 			Stateless: true,
 			Logger:    s.deps.Logger,
@@ -158,22 +136,14 @@ func (s *Server) Handler() http.Handler {
 		},
 	)
 	s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// /mcp is the user's workspace-less endpoint (reminders); /mcp/w/{id} is
-		// the endpoint of one workspace. Anything else is not an MCP resource.
+		// There is one MCP resource; tools name the space they work with.
 		resourcePath := strings.TrimSuffix(r.URL.Path, "/")
-		workspaceID, ok := oauthserver.ParseResourcePath(resourcePath)
-		if !ok {
+		if resourcePath != oauthserver.ResourcePath {
 			http.NotFound(w, r)
 			return
 		}
-		principal, ok := s.authenticate(w, r, resourcePath, workspaceID)
+		principal, ok := s.authenticate(w, r, resourcePath)
 		if !ok {
-			return
-		}
-		principal.WorkspaceID = workspaceID
-		if workspaceID != "" && (s.deps.WorkspaceAccess == nil || !s.deps.WorkspaceAccess(r.Context(), principal.ID, workspaceID)) {
-			// A workspace the user is not in looks like a missing one.
-			http.NotFound(w, r)
 			return
 		}
 		transport.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), principal)))
@@ -184,7 +154,7 @@ func (s *Server) Handler() http.Handler {
 // authenticate resolves the bearer token of an MCP request: an OAuth access
 // token or a personal access token. On failure it answers the request and
 // returns false.
-func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, resourcePath, workspaceID string) (Principal, bool) {
+func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, resourcePath string) (Principal, bool) {
 	challenge := `Bearer realm="cublyverse-mcp"`
 	if s.deps.OAuth != nil {
 		challenge += `, resource_metadata="` + s.deps.OAuth.ResourceMetadataURL(resourcePath) + `"`
@@ -196,14 +166,9 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, resourcePa
 			writeUnauthorized(w, challenge+`, error="invalid_token"`, "Недействительный токен доступа")
 			return Principal{}, false
 		}
-		// The token is bound to the resource it was issued for (RFC 8707); a
-		// token for one workspace must not open another.
+		// The token is bound to the resource it was issued for (RFC 8707).
 		if token.Resource != "" && token.Resource != s.deps.OAuth.ResourceURL(resourcePath) {
 			writeUnauthorized(w, challenge+`, error="invalid_token"`, "Токен выдан для другого ресурса")
-			return Principal{}, false
-		}
-		if workspaceID != "" && token.WorkspaceID != workspaceID {
-			writeUnauthorized(w, challenge+`, error="invalid_token"`, "Токен выдан для другого workspace")
 			return Principal{}, false
 		}
 		return Principal{ID: token.UserID, Scopes: token.Scopes, TokenID: token.ID}, true

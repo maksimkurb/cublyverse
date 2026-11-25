@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WORKSPACE_STORAGE_KEY, readStoredWorkspaceID, writeStoredWorkspaceID } from "./selection";
+import { readStoredWorkspaceID, workspaceStorageKey, writeStoredWorkspaceID } from "./selection";
 
 /** Minimal in-memory localStorage; jsdom does not always provide one. */
 function fakeStorage() {
@@ -27,12 +27,14 @@ beforeEach(() => {
 
 describe("workspace selection storage", () => {
   it("remembers and clears the chosen workspace", () => {
-    writeStoredWorkspaceID("44444444-4444-4444-8444-444444444444");
-    expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).toBe("44444444-4444-4444-8444-444444444444");
-    expect(readStoredWorkspaceID()).toBe("44444444-4444-4444-8444-444444444444");
+    writeStoredWorkspaceID("warehouse", "44444444-4444-4444-8444-444444444444");
+    expect(window.localStorage.getItem(workspaceStorageKey("warehouse"))).toBe("44444444-4444-4444-8444-444444444444");
+    expect(readStoredWorkspaceID("warehouse")).toBe("44444444-4444-4444-8444-444444444444");
+    // Every mini-app remembers its own space.
+    expect(readStoredWorkspaceID("reminders")).toBeNull();
 
-    writeStoredWorkspaceID(null);
-    expect(readStoredWorkspaceID()).toBeNull();
+    writeStoredWorkspaceID("warehouse", null);
+    expect(readStoredWorkspaceID("warehouse")).toBeNull();
   });
 
   it("keeps working when the browser refuses storage", () => {
@@ -48,7 +50,7 @@ describe("workspace selection storage", () => {
       }),
     });
 
-    expect(() => writeStoredWorkspaceID("id")).not.toThrow();
-    expect(readStoredWorkspaceID()).toBeNull();
+    expect(() => writeStoredWorkspaceID("warehouse", "id")).not.toThrow();
+    expect(readStoredWorkspaceID("warehouse")).toBeNull();
   });
 });

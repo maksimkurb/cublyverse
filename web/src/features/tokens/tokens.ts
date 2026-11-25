@@ -30,12 +30,12 @@ export const SCOPE_OPTIONS: ScopeOption[] = [
   {
     value: "craft:read",
     label: "Чтение «Бусинок»",
-    description: "Смотреть каталог, запасы и закупки workspace (адрес /mcp/w/…)",
+    description: "Смотреть каталог, запасы, закупки и проекты складов",
   },
   {
     value: "craft:write",
     label: "Изменение «Бусинок»",
-    description: "Менять запасы, каталог и закупки workspace",
+    description: "Менять запасы, каталог, закупки и проекты складов",
   },
 ];
 

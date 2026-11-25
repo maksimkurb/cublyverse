@@ -1,7 +1,41 @@
 -- name: CreateWorkspace :one
-INSERT INTO workspaces (name, created_by)
-VALUES ($1, $2)
+INSERT INTO workspaces (name, created_by, app, personal)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
+
+-- name: CreatePersonalWorkspace :one
+-- Returns no row when another request created the personal space first.
+INSERT INTO workspaces (name, created_by, app, personal)
+VALUES ($1, $2, $3, true)
+ON CONFLICT (created_by, app) WHERE personal DO NOTHING
+RETURNING *;
+
+-- name: GetDefaultWorkspace :one
+-- The space things go to when none is named: the personal one, else the oldest
+-- space the user created. Membership is required in both cases.
+SELECT w.*
+FROM workspaces w
+JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = sqlc.arg(user_id)::uuid
+WHERE w.app = sqlc.arg(app)::text
+  AND w.created_by = sqlc.arg(user_id)::uuid
+ORDER BY w.personal DESC, w.created_at, w.id
+LIMIT 1;
+
+-- name: HasPersonalWorkspace :one
+SELECT EXISTS (
+    SELECT 1 FROM workspaces
+    WHERE created_by = $1
+      AND app = $2
+      AND personal
+);
+
+-- name: ClearPersonalWorkspace :exec
+-- Used when the user is no longer a member of their old personal space.
+UPDATE workspaces
+SET personal = false
+WHERE created_by = $1
+  AND app = $2
+  AND personal;
 
 -- name: AddWorkspaceMember :exec
 -- Idempotent: adding an existing member changes nothing.
@@ -27,8 +61,9 @@ SELECT EXISTS (
 SELECT w.*
 FROM workspaces w
 JOIN workspace_members m ON m.workspace_id = w.id
-WHERE m.user_id = $1
-ORDER BY w.name, w.id;
+WHERE m.user_id = sqlc.arg(user_id)::uuid
+  AND (sqlc.arg(app)::text = '' OR w.app = sqlc.arg(app))
+ORDER BY w.app, w.personal DESC, w.name, w.id;
 
 -- name: GetWorkspaceForUser :one
 SELECT w.*

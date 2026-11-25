@@ -30,7 +30,7 @@ const (
 // registerWishlistMCP adds the wish list and project tools to the workspace
 // endpoint. It is called from registerMCP.
 func (f *Feature) registerWishlistMCP(server *mcpserver.Server) {
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolWishlistList, Title: "List the wish list",
 		Description: "List what the workspace wants to buy. By default only entries with status " +
 			"wanted are returned; pass ordered or bought for another status, or all for every entry. " +
@@ -38,7 +38,7 @@ func (f *Feature) registerWishlistMCP(server *mcpserver.Server) {
 		Annotations: readAnnotations("List the wish list"),
 	}, f.mcpWishlistList)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolWishlistAdd, Title: "Add a wish",
 		Description: "Add an entry to the wish list: either a catalogue item (catalog_item_id) or free " +
 			"text (title) for something that is not in any catalogue yet. The title defaults to the item " +
@@ -47,7 +47,7 @@ func (f *Feature) registerWishlistMCP(server *mcpserver.Server) {
 		Annotations: writeAnnotations("Add a wish", false, false),
 	}, f.mcpWishlistAdd)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolWishlistUpdate, Title: "Update a wish",
 		Description: "Change the quantity, priority, note or status of a wish list entry. Omitted fields " +
 			"keep their current values; status is wanted, ordered or bought. Use craft_wishlist_mark_bought " +
@@ -55,26 +55,26 @@ func (f *Feature) registerWishlistMCP(server *mcpserver.Server) {
 		Annotations: writeAnnotations("Update a wish", false, true),
 	}, f.mcpWishlistUpdate)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolWishlistRemove, Title: "Remove a wish",
 		Description: "Delete a wish list entry together with its links. The stock is not changed.",
 		Annotations: writeAnnotations("Remove a wish", true, true),
 	}, f.mcpWishlistRemove)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolWishlistLinkAdd, Title: "Add a shop link to a wish",
 		Description: "Attach a shop page where the wished item can be bought: an http(s) url, the shop " +
 			"name, and optionally the price, currency and whether the shop has it in stock.",
 		Annotations: writeAnnotations("Add a shop link to a wish", false, false),
 	}, f.mcpWishlistLinkAdd)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolWishlistLinkRemove, Title: "Remove a shop link from a wish",
 		Description: "Delete one shop link of a wish list entry.",
 		Annotations: writeAnnotations("Remove a shop link from a wish", true, true),
 	}, f.mcpWishlistLinkRemove)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolWishlistMarkBought, Title: "Mark a wish as bought",
 		Description: "Mark a wish list entry as bought. With add_to_stock set and a catalogue item, the " +
 			"wanted quantity is added to the stock in the same transaction, exactly like craft_stock_adjust; " +
@@ -82,13 +82,13 @@ func (f *Feature) registerWishlistMCP(server *mcpserver.Server) {
 		Annotations: writeAnnotations("Mark a wish as bought", false, true),
 	}, f.mcpWishlistMarkBought)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolProjectList, Title: "List projects",
 		Description: "List the craft projects of the workspace with the number of materials planned in each.",
 		Annotations: readAnnotations("List projects"),
 	}, f.mcpProjectList)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolProjectGet, Title: "Get a project",
 		Description: "Return one project with its materials: planned quantity, quantity already used, the " +
 			"current stock and the shortage. shortage = max(0, qty_planned - qty_used - stock), the quantity " +
@@ -96,14 +96,14 @@ func (f *Feature) registerWishlistMCP(server *mcpserver.Server) {
 		Annotations: readAnnotations("Get a project"),
 	}, f.mcpProjectGet)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolProjectCreate, Title: "Create a project",
 		Description: "Create a craft project with a name and optional notes. Materials are added with " +
 			"craft_project_set_material.",
 		Annotations: writeAnnotations("Create a project", false, false),
 	}, f.mcpProjectCreate)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolProjectSetMaterial, Title: "Plan a material for a project",
 		Description: "Add a catalogue item to the project plan or change its planned quantity. Identify the " +
 			"item by item_id or by manufacturer + article. A missing qty_planned clears the plan; used " +
@@ -111,7 +111,7 @@ func (f *Feature) registerWishlistMCP(server *mcpserver.Server) {
 		Annotations: writeAnnotations("Plan a material for a project", false, true),
 	}, f.mcpProjectSetMaterial)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolProjectUseMaterial, Title: "Use material for a project",
 		Description: "Withdraw material from the stock for a project: decreases the stock and increases the " +
 			"used quantity of the material in the same transaction. A withdrawal larger than the stock is an " +
@@ -119,7 +119,7 @@ func (f *Feature) registerWishlistMCP(server *mcpserver.Server) {
 		Annotations: writeAnnotations("Use material for a project", false, false),
 	}, f.mcpProjectUseMaterial)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolProjectShortageToWish, Title: "Add the project shortage to the wish list",
 		Description: "Add every material of the project whose shortage is positive (the quantity still to " +
 			"buy) to the wish list, skipping materials that are already wanted. Returns the added wishes; " +
@@ -184,6 +184,7 @@ type mcpWishesOutput struct {
 }
 
 type mcpWishIDInput struct {
+	mcpSpace
 	WishID string `json:"wish_id" jsonschema:"wish list entry id (UUID)"`
 }
 
@@ -199,10 +200,12 @@ type mcpWishLinkRemoveOutput struct {
 }
 
 type mcpWishlistListInput struct {
+	mcpSpace
 	Status string `json:"status,omitempty" jsonschema:"wanted (default), ordered, bought or all"`
 }
 
 type mcpWishAddInput struct {
+	mcpSpace
 	CatalogItemID string   `json:"catalog_item_id,omitempty" jsonschema:"catalogue item id (UUID); omit for a free-text wish"`
 	Title         string   `json:"title,omitempty" jsonschema:"what is wanted; defaults to the item name when catalog_item_id is set"`
 	QtyWanted     *float64 `json:"qty_wanted,omitempty" jsonschema:"how much is wanted, positive, in the item unit"`
@@ -211,6 +214,7 @@ type mcpWishAddInput struct {
 }
 
 type mcpWishUpdateInput struct {
+	mcpSpace
 	WishID    string   `json:"wish_id" jsonschema:"wish list entry id (UUID)"`
 	QtyWanted *float64 `json:"qty_wanted,omitempty" jsonschema:"new wanted quantity, positive; omit to keep the current one"`
 	Priority  *int     `json:"priority,omitempty" jsonschema:"new priority 0..2; omit to keep the current one"`
@@ -219,6 +223,7 @@ type mcpWishUpdateInput struct {
 }
 
 type mcpWishLinkAddInput struct {
+	mcpSpace
 	WishID   string   `json:"wish_id" jsonschema:"wish list entry id (UUID)"`
 	URL      string   `json:"url" jsonschema:"shop page, must start with http:// or https://"`
 	ShopName string   `json:"shop_name,omitempty" jsonschema:"shop name"`
@@ -228,11 +233,13 @@ type mcpWishLinkAddInput struct {
 }
 
 type mcpWishLinkRemoveInput struct {
+	mcpSpace
 	WishID string `json:"wish_id" jsonschema:"wish list entry id (UUID)"`
 	LinkID string `json:"link_id" jsonschema:"shop link id (UUID)"`
 }
 
 type mcpWishMarkBoughtInput struct {
+	mcpSpace
 	WishID     string `json:"wish_id" jsonschema:"wish list entry id (UUID)"`
 	AddToStock bool   `json:"add_to_stock,omitempty" jsonschema:"add the wanted quantity to the stock when the entry points at a catalogue item"`
 }
@@ -273,21 +280,25 @@ type mcpProjectsOutput struct {
 }
 
 type mcpProjectIDInput struct {
+	mcpSpace
 	ProjectID string `json:"project_id" jsonschema:"project id (UUID)"`
 }
 
 type mcpProjectCreateInput struct {
+	mcpSpace
 	Name  string `json:"name" jsonschema:"project name, 1 to 200 characters"`
 	Notes string `json:"notes,omitempty" jsonschema:"free-text notes"`
 }
 
 type mcpProjectSetMaterialInput struct {
+	mcpSpace
 	ProjectID string `json:"project_id" jsonschema:"project id (UUID)"`
 	mcpItemRef
 	QtyPlanned *float64 `json:"qty_planned,omitempty" jsonschema:"planned quantity, 0 or more; omit to clear the plan"`
 }
 
 type mcpProjectUseMaterialInput struct {
+	mcpSpace
 	ProjectID string `json:"project_id" jsonschema:"project id (UUID)"`
 	mcpItemRef
 	Qty float64 `json:"qty" jsonschema:"quantity to withdraw from the stock and mark used, positive"`
@@ -296,7 +307,7 @@ type mcpProjectUseMaterialInput struct {
 // --- handlers ----------------------------------------------------------------
 
 func (f *Feature) mcpWishlistList(ctx context.Context, _ *mcp.CallToolRequest, in mcpWishlistListInput) (*mcp.CallToolResult, mcpWishesOutput, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftRead)
+	user, ws, err := f.access(ctx, auth.ScopeCraftRead, in.Space)
 	if err != nil {
 		return nil, mcpWishesOutput{}, err
 	}
@@ -312,7 +323,7 @@ func (f *Feature) mcpWishlistList(ctx context.Context, _ *mcp.CallToolRequest, i
 }
 
 func (f *Feature) mcpWishlistAdd(ctx context.Context, _ *mcp.CallToolRequest, in mcpWishAddInput) (*mcp.CallToolResult, mcpWish, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpWish{}, err
 	}
@@ -327,7 +338,7 @@ func (f *Feature) mcpWishlistAdd(ctx context.Context, _ *mcp.CallToolRequest, in
 }
 
 func (f *Feature) mcpWishlistUpdate(ctx context.Context, _ *mcp.CallToolRequest, in mcpWishUpdateInput) (*mcp.CallToolResult, mcpWish, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpWish{}, err
 	}
@@ -356,7 +367,7 @@ func (f *Feature) mcpWishlistUpdate(ctx context.Context, _ *mcp.CallToolRequest,
 }
 
 func (f *Feature) mcpWishlistRemove(ctx context.Context, _ *mcp.CallToolRequest, in mcpWishIDInput) (*mcp.CallToolResult, mcpWishRemoveOutput, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpWishRemoveOutput{}, err
 	}
@@ -367,7 +378,7 @@ func (f *Feature) mcpWishlistRemove(ctx context.Context, _ *mcp.CallToolRequest,
 }
 
 func (f *Feature) mcpWishlistLinkAdd(ctx context.Context, _ *mcp.CallToolRequest, in mcpWishLinkAddInput) (*mcp.CallToolResult, mcpWishLink, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpWishLink{}, err
 	}
@@ -381,7 +392,7 @@ func (f *Feature) mcpWishlistLinkAdd(ctx context.Context, _ *mcp.CallToolRequest
 }
 
 func (f *Feature) mcpWishlistLinkRemove(ctx context.Context, _ *mcp.CallToolRequest, in mcpWishLinkRemoveInput) (*mcp.CallToolResult, mcpWishLinkRemoveOutput, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpWishLinkRemoveOutput{}, err
 	}
@@ -392,7 +403,7 @@ func (f *Feature) mcpWishlistLinkRemove(ctx context.Context, _ *mcp.CallToolRequ
 }
 
 func (f *Feature) mcpWishlistMarkBought(ctx context.Context, _ *mcp.CallToolRequest, in mcpWishMarkBoughtInput) (*mcp.CallToolResult, mcpWish, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpWish{}, err
 	}
@@ -403,8 +414,8 @@ func (f *Feature) mcpWishlistMarkBought(ctx context.Context, _ *mcp.CallToolRequ
 	return nil, wishToMCP(wish), nil
 }
 
-func (f *Feature) mcpProjectList(ctx context.Context, _ *mcp.CallToolRequest, _ mcpEmpty) (*mcp.CallToolResult, mcpProjectsOutput, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftRead)
+func (f *Feature) mcpProjectList(ctx context.Context, _ *mcp.CallToolRequest, in mcpSpace) (*mcp.CallToolResult, mcpProjectsOutput, error) {
+	user, ws, err := f.access(ctx, auth.ScopeCraftRead, in.Space)
 	if err != nil {
 		return nil, mcpProjectsOutput{}, err
 	}
@@ -420,7 +431,7 @@ func (f *Feature) mcpProjectList(ctx context.Context, _ *mcp.CallToolRequest, _ 
 }
 
 func (f *Feature) mcpProjectGet(ctx context.Context, _ *mcp.CallToolRequest, in mcpProjectIDInput) (*mcp.CallToolResult, mcpProject, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftRead)
+	user, ws, err := f.access(ctx, auth.ScopeCraftRead, in.Space)
 	if err != nil {
 		return nil, mcpProject{}, err
 	}
@@ -432,7 +443,7 @@ func (f *Feature) mcpProjectGet(ctx context.Context, _ *mcp.CallToolRequest, in 
 }
 
 func (f *Feature) mcpProjectCreate(ctx context.Context, _ *mcp.CallToolRequest, in mcpProjectCreateInput) (*mcp.CallToolResult, mcpProject, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpProject{}, err
 	}
@@ -444,7 +455,7 @@ func (f *Feature) mcpProjectCreate(ctx context.Context, _ *mcp.CallToolRequest, 
 }
 
 func (f *Feature) mcpProjectSetMaterial(ctx context.Context, _ *mcp.CallToolRequest, in mcpProjectSetMaterialInput) (*mcp.CallToolResult, mcpProject, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpProject{}, err
 	}
@@ -460,7 +471,7 @@ func (f *Feature) mcpProjectSetMaterial(ctx context.Context, _ *mcp.CallToolRequ
 }
 
 func (f *Feature) mcpProjectUseMaterial(ctx context.Context, _ *mcp.CallToolRequest, in mcpProjectUseMaterialInput) (*mcp.CallToolResult, mcpProject, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpProject{}, err
 	}
@@ -476,7 +487,7 @@ func (f *Feature) mcpProjectUseMaterial(ctx context.Context, _ *mcp.CallToolRequ
 }
 
 func (f *Feature) mcpProjectShortageToWish(ctx context.Context, _ *mcp.CallToolRequest, in mcpProjectIDInput) (*mcp.CallToolResult, mcpWishesOutput, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpWishesOutput{}, err
 	}

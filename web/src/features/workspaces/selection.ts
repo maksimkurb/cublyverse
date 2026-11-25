@@ -1,27 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { Workspace } from "../../api/client";
+import type { SpaceApp } from "./apps";
 import { useWorkspacesQuery } from "./data";
 
-/** Key of the workspace chosen in the switcher. */
-export const WORKSPACE_STORAGE_KEY = "cv.workspace";
+/** Key of the space of a mini-app chosen in its switcher. */
+export function workspaceStorageKey(app: SpaceApp): string {
+  return `cv.space.${app}`;
+}
 
-/** Reads the remembered workspace id; storage may be unavailable. */
-export function readStoredWorkspaceID(): string | null {
+/** Reads the remembered space id; storage may be unavailable. */
+export function readStoredWorkspaceID(app: SpaceApp): string | null {
   try {
-    return window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    return window.localStorage.getItem(workspaceStorageKey(app));
   } catch {
     return null;
   }
 }
 
-/** Remembers the chosen workspace; a refusal is not an error worth showing. */
-export function writeStoredWorkspaceID(id: string | null): void {
+/** Remembers the chosen space; a refusal is not an error worth showing. */
+export function writeStoredWorkspaceID(app: SpaceApp, id: string | null): void {
   try {
     if (id) {
-      window.localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
+      window.localStorage.setItem(workspaceStorageKey(app), id);
     } else {
-      window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+      window.localStorage.removeItem(workspaceStorageKey(app));
     }
   } catch {
     // Private mode or a full quota: the switcher keeps working in memory.
@@ -40,14 +43,14 @@ export interface CurrentWorkspace {
 }
 
 /**
- * Shared selection of the current workspace. The id is persisted in
- * `localStorage`, but an id that is no longer in the list (deleted workspace,
+ * Selection of the current space of a mini-app. The id is persisted in
+ * `localStorage`, but an id that is no longer in the list (deleted space,
  * another account) falls back to the first one.
  */
-export function useCurrentWorkspace(): CurrentWorkspace {
-  const query = useWorkspacesQuery();
+export function useCurrentWorkspace(app: SpaceApp): CurrentWorkspace {
+  const query = useWorkspacesQuery(app);
   const workspaces = useMemo(() => query.data ?? [], [query.data]);
-  const [selected, setSelected] = useState<string | null>(() => readStoredWorkspaceID());
+  const [selected, setSelected] = useState<string | null>(() => readStoredWorkspaceID(app));
 
   useEffect(() => {
     if (workspaces.length === 0) {
@@ -58,12 +61,12 @@ export function useCurrentWorkspace(): CurrentWorkspace {
     }
     const first = workspaces[0].id;
     setSelected(first);
-    writeStoredWorkspaceID(first);
-  }, [workspaces, selected]);
+    writeStoredWorkspaceID(app, first);
+  }, [app, workspaces, selected]);
 
   function select(id: string) {
     setSelected(id);
-    writeStoredWorkspaceID(id);
+    writeStoredWorkspaceID(app, id);
   }
 
   const current = workspaces.find((workspace) => workspace.id === selected) ?? null;

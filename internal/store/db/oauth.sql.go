@@ -18,7 +18,7 @@ SET used_at = now()
 WHERE code_hash = $1
   AND used_at IS NULL
   AND expires_at > now()
-RETURNING code_hash, family_id, client_id, user_id, workspace_id, scopes, resource, redirect_uri, code_challenge, expires_at, used_at, created_at
+RETURNING code_hash, family_id, client_id, user_id, scopes, resource, redirect_uri, code_challenge, expires_at, used_at, created_at
 `
 
 // Marks the code used and returns it; a second call finds nothing. The caller
@@ -31,7 +31,6 @@ func (q *Queries) ConsumeOAuthCode(ctx context.Context, codeHash []byte) (OauthC
 		&i.FamilyID,
 		&i.ClientID,
 		&i.UserID,
-		&i.WorkspaceID,
 		&i.Scopes,
 		&i.Resource,
 		&i.RedirectUri,
@@ -45,10 +44,10 @@ func (q *Queries) ConsumeOAuthCode(ctx context.Context, codeHash []byte) (OauthC
 
 const createOAuthCode = `-- name: CreateOAuthCode :exec
 INSERT INTO oauth_codes (
-    code_hash, family_id, client_id, user_id, workspace_id, scopes, resource,
+    code_hash, family_id, client_id, user_id, scopes, resource,
     redirect_uri, code_challenge, expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 `
 
@@ -57,7 +56,6 @@ type CreateOAuthCodeParams struct {
 	FamilyID      pgtype.UUID `json:"family_id"`
 	ClientID      string      `json:"client_id"`
 	UserID        pgtype.UUID `json:"user_id"`
-	WorkspaceID   pgtype.UUID `json:"workspace_id"`
 	Scopes        []string    `json:"scopes"`
 	Resource      string      `json:"resource"`
 	RedirectUri   string      `json:"redirect_uri"`
@@ -71,7 +69,6 @@ func (q *Queries) CreateOAuthCode(ctx context.Context, arg CreateOAuthCodeParams
 		arg.FamilyID,
 		arg.ClientID,
 		arg.UserID,
-		arg.WorkspaceID,
 		arg.Scopes,
 		arg.Resource,
 		arg.RedirectUri,
@@ -83,19 +80,18 @@ func (q *Queries) CreateOAuthCode(ctx context.Context, arg CreateOAuthCodeParams
 
 const createOAuthToken = `-- name: CreateOAuthToken :one
 INSERT INTO oauth_tokens (
-    family_id, client_id, user_id, workspace_id, scopes, resource,
+    family_id, client_id, user_id, scopes, resource,
     access_hash, access_expires_at, refresh_hash, refresh_expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
-RETURNING id, family_id, client_id, user_id, workspace_id, scopes, resource, access_hash, access_expires_at, refresh_hash, refresh_expires_at, refresh_used_at, revoked_at, last_used_at, created_at
+RETURNING id, family_id, client_id, user_id, scopes, resource, access_hash, access_expires_at, refresh_hash, refresh_expires_at, refresh_used_at, revoked_at, last_used_at, created_at
 `
 
 type CreateOAuthTokenParams struct {
 	FamilyID         pgtype.UUID `json:"family_id"`
 	ClientID         string      `json:"client_id"`
 	UserID           pgtype.UUID `json:"user_id"`
-	WorkspaceID      pgtype.UUID `json:"workspace_id"`
 	Scopes           []string    `json:"scopes"`
 	Resource         string      `json:"resource"`
 	AccessHash       []byte      `json:"access_hash"`
@@ -109,7 +105,6 @@ func (q *Queries) CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenPara
 		arg.FamilyID,
 		arg.ClientID,
 		arg.UserID,
-		arg.WorkspaceID,
 		arg.Scopes,
 		arg.Resource,
 		arg.AccessHash,
@@ -123,7 +118,6 @@ func (q *Queries) CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenPara
 		&i.FamilyID,
 		&i.ClientID,
 		&i.UserID,
-		&i.WorkspaceID,
 		&i.Scopes,
 		&i.Resource,
 		&i.AccessHash,
@@ -171,7 +165,7 @@ func (q *Queries) GetOAuthClient(ctx context.Context, clientID string) (OauthCli
 }
 
 const getOAuthCode = `-- name: GetOAuthCode :one
-SELECT code_hash, family_id, client_id, user_id, workspace_id, scopes, resource, redirect_uri, code_challenge, expires_at, used_at, created_at FROM oauth_codes
+SELECT code_hash, family_id, client_id, user_id, scopes, resource, redirect_uri, code_challenge, expires_at, used_at, created_at FROM oauth_codes
 WHERE code_hash = $1
 `
 
@@ -183,7 +177,6 @@ func (q *Queries) GetOAuthCode(ctx context.Context, codeHash []byte) (OauthCode,
 		&i.FamilyID,
 		&i.ClientID,
 		&i.UserID,
-		&i.WorkspaceID,
 		&i.Scopes,
 		&i.Resource,
 		&i.RedirectUri,
@@ -196,7 +189,7 @@ func (q *Queries) GetOAuthCode(ctx context.Context, codeHash []byte) (OauthCode,
 }
 
 const getOAuthTokenByAccess = `-- name: GetOAuthTokenByAccess :one
-SELECT id, family_id, client_id, user_id, workspace_id, scopes, resource, access_hash, access_expires_at, refresh_hash, refresh_expires_at, refresh_used_at, revoked_at, last_used_at, created_at FROM oauth_tokens
+SELECT id, family_id, client_id, user_id, scopes, resource, access_hash, access_expires_at, refresh_hash, refresh_expires_at, refresh_used_at, revoked_at, last_used_at, created_at FROM oauth_tokens
 WHERE access_hash = $1
 `
 
@@ -208,7 +201,6 @@ func (q *Queries) GetOAuthTokenByAccess(ctx context.Context, accessHash []byte) 
 		&i.FamilyID,
 		&i.ClientID,
 		&i.UserID,
-		&i.WorkspaceID,
 		&i.Scopes,
 		&i.Resource,
 		&i.AccessHash,
@@ -224,7 +216,7 @@ func (q *Queries) GetOAuthTokenByAccess(ctx context.Context, accessHash []byte) 
 }
 
 const getOAuthTokenByRefresh = `-- name: GetOAuthTokenByRefresh :one
-SELECT id, family_id, client_id, user_id, workspace_id, scopes, resource, access_hash, access_expires_at, refresh_hash, refresh_expires_at, refresh_used_at, revoked_at, last_used_at, created_at FROM oauth_tokens
+SELECT id, family_id, client_id, user_id, scopes, resource, access_hash, access_expires_at, refresh_hash, refresh_expires_at, refresh_used_at, revoked_at, last_used_at, created_at FROM oauth_tokens
 WHERE refresh_hash = $1
 `
 
@@ -236,7 +228,6 @@ func (q *Queries) GetOAuthTokenByRefresh(ctx context.Context, refreshHash []byte
 		&i.FamilyID,
 		&i.ClientID,
 		&i.UserID,
-		&i.WorkspaceID,
 		&i.Scopes,
 		&i.Resource,
 		&i.AccessHash,
@@ -253,12 +244,10 @@ func (q *Queries) GetOAuthTokenByRefresh(ctx context.Context, refreshHash []byte
 
 const listOAuthGrantsForUser = `-- name: ListOAuthGrantsForUser :many
 SELECT DISTINCT ON (t.family_id)
-       t.family_id, t.client_id, c.name AS client_name, t.workspace_id,
-       w.name AS workspace_name,
+       t.family_id, t.client_id, c.name AS client_name,
        t.scopes, t.created_at, t.last_used_at, t.refresh_expires_at
 FROM oauth_tokens t
 JOIN oauth_clients c ON c.client_id = t.client_id
-LEFT JOIN workspaces w ON w.id = t.workspace_id
 WHERE t.user_id = $1
   AND t.revoked_at IS NULL
   AND t.refresh_expires_at > now()
@@ -269,8 +258,6 @@ type ListOAuthGrantsForUserRow struct {
 	FamilyID         pgtype.UUID        `json:"family_id"`
 	ClientID         string             `json:"client_id"`
 	ClientName       string             `json:"client_name"`
-	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
-	WorkspaceName    *string            `json:"workspace_name"`
 	Scopes           []string           `json:"scopes"`
 	CreatedAt        time.Time          `json:"created_at"`
 	LastUsedAt       pgtype.Timestamptz `json:"last_used_at"`
@@ -291,8 +278,6 @@ func (q *Queries) ListOAuthGrantsForUser(ctx context.Context, userID pgtype.UUID
 			&i.FamilyID,
 			&i.ClientID,
 			&i.ClientName,
-			&i.WorkspaceID,
-			&i.WorkspaceName,
 			&i.Scopes,
 			&i.CreatedAt,
 			&i.LastUsedAt,
@@ -415,7 +400,7 @@ SET refresh_used_at = now()
 WHERE id = $1
   AND refresh_used_at IS NULL
   AND revoked_at IS NULL
-RETURNING id, family_id, client_id, user_id, workspace_id, scopes, resource, access_hash, access_expires_at, refresh_hash, refresh_expires_at, refresh_used_at, revoked_at, last_used_at, created_at
+RETURNING id, family_id, client_id, user_id, scopes, resource, access_hash, access_expires_at, refresh_hash, refresh_expires_at, refresh_used_at, revoked_at, last_used_at, created_at
 `
 
 // Atomically spends a refresh token; a concurrent second use finds no row.
@@ -427,7 +412,6 @@ func (q *Queries) UseOAuthRefresh(ctx context.Context, id pgtype.UUID) (OauthTok
 		&i.FamilyID,
 		&i.ClientID,
 		&i.UserID,
-		&i.WorkspaceID,
 		&i.Scopes,
 		&i.Resource,
 		&i.AccessHash,

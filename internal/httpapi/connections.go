@@ -55,16 +55,11 @@ func (h *handlers) RevokeConnection(ctx context.Context, request gen.RevokeConne
 }
 
 func connectionToAPI(grant oauthserver.Grant) gen.Connection {
-	connection := gen.Connection{
+	return gen.Connection{
 		Id:         grant.ID,
 		ClientName: grant.ClientName,
 		Scopes:     grant.Scopes,
 		CreatedAt:  grant.CreatedAt,
 		LastUsedAt: grant.LastUsedAt,
 	}
-	if grant.WorkspaceID != "" {
-		id, name := grant.WorkspaceID, grant.WorkspaceName
-		connection.WorkspaceId, connection.WorkspaceName = &id, &name
-	}
-	return connection
 }

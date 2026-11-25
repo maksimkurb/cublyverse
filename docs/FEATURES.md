@@ -10,8 +10,8 @@
 | Фича | Где | Входы | Статус |
 |---|---|---|---|
 | Напоминания (`reminders`) | `internal/features/reminders` | бот (`/reminders`, кнопка «✅ Выполнено»), API (`/reminders`), MCP (шесть инструментов), WebApp (экран) | ✅ |
-| Бусинки (`craft`) | `internal/features/craft` | API (`/craft`, `/workspaces/{id}/catalog`, `/workspaces/{id}/inventory`), MCP (`/mcp/w/{id}`), WebApp (экран «Склад») | ✅ |
-| Пространства (`workspaces`) | `internal/workspace` | API (`/workspaces`), MCP (контекст `/mcp/w/{id}`), WebApp (экран «Участники») | ✅ |
+| Бусинки (`craft`) | `internal/features/craft` | API (`/craft`, `/workspaces/{id}/catalog`, `/workspaces/{id}/inventory`), MCP (`craft_*` на `/mcp`), WebApp (экран «Склад») | ✅ |
+| Пространства (`workspaces`) | `internal/workspace` | API (`/workspaces`), MCP (`spaces_list`, аргумент `space`), WebApp (кнопка пространства в мини-аппе) | ✅ |
 | Доступ по токенам (`tokens`) | `internal/auth` + `web/src/features/tokens` | WebApp и API (`/tokens`); MCP только принимает PAT | ✅ |
 
 «Доступ по токенам» — не отдельная продуктовая фича, а инфраструктура входа:
@@ -429,7 +429,7 @@ cublyverse import-n8n --format json tg.json --database-url postgres://…
 
 ## Бусинки: wishlist и проекты
 
-«Бусинки» (`internal/features/craft`, MCP на `/mcp/w/{id}`) ведут каталог
+«Бусинки» (`internal/features/craft`, MCP на `/mcp`) ведут каталог
 материалов и остатки workspace, а поверх них — списки покупок и проекты.
 **Закупки** (в API и MCP — `wishlist`) хранят то, что хочется купить: позицию каталога или свободный
 текст, желаемое количество, приоритет 0..2, статус `wanted`/`ordered`/`bought`

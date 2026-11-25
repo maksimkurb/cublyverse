@@ -33,8 +33,8 @@ func TestWishlistLifecycleAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	user := e.user(t, "lilya", "lilya@example.com")
 	other := e.user(t, "other", "o@example.com")
-	ws, _ := e.workspaces.Create(ctx, user, "Дом")
-	otherWS, _ := e.workspaces.Create(ctx, other, "Чужой")
+	ws, _ := e.workspaces.Create(ctx, user, workspace.AppWarehouse, "Дом")
+	otherWS, _ := e.workspaces.Create(ctx, other, workspace.AppWarehouse, "Чужой")
 
 	pearl, err := e.craft.CreateItem(ctx, user, ws.ID, craft.ItemInput{
 		Category: "pearls", Name: "Жемчуг Майорка айвори 2 мм", Unit: "шт",
@@ -170,8 +170,8 @@ func TestProjectMaterialsShortageAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	user := e.user(t, "lilya", "lilya@example.com")
 	other := e.user(t, "other", "o@example.com")
-	ws, _ := e.workspaces.Create(ctx, user, "Дом")
-	otherWS, _ := e.workspaces.Create(ctx, other, "Чужой")
+	ws, _ := e.workspaces.Create(ctx, user, workspace.AppWarehouse, "Дом")
+	otherWS, _ := e.workspaces.Create(ctx, other, workspace.AppWarehouse, "Чужой")
 
 	beads, err := e.craft.CreateItem(ctx, user, ws.ID, craft.ItemInput{
 		Category: "seed-beads", Name: "Бисер зелёный", Unit: "упаковка",

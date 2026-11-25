@@ -11,8 +11,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/maksimkurb/cublyverse/internal/auth"
 	"github.com/maksimkurb/cublyverse/internal/store/db"
 	"github.com/maksimkurb/cublyverse/internal/workspace"
@@ -30,8 +28,6 @@ type authRequest struct {
 	Scope       string
 	Challenge   string
 	Resource    string
-	// ResourceWorkspace is the workspace the resource URL names, if any.
-	ResourceWorkspace string
 }
 
 // requestError is a request problem that cannot be reported by redirecting to
@@ -74,12 +70,10 @@ func (s *Service) parseAuthRequest(r *http.Request, v url.Values) (authRequest, 
 		if err != nil || !strings.HasPrefix(resource, s.cfg.Issuer) || u.RawQuery != "" || u.Fragment != "" {
 			return req, redirectError{"invalid_target", "Неизвестный ресурс."}
 		}
-		ws, ok := parseResourcePath(u.Path)
-		if !ok || u.Scheme+"://"+u.Host != s.cfg.Issuer {
+		if u.Path != ResourcePath || u.Scheme+"://"+u.Host != s.cfg.Issuer {
 			return req, redirectError{"invalid_target", "Неизвестный ресурс."}
 		}
 		req.Resource = s.cfg.Issuer + u.Path
-		req.ResourceWorkspace = ws
 	}
 	return req, nil
 }
@@ -98,7 +92,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/auth/login?return_to="+url.QueryEscape(target), http.StatusFound)
 		return
 	}
-	s.renderConsent(w, r, req, session.PrincipalID, "")
+	s.renderConsent(w, r, req, "")
 }
 
 // respondRequestError reports a parse error and returns false, or true when the
@@ -125,22 +119,14 @@ type consentView struct {
 	Client         string
 	RedirectHost   string
 	Scopes         []auth.Scope
-	Workspaces     []workspace.Workspace
-	FixedWorkspace string
 	CSRF           string
 	// Hidden are the original request parameters, replayed by the form.
-	Hidden     map[string]string
-	CIMD       bool
-	ClientID   string
-	WantsCraft bool
+	Hidden   map[string]string
+	CIMD     bool
+	ClientID string
 }
 
-func (s *Service) renderConsent(w http.ResponseWriter, r *http.Request, req authRequest, userID, message string) {
-	workspaces, err := s.workspaces.List(r.Context(), userID)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
+func (s *Service) renderConsent(w http.ResponseWriter, r *http.Request, req authRequest, message string) {
 	csrf, err := randomToken("")
 	if err != nil {
 		s.fail(w, r, err)
@@ -152,38 +138,22 @@ func (s *Service) renderConsent(w http.ResponseWriter, r *http.Request, req auth
 	})
 	granted := grantedScopes(req.Scope)
 	var scopes []auth.Scope
-	wantsCraft := false
 	for _, name := range granted {
 		for _, sc := range auth.Scopes {
 			if sc.Name == name {
 				scopes = append(scopes, sc)
 			}
 		}
-		if strings.HasPrefix(name, "craft:") {
-			wantsCraft = true
-		}
 	}
 	view := consentView{
 		Title: "Доступ приложению", Message: message, Client: req.Client.Name, ClientID: req.Client.ID,
 		CIMD: req.Client.CIMD, RedirectHost: redirectHost(req.RedirectURI), Scopes: scopes,
-		Workspaces: workspaces, CSRF: csrf, WantsCraft: wantsCraft,
+		CSRF: csrf,
 		Hidden: map[string]string{
 			"client_id": req.Client.ID, "redirect_uri": req.RedirectURI, "state": req.State,
 			"scope": req.Scope, "code_challenge": req.Challenge, "code_challenge_method": "S256",
 			"response_type": "code", "resource": req.Resource,
 		},
-	}
-	if req.ResourceWorkspace != "" {
-		for _, ws := range workspaces {
-			if ws.ID == req.ResourceWorkspace {
-				view.FixedWorkspace = ws.Name
-				view.Workspaces = []workspace.Workspace{ws}
-			}
-		}
-		if view.FixedWorkspace == "" {
-			s.renderPage(w, http.StatusForbidden, errorPage, consentView{Title: "Нет доступа", Message: "Вы не состоите в workspace, к которому запрошен доступ."})
-			return
-		}
 	}
 	s.renderPage(w, http.StatusOK, consentPage, view)
 }
@@ -213,33 +183,7 @@ func (s *Service) handleAuthorizeDecision(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	workspaceID := r.PostForm.Get("workspace_id")
-	if req.ResourceWorkspace != "" {
-		workspaceID = req.ResourceWorkspace
-	}
-	var wsID pgtype.UUID
-	if workspaceID != "" {
-		ws, err := s.workspaces.Require(r.Context(), session.PrincipalID, workspaceID)
-		if err != nil {
-			s.renderPage(w, http.StatusForbidden, errorPage, consentView{Title: "Нет доступа", Message: "Вы не состоите в выбранном workspace."})
-			return
-		}
-		wsID, _ = workspace.ParseID(ws.ID)
-	}
 	scopes := grantedScopes(req.Scope)
-	if !wsID.Valid {
-		// Craft data lives in a workspace; without one there is nothing to grant.
-		kept := scopes[:0]
-		for _, sc := range scopes {
-			if !strings.HasPrefix(sc, "craft:") {
-				kept = append(kept, sc)
-			}
-		}
-		scopes = kept
-		if len(scopes) == 0 {
-			scopes = []string{auth.ScopeProfileRead}
-		}
-	}
 
 	code, err := randomToken("")
 	if err != nil {
@@ -254,7 +198,7 @@ func (s *Service) handleAuthorizeDecision(w http.ResponseWriter, r *http.Request
 	familyID, _ := workspace.ParseID(family)
 	userID, _ := workspace.ParseID(session.PrincipalID)
 	if err := s.st.Queries().CreateOAuthCode(r.Context(), db.CreateOAuthCodeParams{
-		CodeHash: hashSecret(code), FamilyID: familyID, ClientID: req.Client.ID, UserID: userID, WorkspaceID: wsID,
+		CodeHash: hashSecret(code), FamilyID: familyID, ClientID: req.Client.ID, UserID: userID,
 		Scopes: scopes, Resource: req.Resource, RedirectUri: req.RedirectURI, CodeChallenge: req.Challenge,
 		ExpiresAt: s.now().Add(codeTTL),
 	}); err != nil {
@@ -316,8 +260,6 @@ main{background:#fff;max-width:30rem;width:calc(100% - 2rem);padding:1.5rem;bord
 h1{font-size:1.25rem;margin:.2rem 0 .8rem}
 ul{padding-left:1.1rem}
 .muted{color:#666;font-size:.9rem}
-label{display:block;margin:.8rem 0 .25rem;font-weight:600}
-select{width:100%;padding:.5rem;font:inherit}
 .row{display:flex;gap:.6rem;margin-top:1.2rem}
 button{font:inherit;padding:.6rem 1rem;border-radius:8px;border:1px solid #5546e8;cursor:pointer;background:#5546e8;color:#fff}
 button.secondary{background:transparent;color:#5546e8}
@@ -342,17 +284,10 @@ var consentPage = template.Must(template.New("c").Parse(`<!doctype html><html la
 <form method="post" action="/oauth/authorize">
 {{range $k, $v := .Hidden}}<input type="hidden" name="{{$k}}" value="{{$v}}">{{end}}
 <input type="hidden" name="csrf" value="{{.CSRF}}">
-{{if .WantsCraft}}
-<label for="ws">Workspace</label>
-{{if .FixedWorkspace}}<p><strong>{{.FixedWorkspace}}</strong></p><input type="hidden" name="workspace_id" value="{{(index .Workspaces 0).ID}}">
-{{else}}<select id="ws" name="workspace_id"><option value="">— без доступа к «Бусинкам» —</option>
-{{range .Workspaces}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
-<p class="muted">Приложение получит доступ только к выбранному workspace.</p>{{end}}
-{{end}}
 <div class="row"><button type="submit" name="decision" value="allow">Разрешить</button>
 <button type="submit" name="decision" value="deny" class="secondary">Отказать</button></div>
 </form>
-<p class="muted">Доступ можно отозвать в настройках Cublyverse.</p>
+<p class="muted">Приложение получит доступ ко всем вашим пространствам в пределах перечисленных прав. Доступ можно отозвать в настройках Cublyverse.</p>
 </main></body></html>`))
 
 func (s *Service) renderPage(w http.ResponseWriter, status int, tmpl *template.Template, view consentView) {

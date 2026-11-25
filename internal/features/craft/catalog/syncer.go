@@ -69,6 +69,43 @@ func NewSyncer(st *store.Store, logger *slog.Logger) *Syncer {
 	return &Syncer{st: st, logger: logger}
 }
 
+// Retry pauses after a run that did not succeed.
+const (
+	// failedRetry keeps a broken source from being crawled over and over.
+	failedRetry = 24 * time.Hour
+	// interruptedRetry covers a run that never finished, usually because the
+	// process restarted; a run younger than this may still be in progress.
+	interruptedRetry = 2 * time.Hour
+)
+
+// Due reports whether the source needs a scheduled run: its last successful run
+// is older than interval, and the latest attempt does not call for a pause. It
+// looks at the stored runs, so a restart does not start a new crawl.
+func (s *Syncer) Due(ctx context.Context, source string, interval time.Duration, now time.Time) (bool, error) {
+	ok, err := s.st.Queries().GetLatestSuccessfulCraftCatalogSyncRun(ctx, source)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return false, fmt.Errorf("catalog: last successful run: %w", err)
+	case now.Sub(ok.StartedAt) < interval:
+		return false, nil
+	}
+	latest, err := s.st.Queries().GetLatestCraftCatalogSyncRun(ctx, source)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("catalog: latest run: %w", err)
+	}
+	switch latest.Status {
+	case "failed":
+		return now.Sub(latest.StartedAt) >= failedRetry, nil
+	case "running":
+		return now.Sub(latest.StartedAt) >= interruptedRetry, nil
+	}
+	return true, nil
+}
+
 // Run fetches source and applies it. The run row is created before the fetch,
 // so a crash leaves a visible "running" record; a fetch error finishes it as
 // "failed" and is returned to the caller.

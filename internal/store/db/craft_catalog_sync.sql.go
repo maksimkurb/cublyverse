@@ -188,6 +188,55 @@ func (q *Queries) GetGlobalCraftCatalogItemByArticle(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getLatestCraftCatalogSyncRun = `-- name: GetLatestCraftCatalogSyncRun :one
+SELECT id, source, started_at, finished_at, status, created, updated, unchanged, error FROM craft_catalog_sync_runs
+WHERE source = $1
+ORDER BY started_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestCraftCatalogSyncRun(ctx context.Context, source string) (CraftCatalogSyncRun, error) {
+	row := q.db.QueryRow(ctx, getLatestCraftCatalogSyncRun, source)
+	var i CraftCatalogSyncRun
+	err := row.Scan(
+		&i.ID,
+		&i.Source,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.Status,
+		&i.Created,
+		&i.Updated,
+		&i.Unchanged,
+		&i.Error,
+	)
+	return i, err
+}
+
+const getLatestSuccessfulCraftCatalogSyncRun = `-- name: GetLatestSuccessfulCraftCatalogSyncRun :one
+SELECT id, source, started_at, finished_at, status, created, updated, unchanged, error FROM craft_catalog_sync_runs
+WHERE source = $1
+  AND status = 'ok'
+ORDER BY started_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestSuccessfulCraftCatalogSyncRun(ctx context.Context, source string) (CraftCatalogSyncRun, error) {
+	row := q.db.QueryRow(ctx, getLatestSuccessfulCraftCatalogSyncRun, source)
+	var i CraftCatalogSyncRun
+	err := row.Scan(
+		&i.ID,
+		&i.Source,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.Status,
+		&i.Created,
+		&i.Updated,
+		&i.Unchanged,
+		&i.Error,
+	)
+	return i, err
+}
+
 const touchGlobalCraftCatalogItem = `-- name: TouchGlobalCraftCatalogItem :execrows
 UPDATE craft_catalog_items
 SET fetched_at    = $2,

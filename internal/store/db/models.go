@@ -220,7 +220,6 @@ type OauthCode struct {
 	FamilyID      pgtype.UUID        `json:"family_id"`
 	ClientID      string             `json:"client_id"`
 	UserID        pgtype.UUID        `json:"user_id"`
-	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
 	Scopes        []string           `json:"scopes"`
 	Resource      string             `json:"resource"`
 	RedirectUri   string             `json:"redirect_uri"`
@@ -235,7 +234,6 @@ type OauthToken struct {
 	FamilyID         pgtype.UUID        `json:"family_id"`
 	ClientID         string             `json:"client_id"`
 	UserID           pgtype.UUID        `json:"user_id"`
-	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
 	Scopes           []string           `json:"scopes"`
 	Resource         string             `json:"resource"`
 	AccessHash       []byte             `json:"access_hash"`
@@ -272,6 +270,7 @@ type Reminder struct {
 	EndCount          *int32             `json:"end_count"`
 	OccurrencesFired  int32              `json:"occurrences_fired"`
 	FinishedAt        pgtype.Timestamptz `json:"finished_at"`
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
 }
 
 type ReminderOccurrence struct {
@@ -286,6 +285,11 @@ type ReminderOccurrence struct {
 	Deliveries   []byte             `json:"deliveries"`
 	CreatedAt    time.Time          `json:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at"`
+}
+
+type ReminderRecipient struct {
+	ReminderID pgtype.UUID `json:"reminder_id"`
+	UserID     pgtype.UUID `json:"user_id"`
 }
 
 type Session struct {
@@ -316,6 +320,8 @@ type Workspace struct {
 	CreatedBy pgtype.UUID `json:"created_by"`
 	CreatedAt time.Time   `json:"created_at"`
 	UpdatedAt time.Time   `json:"updated_at"`
+	App       string      `json:"app"`
+	Personal  bool        `json:"personal"`
 }
 
 type WorkspaceMember struct {

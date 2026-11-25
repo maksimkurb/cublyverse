@@ -7,6 +7,8 @@ import { useHost } from "../../host/HostContext";
 import { usePageTitle } from "../../router/router";
 import { Button, EmptyState, Notice, Segmented, Switch } from "../../ui/controls";
 import { IconCheck, IconPlus } from "../../ui/icons";
+import { SpaceBar } from "../workspaces/SpaceBar";
+import { useCurrentWorkspace } from "../workspaces/selection";
 import { ReminderEditor } from "./ReminderEditor";
 import { toggleBody, useCompleteReminder, useRemindersQuery, useUpdateReminder } from "./data";
 import { defaultTimezone, weekdayOptions } from "./form";
@@ -60,7 +62,9 @@ export default function RemindersScreen() {
   const { user } = useAuth();
   usePageTitle("Напоминания");
 
-  const query = useRemindersQuery();
+  const space = useCurrentWorkspace("reminders");
+  const spaceId = space.current?.id ?? "";
+  const query = useRemindersQuery(spaceId);
   const update = useUpdateReminder();
   const complete = useCompleteReminder();
 
@@ -147,11 +151,13 @@ export default function RemindersScreen() {
     <div className="page">
       <header className="page__head">
         <h1 className="page__title">Напоминания</h1>
-        <Button variant="primary" aria-label="Новое напоминание" onClick={() => setEditor({ mode: "create" })}>
+        <Button variant="primary" aria-label="Новое напоминание" disabled={!spaceId} onClick={() => setEditor({ mode: "create" })}>
           <IconPlus />
           Новое
         </Button>
       </header>
+
+      <SpaceBar app="reminders" space={space} />
 
       {pending.map((reminder) => (
         <section className="pending" key={reminder.id} aria-label={`Ждёт отметки: ${reminder.message}`}>
@@ -168,7 +174,7 @@ export default function RemindersScreen() {
         </section>
       ))}
 
-      {query.isPending && (
+      {spaceId && query.isPending && (
         <p className="page__state" role="status">
           Загрузка…
         </p>
@@ -231,6 +237,8 @@ export default function RemindersScreen() {
           mode={editor.mode}
           reminder={editor.mode === "edit" ? editor.reminder : undefined}
           defaultTimezone={defaultTimezone(user.timezone)}
+          spaceId={spaceId}
+          currentUserId={user.id}
           onClose={() => setEditor(null)}
           onFinished={() => setEditor(null)}
         />

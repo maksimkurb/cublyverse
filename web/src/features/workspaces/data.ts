@@ -1,6 +1,7 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { $api } from "../../api/query";
+import type { SpaceApp } from "./apps";
 
 /** Query key of `GET /workspaces`, as built by openapi-react-query. */
 export const workspacesQueryKey = ["get", "/workspaces"] as const;
@@ -16,9 +17,9 @@ function invalidateWorkspaceData(queryClient: QueryClient) {
   });
 }
 
-/** Loads every workspace the signed-in user belongs to. */
-export function useWorkspacesQuery() {
-  return $api.useQuery("get", "/workspaces");
+/** Loads the spaces of one mini-app the signed-in user belongs to. */
+export function useWorkspacesQuery(app: SpaceApp) {
+  return $api.useQuery("get", "/workspaces", { params: { query: { app } } });
 }
 
 /** Creates a workspace with the user as its first member. */

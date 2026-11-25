@@ -196,14 +196,19 @@ func TestServiceValidation(t *testing.T) {
 			repeat  int32
 		}
 		valid := row{message: "x", kind: "weekly", days: []int16{1}, hhmm: "09:00", repeat: 10}
+		var spaceID string
+		if err := env.store.Pool().QueryRow(ctx,
+			`INSERT INTO workspaces (name, app) VALUES ('Личное', 'reminders') RETURNING id::text`).Scan(&spaceID); err != nil {
+			t.Fatalf("create space: %v", err)
+		}
 		insert := func(r row) error {
 			_, err := env.store.Pool().Exec(ctx, `
 				INSERT INTO reminders (
 					user_id, message, timezone, schedule_kind, schedule_days,
-					time_hhmm, repeat_minutes, start_date
+					time_hhmm, repeat_minutes, start_date, workspace_id
 				)
-				VALUES ($1, $2, 'UTC', $3, $4, $5, $6, DATE '2026-01-05')`,
-				userID, r.message, r.kind, r.days, r.hhmm, r.repeat)
+				VALUES ($1, $2, 'UTC', $3, $4, $5, $6, DATE '2026-01-05', $7)`,
+				userID, r.message, r.kind, r.days, r.hhmm, r.repeat, spaceID)
 			return err
 		}
 		if err := insert(valid); err != nil {

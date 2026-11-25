@@ -10,7 +10,7 @@ import (
 )
 
 // TestCraftWishlistAndProjectsMCP covers the wish list and project tools over
-// the per-workspace MCP endpoint: adding wishes, shop links, planning materials,
+// the MCP endpoint: adding wishes, shop links, planning materials,
 // using stock, the shortage to wish list flow and the scope check.
 func TestCraftWishlistAndProjectsMCP(t *testing.T) {
 	env := newMCPTestApp(t)
@@ -18,17 +18,17 @@ func TestCraftWishlistAndProjectsMCP(t *testing.T) {
 	q := env.app.Store().Queries()
 
 	owner, _ := workspace.ParseID(env.user.ID)
-	ws, err := q.CreateWorkspace(ctx, db.CreateWorkspaceParams{Name: "Дом", CreatedBy: owner})
+	ws, err := q.CreateWorkspace(ctx, db.CreateWorkspaceParams{Name: "Дом", CreatedBy: owner, App: workspace.AppWarehouse})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := q.AddWorkspaceMember(ctx, db.AddWorkspaceMemberParams{WorkspaceID: ws.ID, UserID: owner, AddedBy: owner}); err != nil {
 		t.Fatal(err)
 	}
-	path := "/mcp/w/" + workspace.FormatID(ws.ID)
+	const path = "/mcp"
 	session, err := env.connectAt(path, env.issueToken(auth.ScopeCraftRead, auth.ScopeCraftWrite))
 	if err != nil {
-		t.Fatalf("connect workspace endpoint: %v", err)
+		t.Fatalf("connect mcp endpoint: %v", err)
 	}
 
 	created := env.call(session, "craft_item_create", map[string]any{

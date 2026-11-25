@@ -13,10 +13,10 @@ WHERE client_id = $1;
 
 -- name: CreateOAuthCode :exec
 INSERT INTO oauth_codes (
-    code_hash, family_id, client_id, user_id, workspace_id, scopes, resource,
+    code_hash, family_id, client_id, user_id, scopes, resource,
     redirect_uri, code_challenge, expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 );
 
 -- name: ConsumeOAuthCode :one
@@ -35,10 +35,10 @@ WHERE code_hash = $1;
 
 -- name: CreateOAuthToken :one
 INSERT INTO oauth_tokens (
-    family_id, client_id, user_id, workspace_id, scopes, resource,
+    family_id, client_id, user_id, scopes, resource,
     access_hash, access_expires_at, refresh_hash, refresh_expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING *;
 
@@ -74,12 +74,10 @@ WHERE id = $1
 -- name: ListOAuthGrantsForUser :many
 -- One row per live family: the most recent token of each, with the client name.
 SELECT DISTINCT ON (t.family_id)
-       t.family_id, t.client_id, c.name AS client_name, t.workspace_id,
-       w.name AS workspace_name,
+       t.family_id, t.client_id, c.name AS client_name,
        t.scopes, t.created_at, t.last_used_at, t.refresh_expires_at
 FROM oauth_tokens t
 JOIN oauth_clients c ON c.client_id = t.client_id
-LEFT JOIN workspaces w ON w.id = t.workspace_id
 WHERE t.user_id = $1
   AND t.revoked_at IS NULL
   AND t.refresh_expires_at > now()

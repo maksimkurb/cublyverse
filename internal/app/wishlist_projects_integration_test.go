@@ -19,7 +19,7 @@ func TestWishlistAndProjectsAPI(t *testing.T) {
 	ctx := context.Background()
 	token := env.session.Token
 
-	status, body := env.api(http.MethodPost, "/workspaces", token, `{"name":"Дом"}`)
+	status, body := env.api(http.MethodPost, "/workspaces", token, `{"name":"Дом","app":"warehouse"}`)
 	if status != http.StatusCreated {
 		t.Fatalf("create workspace status %d: %s", status, body)
 	}
@@ -72,9 +72,9 @@ func TestWishlistAndProjectsAPI(t *testing.T) {
 		t.Fatalf("add item wish status %d: %s", status, body)
 	}
 	var itemWish struct {
-		ID     string `json:"id"`
-		Title  string `json:"title"`
-		Item   *struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+		Item  *struct {
 			ID       string  `json:"id"`
 			StockQty float64 `json:"stock_qty"`
 		} `json:"item"`

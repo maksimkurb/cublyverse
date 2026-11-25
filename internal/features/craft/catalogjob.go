@@ -13,8 +13,11 @@ import (
 // catalogues. A week keeps the data current without hammering the manufacturers.
 const CatalogSyncInterval = 7 * 24 * time.Hour
 
-// CatalogSyncJob runs every official scraper once, then every interval until
-// ctx is cancelled. One failing source is logged and does not stop the others.
+// catalogCheckInterval is how often the job asks whether a source is due.
+const catalogCheckInterval = time.Hour
+
+// CatalogSyncJob keeps every official catalogue at most interval old until ctx
+// is cancelled. One failing source is logged and does not stop the others.
 type CatalogSyncJob struct {
 	syncer   *catalog.Syncer
 	sources  []catalog.Source
@@ -44,13 +47,12 @@ func NewCatalogSyncJob(syncer *catalog.Syncer, logger *slog.Logger, sources ...c
 // Name identifies the job in logs.
 func (j *CatalogSyncJob) Name() string { return "craft.catalog-sync" }
 
-// Run syncs immediately and then on every tick. The first sync at process
-// start is intentional: an instance that just deployed sees a fresh catalogue
-// instead of waiting a week.
+// Run checks at start and then hourly. A fresh instance syncs at once; a
+// restart of an instance with a recent catalogue does not crawl again.
 func (j *CatalogSyncJob) Run(ctx context.Context) error {
 	j.syncAll(ctx)
 
-	ticker := time.NewTicker(j.interval)
+	ticker := time.NewTicker(min(j.interval, catalogCheckInterval))
 	defer ticker.Stop()
 	for {
 		select {
@@ -66,6 +68,14 @@ func (j *CatalogSyncJob) syncAll(ctx context.Context) {
 	for _, source := range j.sources {
 		if ctx.Err() != nil {
 			return
+		}
+		due, err := j.syncer.Due(ctx, source.Name(), j.interval, time.Now())
+		if err != nil {
+			j.logger.Error("craft catalogue sync check failed", slog.String("source", source.Name()), slog.String("error", err.Error()))
+			continue
+		}
+		if !due {
+			continue
 		}
 		if _, err := j.syncer.Run(ctx, source); err != nil {
 			j.logger.Error("craft catalogue sync failed",

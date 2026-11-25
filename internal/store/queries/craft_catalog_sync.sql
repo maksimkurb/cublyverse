@@ -81,3 +81,16 @@ WHERE workspace_id IS NULL
   AND source = $3
   AND deprecated_at IS NULL
   AND (fetched_at IS NULL OR fetched_at < $4);
+
+-- name: GetLatestCraftCatalogSyncRun :one
+SELECT * FROM craft_catalog_sync_runs
+WHERE source = $1
+ORDER BY started_at DESC, id DESC
+LIMIT 1;
+
+-- name: GetLatestSuccessfulCraftCatalogSyncRun :one
+SELECT * FROM craft_catalog_sync_runs
+WHERE source = $1
+  AND status = 'ok'
+ORDER BY started_at DESC, id DESC
+LIMIT 1;

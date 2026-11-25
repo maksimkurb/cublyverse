@@ -125,9 +125,9 @@ export interface paths {
         };
         /**
          * List the reminders of the current user
-         * @description Returns every reminder of the signed-in user, ordered by the local time
-         *     of day and then by creation time. An empty array means the user has no
-         *     reminders.
+         * @description Returns the reminders of every reminders space the signed-in user is a
+         *     member of, or of the space in `space_id`, ordered by the local time of
+         *     day and then by creation time. An empty array means there are none.
          *
          *     Each item carries its pending occurrence, if the reminder has fired and
          *     is still waiting for confirmation.
@@ -1165,8 +1165,8 @@ export interface components {
          *       implied by any other granted scope.
          *     * `reminders:read` — read reminders.
          *     * `reminders:write` — create, replace, complete and delete reminders.
-         *     * `craft:read` — read the catalogue, stock and wish list of a workspace
-         *       through its MCP endpoint `/mcp/w/{id}`.
+         *     * `craft:read` — read the catalogue, stock, wish list and projects of
+         *       the user's warehouses through the MCP endpoint `/mcp`.
          *     * `craft:write` — change them.
          *
          *     The registry is extensible: new operations document the scope they
@@ -1190,16 +1190,6 @@ export interface components {
              * @example Claude
              */
             client_name: string;
-            /**
-             * @description Workspace the application may use, or `null` when none.
-             * @example 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
-             */
-            workspace_id: string | null;
-            /**
-             * @description Name of that workspace, or `null` when there is none.
-             * @example Дом
-             */
-            workspace_name: string | null;
             /**
              * @description Permissions the user approved.
              * @example [
@@ -1501,6 +1491,23 @@ export interface components {
          */
         Reminder: {
             /**
+             * @description Reminders space the rule lives in; its members can see and change it.
+             * @example 44444444-4444-4444-8444-444444444444
+             */
+            space_id: string;
+            /**
+             * @description User who created the reminder.
+             * @example 11111111-1111-4111-8111-111111111111
+             */
+            author_id: string;
+            /**
+             * @description Members of the space who get the message.
+             * @example [
+             *       "11111111-1111-4111-8111-111111111111"
+             *     ]
+             */
+            recipient_ids: string[];
+            /**
              * @description Reminder id (UUID).
              * @example 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
              */
@@ -1710,6 +1717,18 @@ export interface components {
          */
         CreateReminderRequest: {
             /**
+             * @description Reminders space of the rule; the default personal space when omitted on create.
+             * @example 44444444-4444-4444-8444-444444444444
+             */
+            space_id?: string;
+            /**
+             * @description Members of the space who get the message; only the author.
+             * @example [
+             *       "11111111-1111-4111-8111-111111111111"
+             *     ]
+             */
+            recipient_ids?: string[];
+            /**
              * @description Reminder text, 1..1500 characters.
              * @example Выпить таблетку
              */
@@ -1804,6 +1823,18 @@ export interface components {
          */
         UpdateReminderRequest: {
             /**
+             * @description Reminders space of the rule; the reminder stays where it is when omitted.
+             * @example 44444444-4444-4444-8444-444444444444
+             */
+            space_id?: string;
+            /**
+             * @description Members of the space who get the message; the recipients stay when omitted.
+             * @example [
+             *       "11111111-1111-4111-8111-111111111111"
+             *     ]
+             */
+            recipient_ids?: string[];
+            /**
              * @description Reminder text, 1..1500 characters.
              * @example Выпить таблетку
              */
@@ -1882,6 +1913,13 @@ export interface components {
             enabled: boolean;
         };
         /**
+         * @description Mini-app a space belongs to. Sharing a space shares the data of that
+         *     mini-app only.
+         * @example warehouse
+         * @enum {string}
+         */
+        SpaceApp: "warehouse" | "reminders";
+        /**
          * @description A shared workspace. Every member has the same rights; data of a
          *     workspace is visible to its members only.
          */
@@ -1891,6 +1929,12 @@ export interface components {
              * @example 44444444-4444-4444-8444-444444444444
              */
             id: string;
+            app: components["schemas"]["SpaceApp"];
+            /**
+             * @description Whether this is the creator's own default space of the mini-app.
+             * @example true
+             */
+            personal: boolean;
             /**
              * @description Name every member sees.
              * @example Дом
@@ -1962,8 +2006,9 @@ export interface components {
              */
             avatar_url: string;
         };
-        /** @description Name of a new workspace. */
+        /** @description A new space of a mini-app. */
         CreateWorkspaceRequest: {
+            app: components["schemas"]["SpaceApp"];
             /**
              * @description Name of the workspace, 1..80 characters. Leading and trailing
              *     whitespace is trimmed.
@@ -2878,7 +2923,10 @@ export interface operations {
     };
     listReminders: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Only reminders of this space. */
+                space_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3214,7 +3262,10 @@ export interface operations {
     };
     listWorkspaces: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Only spaces of this mini-app. */
+                app?: components["schemas"]["SpaceApp"];
+            };
             header?: never;
             path?: never;
             cookie?: never;

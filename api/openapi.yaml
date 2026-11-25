@@ -261,12 +261,19 @@ paths:
         - reminders
       summary: List the reminders of the current user
       description: |
-        Returns every reminder of the signed-in user, ordered by the local time
-        of day and then by creation time. An empty array means the user has no
-        reminders.
+        Returns the reminders of every reminders space the signed-in user is a
+        member of, or of the space in `space_id`, ordered by the local time of
+        day and then by creation time. An empty array means there are none.
 
         Each item carries its pending occurrence, if the reminder has fired and
         is still waiting for confirmation.
+      parameters:
+        - name: space_id
+          in: query
+          required: false
+          description: Only reminders of this space.
+          schema:
+            type: string
       security:
         - bearerAuth: []
         - cookieAuth: []
@@ -642,6 +649,13 @@ paths:
       description: |
         Returns every workspace the signed-in user is a member of, ordered by
         name. A user who has not created or joined one gets an empty list.
+      parameters:
+        - name: app
+          in: query
+          required: false
+          description: Only spaces of this mini-app.
+          schema:
+            $ref: "#/components/schemas/SpaceApp"
       security:
         - bearerAuth: []
         - cookieAuth: []
@@ -2168,8 +2182,8 @@ components:
           implied by any other granted scope.
         * `reminders:read` — read reminders.
         * `reminders:write` — create, replace, complete and delete reminders.
-        * `craft:read` — read the catalogue, stock and wish list of a workspace
-          through its MCP endpoint `/mcp/w/{id}`.
+        * `craft:read` — read the catalogue, stock, wish list and projects of
+          the user's warehouses through the MCP endpoint `/mcp`.
         * `craft:write` — change them.
 
         The registry is extensible: new operations document the scope they
@@ -2191,8 +2205,6 @@ components:
       required:
         - id
         - client_name
-        - workspace_id
-        - workspace_name
         - scopes
         - created_at
         - last_used_at
@@ -2205,16 +2217,6 @@ components:
           type: string
           description: Name the application gave itself at registration.
           example: Claude
-        workspace_id:
-          type: string
-          nullable: true
-          description: Workspace the application may use, or `null` when none.
-          example: 6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c
-        workspace_name:
-          type: string
-          nullable: true
-          description: Name of that workspace, or `null` when there is none.
-          example: Дом
         scopes:
           type: array
           description: Permissions the user approved.
@@ -2584,6 +2586,9 @@ components:
         first occurrence.
       required:
         - id
+        - space_id
+        - author_id
+        - recipient_ids
         - message
         - timezone
         - schedule_kind
@@ -2606,6 +2611,21 @@ components:
         - created_at
         - updated_at
       properties:
+        space_id:
+          type: string
+          description: Reminders space the rule lives in; its members can see and change it.
+          example: 44444444-4444-4444-8444-444444444444
+        author_id:
+          type: string
+          description: User who created the reminder.
+          example: 11111111-1111-4111-8111-111111111111
+        recipient_ids:
+          type: array
+          description: Members of the space who get the message.
+          items:
+            type: string
+            description: User id of one recipient.
+          example: [11111111-1111-4111-8111-111111111111]
         id:
           type: string
           description: Reminder id (UUID).
@@ -2859,6 +2879,18 @@ components:
         - schedule_kind
         - time
       properties:
+        space_id:
+          type: string
+          description: Reminders space of the rule; the default personal space when omitted on create.
+          example: 44444444-4444-4444-8444-444444444444
+        recipient_ids:
+          type: array
+          minItems: 1
+          description: Members of the space who get the message; only the author.
+          items:
+            type: string
+            description: User id of one recipient.
+          example: [11111111-1111-4111-8111-111111111111]
         message:
           type: string
           minLength: 1
@@ -2979,6 +3011,18 @@ components:
         - repeat_minutes
         - enabled
       properties:
+        space_id:
+          type: string
+          description: Reminders space of the rule; the reminder stays where it is when omitted.
+          example: 44444444-4444-4444-8444-444444444444
+        recipient_ids:
+          type: array
+          minItems: 1
+          description: Members of the space who get the message; the recipients stay when omitted.
+          items:
+            type: string
+            description: User id of one recipient.
+          example: [11111111-1111-4111-8111-111111111111]
         message:
           type: string
           minLength: 1
@@ -3073,6 +3117,16 @@ components:
             `false` cancels the pending occurrence and clears `next_due_at`.
           example: true
 
+    SpaceApp:
+      type: string
+      enum:
+        - warehouse
+        - reminders
+      description: |
+        Mini-app a space belongs to. Sharing a space shares the data of that
+        mini-app only.
+      example: warehouse
+
     Workspace:
       type: object
       additionalProperties: false
@@ -3082,12 +3136,20 @@ components:
       required:
         - id
         - name
+        - app
+        - personal
         - created_at
       properties:
         id:
           type: string
           description: Workspace id (UUID), used in every workspace-scoped path.
           example: 44444444-4444-4444-8444-444444444444
+        app:
+          $ref: "#/components/schemas/SpaceApp"
+        personal:
+          type: boolean
+          description: Whether this is the creator's own default space of the mini-app.
+          example: true
         name:
           type: string
           minLength: 1
@@ -3169,10 +3231,13 @@ components:
     CreateWorkspaceRequest:
       type: object
       additionalProperties: false
-      description: Name of a new workspace.
+      description: A new space of a mini-app.
       required:
         - name
+        - app
       properties:
+        app:
+          $ref: "#/components/schemas/SpaceApp"
         name:
           type: string
           minLength: 1

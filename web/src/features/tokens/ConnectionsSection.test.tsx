@@ -47,7 +47,6 @@ describe("ConnectionsSection", () => {
     renderWithHost(<ConnectionsSection />, makeFakeHost());
 
     expect(screen.getByText("Claude")).toBeInTheDocument();
-    expect(screen.getByText("Дом")).toBeInTheDocument();
     expect(screen.getByText("craft:write")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Отключить" }));

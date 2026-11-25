@@ -41,8 +41,7 @@ func (s *Server) registerCore() {
 		},
 	}
 	AddTool(s, tool, s.whoAmI)
-	// The workspace endpoint has it too, without a second documentation entry.
-	mcp.AddTool(s.wsSDK, tool, s.whoAmI)
+	s.registerSpaces()
 }
 
 func (s *Server) whoAmI(ctx context.Context, _ *mcp.CallToolRequest, _ whoAmIInput) (*mcp.CallToolResult, whoAmIOutput, error) {

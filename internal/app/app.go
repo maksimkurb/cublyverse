@@ -143,13 +143,10 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		Authenticate: func(ctx context.Context, r *http.Request) (auth.Session, bool) {
 			return authService.ResolveAPIToken(ctx, auth.BearerToken(r), r)
 		},
-		WorkspaceAccess: func(ctx context.Context, userID, workspaceID string) bool {
-			_, err := workspaces.Require(ctx, userID, workspaceID)
-			return err == nil
-		},
+		Spaces: spacesOf(workspaces),
 	}
 	if cfg.PublicBaseURL != "" {
-		oauth = oauthserver.New(oauthserver.Config{Issuer: cfg.PublicBaseURL, Logger: logger}, st, authService, workspaces)
+		oauth = oauthserver.New(oauthserver.Config{Issuer: cfg.PublicBaseURL, Logger: logger}, st, authService)
 		mcpDeps.OAuth = oauth
 	} else {
 		logger.Warn("PUBLIC_BASE_URL is empty: MCP OAuth is disabled, personal access tokens only")

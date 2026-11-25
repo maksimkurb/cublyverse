@@ -4,16 +4,18 @@ import type { Workspace } from "../../api/client";
 import { describeApiError } from "../../api/errors";
 import { useHost, useHostBackButton } from "../../host/HostContext";
 import { Button, Notice, Sheet, TextField } from "../../ui/controls";
+import { SPACE_APPS, type SpaceApp } from "./apps";
 import { useCreateWorkspace, useRenameWorkspace } from "./data";
 
 /** Props of the create dialog. */
 export interface CreateWorkspaceDialogProps {
+  app: SpaceApp;
   onClose: () => void;
   onCreated: (workspace: Workspace) => void;
 }
 
-/** Creates a workspace; the caller becomes its first member. */
-export function CreateWorkspaceDialog({ onClose, onCreated }: CreateWorkspaceDialogProps) {
+/** Creates a space; the caller becomes its first member. */
+export function CreateWorkspaceDialog({ app, onClose, onCreated }: CreateWorkspaceDialogProps) {
   useHostBackButton(onClose);
   const host = useHost();
   const create = useCreateWorkspace();
@@ -32,7 +34,7 @@ export function CreateWorkspaceDialog({ onClose, onCreated }: CreateWorkspaceDia
     setError(null);
     setBusy(true);
     try {
-      const workspace = await create.mutateAsync({ body: { name: trimmed } });
+      const workspace = await create.mutateAsync({ body: { app, name: trimmed } });
       host.haptic("success");
       onCreated(workspace);
     } catch (cause) {
@@ -58,9 +60,7 @@ export function CreateWorkspaceDialog({ onClose, onCreated }: CreateWorkspaceDia
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
-        <p className="page__state">
-          Пространство объединяет людей и их запасы: каждый участник видит каталог и склад и может их менять.
-        </p>
+        <p className="page__state">{SPACE_APPS[app].sharing}</p>
         <Button type="submit" variant="primary" block loading={busy}>
           Создать пространство
         </Button>

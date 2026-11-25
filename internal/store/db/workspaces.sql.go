@@ -30,6 +30,25 @@ func (q *Queries) AddWorkspaceMember(ctx context.Context, arg AddWorkspaceMember
 	return err
 }
 
+const clearPersonalWorkspace = `-- name: ClearPersonalWorkspace :exec
+UPDATE workspaces
+SET personal = false
+WHERE created_by = $1
+  AND app = $2
+  AND personal
+`
+
+type ClearPersonalWorkspaceParams struct {
+	CreatedBy pgtype.UUID `json:"created_by"`
+	App       string      `json:"app"`
+}
+
+// Used when the user is no longer a member of their old personal space.
+func (q *Queries) ClearPersonalWorkspace(ctx context.Context, arg ClearPersonalWorkspaceParams) error {
+	_, err := q.db.Exec(ctx, clearPersonalWorkspace, arg.CreatedBy, arg.App)
+	return err
+}
+
 const countWorkspaceMembers = `-- name: CountWorkspaceMembers :one
 SELECT count(*) FROM workspace_members
 WHERE workspace_id = $1
@@ -42,19 +61,22 @@ func (q *Queries) CountWorkspaceMembers(ctx context.Context, workspaceID pgtype.
 	return count, err
 }
 
-const createWorkspace = `-- name: CreateWorkspace :one
-INSERT INTO workspaces (name, created_by)
-VALUES ($1, $2)
-RETURNING id, name, created_by, created_at, updated_at
+const createPersonalWorkspace = `-- name: CreatePersonalWorkspace :one
+INSERT INTO workspaces (name, created_by, app, personal)
+VALUES ($1, $2, $3, true)
+ON CONFLICT (created_by, app) WHERE personal DO NOTHING
+RETURNING id, name, created_by, created_at, updated_at, app, personal
 `
 
-type CreateWorkspaceParams struct {
+type CreatePersonalWorkspaceParams struct {
 	Name      string      `json:"name"`
 	CreatedBy pgtype.UUID `json:"created_by"`
+	App       string      `json:"app"`
 }
 
-func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error) {
-	row := q.db.QueryRow(ctx, createWorkspace, arg.Name, arg.CreatedBy)
+// Returns no row when another request created the personal space first.
+func (q *Queries) CreatePersonalWorkspace(ctx context.Context, arg CreatePersonalWorkspaceParams) (Workspace, error) {
+	row := q.db.QueryRow(ctx, createPersonalWorkspace, arg.Name, arg.CreatedBy, arg.App)
 	var i Workspace
 	err := row.Scan(
 		&i.ID,
@@ -62,6 +84,41 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.App,
+		&i.Personal,
+	)
+	return i, err
+}
+
+const createWorkspace = `-- name: CreateWorkspace :one
+INSERT INTO workspaces (name, created_by, app, personal)
+VALUES ($1, $2, $3, $4)
+RETURNING id, name, created_by, created_at, updated_at, app, personal
+`
+
+type CreateWorkspaceParams struct {
+	Name      string      `json:"name"`
+	CreatedBy pgtype.UUID `json:"created_by"`
+	App       string      `json:"app"`
+	Personal  bool        `json:"personal"`
+}
+
+func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error) {
+	row := q.db.QueryRow(ctx, createWorkspace,
+		arg.Name,
+		arg.CreatedBy,
+		arg.App,
+		arg.Personal,
+	)
+	var i Workspace
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.App,
+		&i.Personal,
 	)
 	return i, err
 }
@@ -79,8 +136,40 @@ func (q *Queries) DeleteWorkspace(ctx context.Context, id pgtype.UUID) (int64, e
 	return result.RowsAffected(), nil
 }
 
+const getDefaultWorkspace = `-- name: GetDefaultWorkspace :one
+SELECT w.id, w.name, w.created_by, w.created_at, w.updated_at, w.app, w.personal
+FROM workspaces w
+JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = $1::uuid
+WHERE w.app = $2::text
+  AND w.created_by = $1::uuid
+ORDER BY w.personal DESC, w.created_at, w.id
+LIMIT 1
+`
+
+type GetDefaultWorkspaceParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	App    string      `json:"app"`
+}
+
+// The space things go to when none is named: the personal one, else the oldest
+// space the user created. Membership is required in both cases.
+func (q *Queries) GetDefaultWorkspace(ctx context.Context, arg GetDefaultWorkspaceParams) (Workspace, error) {
+	row := q.db.QueryRow(ctx, getDefaultWorkspace, arg.UserID, arg.App)
+	var i Workspace
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.App,
+		&i.Personal,
+	)
+	return i, err
+}
+
 const getWorkspaceForUser = `-- name: GetWorkspaceForUser :one
-SELECT w.id, w.name, w.created_by, w.created_at, w.updated_at
+SELECT w.id, w.name, w.created_by, w.created_at, w.updated_at, w.app, w.personal
 FROM workspaces w
 JOIN workspace_members m ON m.workspace_id = w.id
 WHERE w.id = $1
@@ -101,8 +190,31 @@ func (q *Queries) GetWorkspaceForUser(ctx context.Context, arg GetWorkspaceForUs
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.App,
+		&i.Personal,
 	)
 	return i, err
+}
+
+const hasPersonalWorkspace = `-- name: HasPersonalWorkspace :one
+SELECT EXISTS (
+    SELECT 1 FROM workspaces
+    WHERE created_by = $1
+      AND app = $2
+      AND personal
+)
+`
+
+type HasPersonalWorkspaceParams struct {
+	CreatedBy pgtype.UUID `json:"created_by"`
+	App       string      `json:"app"`
+}
+
+func (q *Queries) HasPersonalWorkspace(ctx context.Context, arg HasPersonalWorkspaceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPersonalWorkspace, arg.CreatedBy, arg.App)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const isWorkspaceMember = `-- name: IsWorkspaceMember :one
@@ -217,17 +329,23 @@ func (q *Queries) ListWorkspaceMembers(ctx context.Context, workspaceID pgtype.U
 }
 
 const listWorkspacesForUser = `-- name: ListWorkspacesForUser :many
-SELECT w.id, w.name, w.created_by, w.created_at, w.updated_at
+SELECT w.id, w.name, w.created_by, w.created_at, w.updated_at, w.app, w.personal
 FROM workspaces w
 JOIN workspace_members m ON m.workspace_id = w.id
-WHERE m.user_id = $1
-ORDER BY w.name, w.id
+WHERE m.user_id = $1::uuid
+  AND ($2::text = '' OR w.app = $2)
+ORDER BY w.app, w.personal DESC, w.name, w.id
 `
+
+type ListWorkspacesForUserParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	App    string      `json:"app"`
+}
 
 // Membership is part of the lookup: a foreign workspace is indistinguishable
 // from an unknown one.
-func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID pgtype.UUID) ([]Workspace, error) {
-	rows, err := q.db.Query(ctx, listWorkspacesForUser, userID)
+func (q *Queries) ListWorkspacesForUser(ctx context.Context, arg ListWorkspacesForUserParams) ([]Workspace, error) {
+	rows, err := q.db.Query(ctx, listWorkspacesForUser, arg.UserID, arg.App)
 	if err != nil {
 		return nil, err
 	}
@@ -241,6 +359,8 @@ func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID pgtype.UUID)
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.App,
+			&i.Personal,
 		); err != nil {
 			return nil, err
 		}
@@ -276,7 +396,7 @@ UPDATE workspaces
 SET name       = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, created_by, created_at, updated_at
+RETURNING id, name, created_by, created_at, updated_at, app, personal
 `
 
 type RenameWorkspaceParams struct {
@@ -293,6 +413,8 @@ func (q *Queries) RenameWorkspace(ctx context.Context, arg RenameWorkspaceParams
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.App,
+		&i.Personal,
 	)
 	return i, err
 }

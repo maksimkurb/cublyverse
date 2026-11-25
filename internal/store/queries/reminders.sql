@@ -15,55 +15,94 @@ INSERT INTO reminders (
     start_date,
     end_kind,
     end_date,
-    end_count
+    end_count,
+    workspace_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
 )
 RETURNING *;
 
 -- name: GetReminder :one
--- Ownership is part of the lookup: a foreign id is indistinguishable from an
--- unknown one.
-SELECT * FROM reminders
-WHERE id = $1
-  AND user_id = $2;
+-- Membership of the reminder's space is part of the lookup: a foreign id is
+-- indistinguishable from an unknown one.
+SELECT r.* FROM reminders r
+WHERE r.id = sqlc.arg(id)::uuid
+  AND EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = sqlc.arg(user_id)::uuid
+      );
 
 -- name: ListReminders :many
-SELECT * FROM reminders
-WHERE user_id = $1
-ORDER BY time_hhmm, created_at, id;
+-- Reminders of every space of the user, or of one space when workspace_id is
+-- given.
+SELECT r.* FROM reminders r
+WHERE (sqlc.narg(workspace_id)::uuid IS NULL OR r.workspace_id = sqlc.narg(workspace_id)::uuid)
+  AND EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = sqlc.arg(user_id)::uuid
+      )
+ORDER BY r.time_hhmm, r.created_at, r.id;
 
 -- name: UpdateReminder :one
--- A full replacement of the rule (PUT semantics). The owner check makes a
+-- A full replacement of the rule (PUT semantics). The membership check makes a
 -- foreign id answer with no rows. The fired counter and the finished marker are
 -- reset: a changed recurrence is a new cycle, exactly as the first one.
-UPDATE reminders
-SET message             = $3,
-    timezone            = $4,
-    schedule_kind       = $5,
-    schedule_days       = $6,
-    time_hhmm           = $7,
-    repeat_minutes      = $8,
-    enabled             = $9,
-    next_due_at         = $10,
-    interval_count      = $11,
-    month_week_position = $12,
-    month_weekday       = $13,
-    start_date          = $14,
-    end_kind            = $15,
-    end_date            = $16,
-    end_count           = $17,
+UPDATE reminders r
+SET message             = sqlc.arg(message),
+    timezone            = sqlc.arg(timezone),
+    schedule_kind       = sqlc.arg(schedule_kind),
+    schedule_days       = sqlc.arg(schedule_days),
+    time_hhmm           = sqlc.arg(time_hhmm),
+    repeat_minutes      = sqlc.arg(repeat_minutes),
+    enabled             = sqlc.arg(enabled),
+    next_due_at         = sqlc.arg(next_due_at),
+    interval_count      = sqlc.arg(interval_count),
+    month_week_position = sqlc.arg(month_week_position),
+    month_weekday       = sqlc.arg(month_weekday),
+    start_date          = sqlc.arg(start_date),
+    end_kind            = sqlc.arg(end_kind),
+    end_date            = sqlc.arg(end_date),
+    end_count           = sqlc.arg(end_count),
+    workspace_id        = sqlc.arg(workspace_id),
     occurrences_fired   = 0,
     finished_at         = NULL,
     updated_at          = now()
-WHERE id = $1
-  AND user_id = $2
-RETURNING *;
+WHERE r.id = sqlc.arg(id)::uuid
+  AND EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = sqlc.arg(user_id)::uuid
+      )
+RETURNING r.*;
 
 -- name: DeleteReminder :execrows
-DELETE FROM reminders
-WHERE id = $1
-  AND user_id = $2;
+DELETE FROM reminders r
+WHERE r.id = sqlc.arg(id)::uuid
+  AND EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = sqlc.arg(user_id)::uuid
+      );
+
+-- name: ClearReminderRecipients :exec
+DELETE FROM reminder_recipients
+WHERE reminder_id = $1;
+
+-- name: AddReminderRecipient :exec
+INSERT INTO reminder_recipients (reminder_id, user_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING;
+
+-- name: ListReminderRecipients :many
+-- Chosen recipients that are still members of the reminder's space.
+SELECT rr.reminder_id, rr.user_id
+FROM reminder_recipients rr
+JOIN reminders r ON r.id = rr.reminder_id
+JOIN workspace_members m ON m.workspace_id = r.workspace_id AND m.user_id = rr.user_id
+WHERE rr.reminder_id = ANY (sqlc.arg(reminder_ids)::uuid[])
+ORDER BY rr.reminder_id, m.created_at, rr.user_id;
 
 -- name: CreateOccurrence :one
 -- The partial unique index allows at most one active occurrence per reminder,
@@ -126,8 +165,8 @@ WHERE reminder_id = $1
 -- of the user.
 SELECT o.* FROM reminder_occurrences o
 JOIN reminders r ON r.id = o.reminder_id
-WHERE r.user_id = $1
-  AND o.status = 'active';
+JOIN workspace_members m ON m.workspace_id = r.workspace_id AND m.user_id = $1
+WHERE o.status = 'active';
 
 -- name: CancelActiveOccurrence :execrows
 -- Editing or disabling a reminder drops its pending firing: the user asked for
@@ -140,8 +179,8 @@ WHERE reminder_id = $1
   AND status = 'active';
 
 -- name: CompleteOccurrence :one
--- Confirms one specific occurrence of the owner's reminder. The WHERE clause is
--- the guard: only an active occurrence changes, and the owner check is part of
+-- Confirms one specific occurrence of a reminder. The WHERE clause is the
+-- guard: only an active occurrence changes, and the membership check is part of
 -- the same statement, so the chat button, the HTTP API and MCP have exactly one
 -- winner and one answer.
 UPDATE reminder_occurrences o
@@ -153,16 +192,25 @@ FROM reminders r
 WHERE o.id = sqlc.arg(occurrence_id)::uuid
   AND o.reminder_id = r.id
   AND r.id = sqlc.arg(reminder_id)::uuid
-  AND r.user_id = sqlc.arg(user_id)::uuid
+  AND EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = sqlc.arg(user_id)::uuid
+      )
   AND o.status = 'active'
 RETURNING o.*;
 
--- name: GetReminderOwner :one
--- Deliberately not scoped by the owner: a confirmation has to tell "already
--- confirmed" from "not your reminder" from "gone", so the owner id is compared
--- in Go. The id comes from a button of that chat and is not enumerable.
-SELECT user_id FROM reminders
-WHERE id = $1;
+-- name: CanAccessReminder :one
+-- Deliberately returns a row for a foreign reminder too: a confirmation has to
+-- tell "not your reminder" from "gone". The id comes from a button of that chat
+-- and is not enumerable.
+SELECT EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = sqlc.arg(user_id)::uuid
+      ) AS allowed
+FROM reminders r
+WHERE r.id = sqlc.arg(id)::uuid;
 
 -- name: ClaimDueReminders :many
 -- Claims a batch of due work for one scheduler tick. The rows stay locked for
@@ -241,7 +289,6 @@ SET enabled     = false,
     finished_at = sqlc.arg(finished_at)::timestamptz,
     updated_at  = sqlc.arg(finished_at)::timestamptz
 WHERE id = sqlc.arg(reminder_id)::uuid
-  AND user_id = sqlc.arg(user_id)::uuid
 RETURNING *;
 
 -- name: ReleaseReminderLease :execrows

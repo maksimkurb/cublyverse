@@ -34,7 +34,7 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 	mcpserver.AddTool(server, &mcp.Tool{
 		Name:  toolList,
 		Title: "List reminders",
-		Description: "List every reminder of the current user with its schedule, " +
+		Description: "List the reminders of every space of the current user (or of one space) with the schedule, " +
 			"next due time and, when a reminder has fired and waits for " +
 			"confirmation, its pending occurrence. Returns an empty array when the " +
 			"user has no reminders.",
@@ -124,8 +124,11 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 
 func boolPtr(value bool) *bool { return &value }
 
-// mcpListInput has no arguments: the user comes from the token.
-type mcpListInput struct{}
+// mcpListInput narrows the list to one space.
+type mcpListInput struct {
+	// Space is the id or name of a reminders space.
+	Space string `json:"space,omitempty" jsonschema:"reminders space id or name (see spaces_list). Omit to list every space"`
+}
 
 // mcpGetInput identifies one reminder.
 type mcpGetInput struct {
@@ -137,6 +140,10 @@ type mcpGetInput struct {
 // described by `repeat` plus the fields of that kind; the old shape (weekdays or
 // month_days without `repeat`) still works and means weekly or monthly.
 type mcpCreateInput struct {
+	// Space is the id or name of a reminders space.
+	Space string `json:"space,omitempty" jsonschema:"reminders space id or name (see spaces_list). Default: the user's own personal space"`
+	// RecipientIDs are who gets the message.
+	RecipientIDs []string `json:"recipient_ids,omitempty" jsonschema:"user ids of space members who get the message (see spaces_list). Default: only the current user"`
 	// Message is the text the user receives.
 	Message string `json:"message" jsonschema:"reminder text in the user's language, 1 to 1500 characters"`
 	// Repeat is the recurrence kind.
@@ -177,6 +184,10 @@ type mcpNthWeekday struct {
 
 // mcpUpdateInput is a partial update: omitted fields keep their current value.
 type mcpUpdateInput struct {
+	// Space moves the reminder to another space.
+	Space string `json:"space,omitempty" jsonschema:"move the reminder to this reminders space (id or name). Omit to keep it where it is"`
+	// RecipientIDs replaces who gets the message.
+	RecipientIDs []string `json:"recipient_ids,omitempty" jsonschema:"new recipients: user ids of space members. Omit to keep the current ones"`
 	// ID is the reminder UUID.
 	ID string `json:"id" jsonschema:"reminder id (UUID) to change"`
 	// Message replaces the text.
@@ -238,6 +249,10 @@ type mcpDeleteOutput struct {
 // mcpReminder is the MCP representation of a reminder. Times are RFC 3339
 // strings in UTC; the schedule itself is local to `time_zone`.
 type mcpReminder struct {
+	// SpaceID is the reminders space of the rule.
+	SpaceID string `json:"space_id" jsonschema:"reminders space the rule belongs to"`
+	// RecipientIDs are who gets the message.
+	RecipientIDs []string `json:"recipient_ids" jsonschema:"user ids who get the message"`
 	// ID is the reminder UUID.
 	ID string `json:"id" jsonschema:"reminder id (UUID)"`
 	// Message is the reminder text.
@@ -307,12 +322,16 @@ type mcpOccurrence struct {
 	CompletedAt string `json:"completed_at,omitempty" jsonschema:"confirmation time in RFC 3339 UTC"`
 }
 
-func (f *Feature) mcpList(ctx context.Context, _ *mcp.CallToolRequest, _ mcpListInput) (*mcp.CallToolResult, mcpListOutput, error) {
+func (f *Feature) mcpList(ctx context.Context, _ *mcp.CallToolRequest, input mcpListInput) (*mcp.CallToolResult, mcpListOutput, error) {
 	principal, err := f.mcpPrincipal(ctx, auth.ScopeRemindersRead)
 	if err != nil {
 		return nil, mcpListOutput{}, err
 	}
-	items, err := f.service.List(ctx, principal.ID)
+	space, err := f.mcpSpace(ctx, principal.ID, input.Space)
+	if err != nil {
+		return nil, mcpListOutput{}, err
+	}
+	items, err := f.service.ListSpace(ctx, principal.ID, space)
 	if err != nil {
 		return nil, mcpListOutput{}, mcpServiceError(err)
 	}
@@ -370,7 +389,13 @@ func (f *Feature) mcpCreate(ctx context.Context, _ *mcp.CallToolRequest, input m
 	if input.Enabled != nil {
 		enabled = *input.Enabled
 	}
+	space, err := f.mcpSpace(ctx, principal.ID, input.Space)
+	if err != nil {
+		return nil, mcpReminder{}, err
+	}
 	reminder, err := f.service.Create(ctx, principal.ID, Input{
+		SpaceID:           space,
+		Recipients:        input.RecipientIDs,
 		Message:           input.Message,
 		Timezone:          timezone,
 		Kind:              kind,
@@ -468,6 +493,12 @@ func (f *Feature) mcpUpdate(ctx context.Context, _ *mcp.CallToolRequest, input m
 		rule.Enabled = *input.Enabled
 	}
 
+	if rule.SpaceID, err = f.mcpSpace(ctx, principal.ID, input.Space); err != nil {
+		return nil, mcpReminder{}, err
+	}
+	if len(input.RecipientIDs) > 0 {
+		rule.Recipients = input.RecipientIDs
+	}
 	reminder, err := f.service.Update(ctx, principal.ID, input.ID, rule)
 	if err != nil {
 		return nil, mcpReminder{}, mcpServiceError(err)
@@ -496,6 +527,15 @@ func (f *Feature) mcpComplete(ctx context.Context, _ *mcp.CallToolRequest, input
 		return nil, mcpReminder{}, mcpServiceError(err)
 	}
 	return nil, reminderToMCP(reminder), nil
+}
+
+// mcpSpace turns the space argument into an id; empty stays empty, which every
+// service call treats as its default.
+func (f *Feature) mcpSpace(ctx context.Context, principalID, ref string) (string, error) {
+	if strings.TrimSpace(ref) == "" {
+		return "", nil
+	}
+	return f.service.ResolveSpace(ctx, principalID, ref)
 }
 
 // mcpPrincipal resolves the caller and checks the scope of the tool. Tool
@@ -682,6 +722,8 @@ func mcpServiceError(err error) error {
 // reminderToMCP maps a service reminder to the tool answer.
 func reminderToMCP(reminder Reminder) mcpReminder {
 	out := mcpReminder{
+		SpaceID:          reminder.SpaceID,
+		RecipientIDs:     append([]string{}, reminder.Recipients...),
 		ID:               reminder.ID,
 		Message:          reminder.Message,
 		Repeat:           string(reminder.Kind),

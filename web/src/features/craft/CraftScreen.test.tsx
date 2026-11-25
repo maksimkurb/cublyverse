@@ -28,6 +28,8 @@ vi.mock("../workspaces/selection", () => ({
   writeStoredWorkspaceID: vi.fn(),
 }));
 
+vi.mock("../workspaces/SpaceBar", () => ({ SpaceBar: () => null }));
+
 vi.mock("./data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./data")>();
   return {

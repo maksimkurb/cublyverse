@@ -7,7 +7,7 @@ import { usePageTitle } from "../../router/router";
 import { Button, EmptyState, Notice, Segmented, SelectField, Switch, TextField } from "../../ui/controls";
 import { IconPlus } from "../../ui/icons";
 import { useCurrentWorkspace } from "../workspaces/selection";
-import { WorkspaceSwitcher } from "../workspaces/WorkspaceSwitcher";
+import { SpaceBar } from "../workspaces/SpaceBar";
 import { AddStockDialog } from "./AddStockDialog";
 import { CreateCraftItemDialog, LinkCraftItemDialog, StockEditDialog } from "./CraftDialogs";
 import { useAdjustCraftStock, useCraftCatalog, useCraftCategories, useCraftInventory, useCraftManufacturers } from "./data";
@@ -341,14 +341,15 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
 }
 
 /**
- * «Склад»: stock, purchases, projects and catalogue of the selected workspace.
- * The workspace itself and its members live in the «Участники» screen.
+ * «Склад»: stock, purchases, projects and catalogue of the selected warehouse
+ * space.
  */
 export default function CraftScreen() {
   const [tab, setTab] = useState<Tab>("inventory");
   usePageTitle("Склад");
 
-  const { query, workspaces, current, select } = useCurrentWorkspace();
+  const space = useCurrentWorkspace("warehouse");
+  const current = space.current;
 
   return (
     <div className="page">
@@ -356,32 +357,12 @@ export default function CraftScreen() {
         <h1 className="page__title">Склад</h1>
       </header>
 
-      {query.isPending && (
-        <p className="page__state" role="status">
-          Загрузка…
-        </p>
-      )}
-
-      {query.isError && (
-        <Notice tone="error">
-          <span>Не удалось загрузить пространства: {query.error?.message ?? "неизвестная ошибка"}</span>
-          <Button size="s" onClick={() => void query.refetch()}>
-            Повторить
-          </Button>
-        </Notice>
-      )}
-
-      {query.isSuccess && workspaces.length === 0 && (
-        <EmptyState title="Нет пространства">
-          Сначала создайте пространство в разделе «Участники»: склад живёт внутри него.
-        </EmptyState>
-      )}
+      <SpaceBar app="warehouse" space={space} />
 
       {current && (
         <>
-          <WorkspaceSwitcher workspaces={workspaces} currentId={current.id} onChange={select} />
           <Segmented label="Раздел" value={tab} options={TABS} onChange={setTab} />
-          {tab === "inventory" && <InventoryPanel workspaceId={current.id} />}
+          {tab === "inventory" && <InventoryPanel key={current.id} workspaceId={current.id} />}
           {tab === "purchases" && <PurchasesPanel workspaceId={current.id} />}
           {tab === "projects" && <ProjectsPanel key={current.id} workspaceId={current.id} />}
           {tab === "catalog" && <CatalogPanel workspaceId={current.id} />}

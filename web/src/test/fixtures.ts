@@ -18,6 +18,9 @@ import type {
 export function makeReminder(overrides: Partial<Reminder> = {}): Reminder {
   return {
     id: "11111111-1111-4111-8111-111111111111",
+    space_id: "44444444-4444-4444-8444-444444444444",
+    author_id: "6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c",
+    recipient_ids: ["6f1c0a3e-5b9d-4a1f-9c2b-7e8d0f1a2b3c"],
     message: "Выпить таблетку",
     timezone: "Europe/Moscow",
     schedule_kind: "weekly",
@@ -63,8 +66,6 @@ export function makeConnection(overrides: Partial<Connection> = {}): Connection 
   return {
     id: "33333333-3333-4333-8333-333333333333",
     client_name: "Claude",
-    workspace_id: "44444444-4444-4444-8444-444444444444",
-    workspace_name: "Дом",
     scopes: ["craft:read", "craft:write"],
     created_at: "2026-01-15T09:30:00Z",
     last_used_at: "2026-01-16T08:00:00Z",
@@ -77,6 +78,8 @@ export function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
     id: "44444444-4444-4444-8444-444444444444",
     name: "Дом",
+    app: "warehouse",
+    personal: true,
     created_at: "2026-01-15T09:30:00Z",
     ...overrides,
   };

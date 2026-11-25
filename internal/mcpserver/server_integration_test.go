@@ -414,6 +414,7 @@ func TestToolListSchema(t *testing.T) {
 		destructive bool
 	}{
 		"whoami":             {readOnly: true},
+		"spaces_list":        {readOnly: true},
 		"reminders_list":     {readOnly: true},
 		"reminders_get":      {readOnly: true},
 		"reminders_create":   {destructive: false},

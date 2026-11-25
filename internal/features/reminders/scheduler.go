@@ -245,9 +245,9 @@ func (s *Scheduler) fireFirst(ctx context.Context, c claim, now, lease time.Time
 	if err != nil {
 		return s.recordFailure(ctx, c, now, lease, err)
 	}
-	message := reminderMessage(reminder, formatUUID(c.reminder.UserID), *scheduledAt, 0, formatUUID(occurrenceID))
-
-	sent, err := s.service.delivery.Send(ctx, formatUUID(c.reminder.UserID), message)
+	sent, err := s.send(ctx, c.reminder, func(recipient string) unibot.Message {
+		return reminderMessage(reminder, recipient, *scheduledAt, 0, formatUUID(occurrenceID))
+	})
 	if err != nil {
 		return s.recordFailure(ctx, c, now, lease, err)
 	}
@@ -297,9 +297,9 @@ func (s *Scheduler) fireRepeat(ctx context.Context, c claim, now, lease time.Tim
 	// shown in the message is the count of already sent repeats.
 	repeats := int(c.occurrence.RepeatCount)
 	occurrenceID := c.occurrence.ID
-	message := reminderMessage(reminder, formatUUID(c.reminder.UserID), c.occurrence.ScheduledAt, repeats, formatUUID(occurrenceID))
-
-	sent, err := s.service.delivery.Send(ctx, formatUUID(c.reminder.UserID), message)
+	sent, err := s.send(ctx, c.reminder, func(recipient string) unibot.Message {
+		return reminderMessage(reminder, recipient, c.occurrence.ScheduledAt, repeats, formatUUID(occurrenceID))
+	})
 	if err != nil {
 		return s.recordFailure(ctx, c, now, lease, err)
 	}
@@ -357,6 +357,39 @@ func (s *Scheduler) fireRepeat(ctx context.Context, c claim, now, lease time.Tim
 	}
 	s.deleteMessages(ctx, previous, formatUUID(c.reminder.ID))
 	return nil
+}
+
+// send delivers a firing to every recipient. One reachable recipient is enough
+// for the firing to count: retrying it would send the others a second copy.
+// Only when nobody got it is the failure returned.
+func (s *Scheduler) send(ctx context.Context, reminder db.Reminder, message func(recipient string) unibot.Message) ([]unibot.SentMessage, error) {
+	targets, err := deliveryTargets(ctx, s.service.st.Queries(), reminder)
+	if err != nil {
+		return nil, err
+	}
+	if len(targets) == 0 {
+		return nil, errors.New("reminder has no recipients")
+	}
+	var sent []unibot.SentMessage
+	var failures error
+	for _, target := range targets {
+		delivered, err := s.service.delivery.Send(ctx, target, message(target))
+		if err != nil {
+			failures = errors.Join(failures, err)
+			continue
+		}
+		sent = append(sent, delivered...)
+	}
+	if len(sent) == 0 && failures != nil {
+		return nil, failures
+	}
+	if failures != nil {
+		s.logger.WarnContext(ctx, "reminder reached only some recipients",
+			slog.String("reminder_id", formatUUID(reminder.ID)),
+			slog.String("error", failures.Error()),
+		)
+	}
+	return sent, nil
 }
 
 // recordFailure stores why a delivery failed, releases the lease and leaves the

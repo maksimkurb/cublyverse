@@ -22,6 +22,7 @@ import (
 	"github.com/maksimkurb/cublyverse/internal/features/reminders/schedule"
 	"github.com/maksimkurb/cublyverse/internal/store"
 	"github.com/maksimkurb/cublyverse/internal/store/db"
+	"github.com/maksimkurb/cublyverse/internal/workspace"
 )
 
 // Limits of the reminder rule. They are part of the contract: the OpenAPI
@@ -112,6 +113,13 @@ func validationErrorf(format string, args ...any) *ValidationError {
 type Reminder struct {
 	// ID is the reminder UUID.
 	ID string
+	// SpaceID is the reminders space the rule lives in; every member of the
+	// space can see and change it.
+	SpaceID string
+	// AuthorID is the user who created it.
+	AuthorID string
+	// Recipients are the members of the space who get the message.
+	Recipients []string
 	// Message is the text the user receives.
 	Message string
 	// Timezone is the IANA time zone the schedule is interpreted in.
@@ -188,6 +196,12 @@ type Occurrence struct {
 // an Interval of 0 means 1, so a request that predates the flexible recurrence
 // keeps its exact old meaning.
 type Input struct {
+	// SpaceID names the reminders space. Empty means the default («Личное»)
+	// space on create and "do not move" on update.
+	SpaceID string
+	// Recipients are user ids of members of the space. Nil means the author on
+	// create and "keep" on update.
+	Recipients        []string
 	Message           string
 	Timezone          string
 	Kind              schedule.Kind
@@ -205,7 +219,8 @@ type Input struct {
 }
 
 // Service is the reminders business logic. Every method takes the principal id
-// of the authenticated user and never returns data of another user.
+// of the authenticated user and only returns reminders of spaces they are a
+// member of.
 type Service struct {
 	st       *store.Store
 	logger   *slog.Logger
@@ -220,8 +235,10 @@ type Service struct {
 type API interface {
 	// Create stores a new reminder and computes its next due time.
 	Create(ctx context.Context, principalID string, input Input) (Reminder, error)
-	// List returns every reminder of the principal.
+	// List returns the reminders of every space of the principal.
 	List(ctx context.Context, principalID string) ([]Reminder, error)
+	// ListSpace is List narrowed to one space; empty means every space.
+	ListSpace(ctx context.Context, principalID, spaceID string) ([]Reminder, error)
 	// Get returns one reminder of the principal.
 	Get(ctx context.Context, principalID, id string) (Reminder, error)
 	// Update replaces the whole rule of a reminder.
@@ -283,13 +300,20 @@ func (s *Service) now() time.Time { return s.clock().UTC() }
 // Create stores a new reminder and computes its next due time when it is
 // enabled.
 func (s *Service) Create(ctx context.Context, principalID string, input Input) (Reminder, error) {
-	return s.CreateTx(ctx, s.st.Queries(), principalID, input)
+	var created Reminder
+	err := s.st.InTx(ctx, func(q *db.Queries) error {
+		var err error
+		created, err = s.CreateTx(ctx, q, principalID, input)
+		return err
+	})
+	return created, err
 }
 
 // CreateTx is Create over an existing query set, so a reminder can be created
 // inside a transaction another caller already opened. The legacy import claim
 // uses it: claiming the waiting rows and creating their reminders must happen
-// in one transaction, and it must not grow a second copy of the insert.
+// in one transaction, and it must not grow a second copy of the insert. Inside
+// somebody else's transaction q is already transactional; Create opens one.
 func (s *Service) CreateTx(ctx context.Context, q *db.Queries, principalID string, input Input) (Reminder, error) {
 	userID, err := parsePrincipal(principalID)
 	if err != nil {
@@ -299,7 +323,16 @@ func (s *Service) CreateTx(ctx context.Context, q *db.Queries, principalID strin
 	if err != nil {
 		return Reminder{}, err
 	}
+	spaceID, err := resolveSpace(ctx, q, userID, input.SpaceID)
+	if err != nil {
+		return Reminder{}, err
+	}
+	recipients := input.Recipients
+	if recipients == nil {
+		recipients = []string{principalID}
+	}
 	row, err := q.CreateReminder(ctx, db.CreateReminderParams{
+		WorkspaceID:       spaceID,
 		UserID:            userID,
 		Message:           rule.message,
 		Timezone:          rule.timezone,
@@ -320,17 +353,33 @@ func (s *Service) CreateTx(ctx context.Context, q *db.Queries, principalID strin
 	if err != nil {
 		return Reminder{}, fmt.Errorf("create reminder: %w", err)
 	}
-	return reminderFromRow(row, nil), nil
+	created := reminderFromRow(row, nil)
+	if created.Recipients, err = setRecipients(ctx, q, row, recipients); err != nil {
+		return Reminder{}, err
+	}
+	return created, nil
 }
 
-// List returns every reminder of the principal, each with its pending
-// occurrence.
+// List returns the reminders of every space of the principal, each with its
+// pending occurrence.
 func (s *Service) List(ctx context.Context, principalID string) ([]Reminder, error) {
+	return s.ListSpace(ctx, principalID, "")
+}
+
+// ListSpace is List narrowed to one space; an empty id means every space. A
+// space the principal is not a member of answers with an empty list.
+func (s *Service) ListSpace(ctx context.Context, principalID, spaceID string) ([]Reminder, error) {
 	userID, err := parsePrincipal(principalID)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.st.Queries().ListReminders(ctx, userID)
+	var space pgtype.UUID
+	if spaceID != "" {
+		if space, err = workspace.ParseID(spaceID); err != nil {
+			return nil, ErrSpaceNotFound
+		}
+	}
+	rows, err := s.st.Queries().ListReminders(ctx, db.ListRemindersParams{UserID: userID, WorkspaceID: space})
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
 	}
@@ -342,9 +391,19 @@ func (s *Service) List(ctx context.Context, principalID string) ([]Reminder, err
 	for i := range occurrences {
 		active[formatUUID(occurrences[i].ReminderID)] = &occurrences[i]
 	}
+	ids := make([]pgtype.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	recipients, err := recipientsOf(ctx, s.st.Queries(), ids...)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]Reminder, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, reminderFromRow(row, active[formatUUID(row.ID)]))
+		reminder := reminderFromRow(row, active[formatUUID(row.ID)])
+		reminder.Recipients = recipients[reminder.ID]
+		out = append(out, reminder)
 	}
 	return out, nil
 }
@@ -371,7 +430,13 @@ func (s *Service) Get(ctx context.Context, principalID, id string) (Reminder, er
 	if err != nil {
 		return Reminder{}, err
 	}
-	return reminderFromRow(row, active), nil
+	reminder := reminderFromRow(row, active)
+	recipients, err := recipientsOf(ctx, s.st.Queries(), reminderID)
+	if err != nil {
+		return Reminder{}, err
+	}
+	reminder.Recipients = recipients[reminder.ID]
+	return reminder, nil
 }
 
 // Update replaces the whole rule (PUT semantics). The pending occurrence is
@@ -392,8 +457,23 @@ func (s *Service) Update(ctx context.Context, principalID, id string, input Inpu
 	}
 
 	var updated db.Reminder
+	var recipients []string
 	err = s.st.InTx(ctx, func(q *db.Queries) error {
+		current, err := q.GetReminder(ctx, db.GetReminderParams{ID: reminderID, UserID: userID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("get reminder: %w", err)
+		}
+		spaceID := current.WorkspaceID
+		if input.SpaceID != "" {
+			if spaceID, err = resolveSpace(ctx, q, userID, input.SpaceID); err != nil {
+				return err
+			}
+		}
 		row, err := q.UpdateReminder(ctx, db.UpdateReminderParams{
+			WorkspaceID:       spaceID,
 			ID:                reminderID,
 			UserID:            userID,
 			Message:           rule.message,
@@ -423,12 +503,29 @@ func (s *Service) Update(ctx context.Context, principalID, id string, input Inpu
 			return fmt.Errorf("cancel active occurrence: %w", err)
 		}
 		updated = row
-		return nil
+
+		wanted := input.Recipients
+		if wanted == nil {
+			// Keeping the recipients across a move drops those who are not
+			// members of the new space.
+			kept, err := recipientsOf(ctx, q, reminderID)
+			if err != nil {
+				return err
+			}
+			wanted = kept[formatUUID(reminderID)]
+			if len(wanted) == 0 {
+				wanted = []string{principalID}
+			}
+		}
+		recipients, err = setRecipients(ctx, q, row, wanted)
+		return err
 	})
 	if err != nil {
 		return Reminder{}, err
 	}
-	return reminderFromRow(updated, nil), nil
+	reminder := reminderFromRow(updated, nil)
+	reminder.Recipients = recipients
+	return reminder, nil
 }
 
 // Delete removes a reminder; its occurrences go with it through the foreign key.
@@ -541,16 +638,16 @@ func (s *Service) CompleteOccurrence(ctx context.Context, principalID, reminderI
 // before the update (so the caller can answer "already", "stale" or "not your
 // reminder") and then performs the guarded update that decides the winner.
 func (s *Service) completeOccurrence(ctx context.Context, userID, reminderID, occurrenceID pgtype.UUID) (CompletionResult, error) {
-	// The owner is read without the ownership filter, because the answer differs
+	// Access is read without the membership filter, because the answer differs
 	// between a foreign reminder and a vanishing one.
-	owner, err := s.st.Queries().GetReminderOwner(ctx, reminderID)
+	allowed, err := s.st.Queries().CanAccessReminder(ctx, db.CanAccessReminderParams{ID: reminderID, UserID: userID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return CompletionNotFound, nil
 	}
 	if err != nil {
-		return CompletionNotFound, fmt.Errorf("get reminder owner: %w", err)
+		return CompletionNotFound, fmt.Errorf("check reminder access: %w", err)
 	}
-	if owner != userID {
+	if !allowed {
 		return CompletionNotOwner, nil
 	}
 
@@ -601,7 +698,6 @@ func (s *Service) completeOccurrence(ctx context.Context, userID, reminderID, oc
 		finished, finishErr := s.st.Queries().FinishReminder(ctx, db.FinishReminderParams{
 			FinishedAt: completedAt,
 			ReminderID: reminderID,
-			UserID:     userID,
 		})
 		switch {
 		case finishErr == nil:
@@ -1025,6 +1121,8 @@ func int32FromOptional(pointer *int32) int {
 func reminderFromRow(row db.Reminder, active *db.ReminderOccurrence) Reminder {
 	reminder := Reminder{
 		ID:                formatUUID(row.ID),
+		SpaceID:           formatUUID(row.WorkspaceID),
+		AuthorID:          formatUUID(row.UserID),
 		Message:           row.Message,
 		Timezone:          row.Timezone,
 		Kind:              schedule.Kind(row.ScheduleKind),

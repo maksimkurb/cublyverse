@@ -20,7 +20,7 @@ func TestWorkspacesAndCraftAPI(t *testing.T) {
 
 	// --- workspaces ---------------------------------------------------------
 
-	status, body := env.api(http.MethodPost, "/workspaces", token, `{"name":"Дом"}`)
+	status, body := env.api(http.MethodPost, "/workspaces", token, `{"name":"Дом","app":"warehouse"}`)
 	if status != http.StatusCreated {
 		t.Fatalf("create workspace status %d: %s", status, body)
 	}
@@ -195,7 +195,7 @@ func TestWorkspacesAndCraftAPI(t *testing.T) {
 		t.Fatalf("remove member status %d: %s", status, body)
 	}
 
-	status, body = env.api(http.MethodPost, "/workspaces", token, `{"name":"Один"}`)
+	status, body = env.api(http.MethodPost, "/workspaces", token, `{"name":"Один","app":"warehouse"}`)
 	if status != http.StatusCreated {
 		t.Fatalf("create single workspace status %d: %s", status, body)
 	}

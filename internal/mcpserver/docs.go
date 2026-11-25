@@ -43,21 +43,7 @@ const (
 // ToolDocs lists the registered tools with their schemas by connecting an
 // in-memory client, which is exactly what a real client sees on tools/list.
 func (s *Server) ToolDocs(ctx context.Context) ([]ToolDoc, error) {
-	var docs []ToolDoc
-	seen := map[string]bool{}
-	for _, sdk := range []*mcp.Server{s.sdk, s.wsSDK} {
-		part, err := s.listToolDocs(ctx, sdk)
-		if err != nil {
-			return nil, err
-		}
-		for _, doc := range part {
-			if !seen[doc.Name] {
-				seen[doc.Name] = true
-				docs = append(docs, doc)
-			}
-		}
-	}
-	return docs, nil
+	return s.listToolDocs(ctx, s.sdk)
 }
 
 func (s *Server) listToolDocs(ctx context.Context, sdk *mcp.Server) ([]ToolDoc, error) {

@@ -75,10 +75,11 @@ type ConnectionService interface {
 // WorkspaceService is the workspace business logic. The real implementation is
 // *workspace.Service.
 type WorkspaceService interface {
-	// Create makes a workspace owned by the user.
-	Create(ctx context.Context, userID, name string) (workspace.Workspace, error)
-	// List returns the workspaces of the user.
-	List(ctx context.Context, userID string) ([]workspace.Workspace, error)
+	// Create makes a space of a mini-app owned by the user.
+	Create(ctx context.Context, userID, app, name string) (workspace.Workspace, error)
+	// List returns the spaces of the user, of one mini-app or of all of them
+	// when app is empty.
+	List(ctx context.Context, userID, app string) ([]workspace.Workspace, error)
 	// Rename changes the name of a workspace.
 	Rename(ctx context.Context, userID, workspaceID, name string) (workspace.Workspace, error)
 	// Delete removes a workspace with everything in it.

@@ -40,10 +40,10 @@ func writeAnnotations(title string, destructive, idempotent bool) *mcp.ToolAnnot
 	return &mcp.ToolAnnotations{Title: title, DestructiveHint: boolPtr(destructive), IdempotentHint: idempotent, OpenWorldHint: boolPtr(false)}
 }
 
-// registerMCP adds the tools to the per-workspace endpoint /mcp/w/{id}. The
-// workspace is the one of the endpoint, so no tool takes a workspace argument.
+// registerMCP adds the warehouse tools. Each takes an optional space argument
+// naming the warehouse it works with.
 func (f *Feature) registerMCP(server *mcpserver.Server) {
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolReference, Title: "Craft reference data",
 		Description: "List the material categories (slug, name, default unit) and the known " +
 			"manufacturers of the craft supplies catalogue. Call it first to learn the valid " +
@@ -51,7 +51,7 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Annotations: readAnnotations("Craft reference data"),
 	}, f.mcpReference)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolSearch, Title: "Search the catalogue",
 		Description: "Search the shared catalogue (manufacturer catalogues such as PRECIOSA or DMC) " +
 			"and the private items of this workspace. Filters are optional; query matches an " +
@@ -60,7 +60,7 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Annotations: readAnnotations("Search the catalogue"),
 	}, f.mcpSearch)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolInventory, Title: "List stock",
 		Description: "List what the workspace holds: items with quantity and unit, optionally " +
 			"filtered by category, manufacturer or text. Use max_qty to find items that are " +
@@ -68,7 +68,7 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Annotations: readAnnotations("List stock"),
 	}, f.mcpInventory)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolStockAdjust, Title: "Change stock by a delta",
 		Description: "Add to or use up material: delta is positive to add and negative to use. " +
 			"Identify the item by item_id, or by manufacturer + article (+ category when ambiguous). " +
@@ -77,20 +77,20 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Annotations: writeAnnotations("Change stock by a delta", false, false),
 	}, f.mcpStockAdjust)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolStockSet, Title: "Set stock to a value",
 		Description: "Set the quantity of an item to an absolute value (a stocktake). Identify the " +
 			"item like craft_stock_adjust. The change is logged.",
 		Annotations: writeAnnotations("Set stock to a value", false, true),
 	}, f.mcpStockSet)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolStockRemove, Title: "Remove an item from stock",
 		Description: "Delete the stock row of an item (the catalogue item itself stays).",
 		Annotations: writeAnnotations("Remove an item from stock", true, true),
 	}, f.mcpStockRemove)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolItemCreate, Title: "Create a private item",
 		Description: "Create a catalogue item private to this workspace, for material that is in no " +
 			"manufacturer catalogue (for example a thread of Mallorca pearls). The unit defaults " +
@@ -99,7 +99,7 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Annotations: writeAnnotations("Create a private item", false, false),
 	}, f.mcpItemCreate)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolItemUpdate, Title: "Update a private item",
 		Description: "Replace the data of a private item of this workspace. All fields are replaced, " +
 			"so read the item with craft_catalog_search first and send the full data. Global " +
@@ -107,13 +107,13 @@ func (f *Feature) registerMCP(server *mcpserver.Server) {
 		Annotations: writeAnnotations("Update a private item", false, true),
 	}, f.mcpItemUpdate)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolItemDelete, Title: "Delete a private item",
 		Description: "Delete a private item together with its stock. Global catalogue items cannot be deleted.",
 		Annotations: writeAnnotations("Delete a private item", true, true),
 	}, f.mcpItemDelete)
 
-	mcpserver.AddWorkspaceTool(server, &mcp.Tool{
+	mcpserver.AddTool(server, &mcp.Tool{
 		Name: toolItemLink, Title: "Link a private item to the catalogue",
 		Description: "Move the stock of a private item to another catalogue item (usually the official " +
 			"one) and delete the private item. Units must match; quantities are summed when the " +
@@ -171,7 +171,10 @@ func stockToMCP(e StockEntry) mcpStock {
 	return mcpStock{Item: item, Qty: e.Qty, Location: e.Location, Notes: e.Notes, UpdatedAt: e.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z")}
 }
 
-type mcpEmpty struct{}
+// mcpSpace names the warehouse of a call.
+type mcpSpace struct {
+	Space string `json:"space,omitempty" jsonschema:"warehouse space id or name (see spaces_list); may be omitted when the user has exactly one"`
+}
 
 type mcpReferenceOutput struct {
 	Categories []struct {
@@ -184,6 +187,7 @@ type mcpReferenceOutput struct {
 }
 
 type mcpFilter struct {
+	mcpSpace
 	Category     string `json:"category,omitempty" jsonschema:"category slug, see craft_reference"`
 	Manufacturer string `json:"manufacturer,omitempty" jsonschema:"manufacturer name, case-insensitive exact match"`
 	Query        string `json:"query,omitempty" jsonschema:"article prefix or part of the name or colour name"`
@@ -211,6 +215,7 @@ type mcpInventoryOutput struct {
 
 // mcpItemRef identifies an item by id or by manufacturer + article.
 type mcpItemRef struct {
+	mcpSpace
 	ItemID       string `json:"item_id,omitempty" jsonschema:"catalogue item id (UUID); use it when known"`
 	Manufacturer string `json:"manufacturer,omitempty" jsonschema:"manufacturer name, with article, instead of item_id"`
 	Article      string `json:"article,omitempty" jsonschema:"article number, with manufacturer, instead of item_id"`
@@ -258,25 +263,33 @@ func (d mcpItemData) input() ItemInput {
 	}
 }
 
+type mcpItemCreateInput struct {
+	mcpSpace
+	mcpItemData
+}
+
 type mcpItemUpdateInput struct {
+	mcpSpace
 	ItemID string `json:"item_id" jsonschema:"id of the private item to replace"`
 	mcpItemData
 }
 
 type mcpItemIDInput struct {
+	mcpSpace
 	ItemID string `json:"item_id" jsonschema:"catalogue item id (UUID)"`
 }
 
 type mcpLinkInput struct {
+	mcpSpace
 	PrivateItemID string `json:"private_item_id" jsonschema:"the private item to merge away"`
 	TargetItemID  string `json:"target_item_id" jsonschema:"the catalogue item that receives its stock"`
 }
 
 // --- handlers ----------------------------------------------------------------
 
-// access authorises one call: the token scope, and the workspace of the
-// endpoint (set by the endpoint only after the membership check).
-func (f *Feature) access(ctx context.Context, scope string) (userID, workspaceID string, err error) {
+// access authorises one call: the token scope, and the warehouse the call
+// names among those the user is a member of.
+func (f *Feature) access(ctx context.Context, scope, space string) (userID, workspaceID string, err error) {
 	principal, ok := mcpserver.PrincipalFromContext(ctx)
 	if !ok {
 		return "", "", mcpserver.ErrUnauthenticated
@@ -284,14 +297,15 @@ func (f *Feature) access(ctx context.Context, scope string) (userID, workspaceID
 	if err := mcpserver.RequireScope(principal, scope); err != nil {
 		return "", "", err
 	}
-	if principal.WorkspaceID == "" {
-		return "", "", errors.New("this tool needs a workspace: connect to /mcp/w/{workspace_id}")
+	resolved, err := f.service.ResolveSpace(ctx, principal.ID, space)
+	if err != nil {
+		return "", "", mcpError(err)
 	}
-	return principal.ID, principal.WorkspaceID, nil
+	return principal.ID, resolved, nil
 }
 
-func (f *Feature) mcpReference(ctx context.Context, _ *mcp.CallToolRequest, _ mcpEmpty) (*mcp.CallToolResult, mcpReferenceOutput, error) {
-	if _, _, err := f.access(ctx, auth.ScopeCraftRead); err != nil {
+func (f *Feature) mcpReference(ctx context.Context, _ *mcp.CallToolRequest, in mcpSpace) (*mcp.CallToolResult, mcpReferenceOutput, error) {
+	if _, _, err := f.access(ctx, auth.ScopeCraftRead, in.Space); err != nil {
 		return nil, mcpReferenceOutput{}, err
 	}
 	var out mcpReferenceOutput
@@ -319,7 +333,7 @@ func (f *Feature) mcpReference(ctx context.Context, _ *mcp.CallToolRequest, _ mc
 }
 
 func (f *Feature) mcpSearch(ctx context.Context, _ *mcp.CallToolRequest, in mcpSearchInput) (*mcp.CallToolResult, mcpItemsOutput, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftRead)
+	user, ws, err := f.access(ctx, auth.ScopeCraftRead, in.Space)
 	if err != nil {
 		return nil, mcpItemsOutput{}, err
 	}
@@ -338,7 +352,7 @@ func (f *Feature) mcpSearch(ctx context.Context, _ *mcp.CallToolRequest, in mcpS
 }
 
 func (f *Feature) mcpInventory(ctx context.Context, _ *mcp.CallToolRequest, in mcpInventoryInput) (*mcp.CallToolResult, mcpInventoryOutput, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftRead)
+	user, ws, err := f.access(ctx, auth.ScopeCraftRead, in.Space)
 	if err != nil {
 		return nil, mcpInventoryOutput{}, err
 	}
@@ -392,7 +406,7 @@ func (f *Feature) resolve(ctx context.Context, user, ws string, ref mcpItemRef) 
 }
 
 func (f *Feature) mcpStockAdjust(ctx context.Context, _ *mcp.CallToolRequest, in mcpAdjustInput) (*mcp.CallToolResult, mcpStock, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpStock{}, err
 	}
@@ -408,7 +422,7 @@ func (f *Feature) mcpStockAdjust(ctx context.Context, _ *mcp.CallToolRequest, in
 }
 
 func (f *Feature) mcpStockSet(ctx context.Context, _ *mcp.CallToolRequest, in mcpSetInput) (*mcp.CallToolResult, mcpStock, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpStock{}, err
 	}
@@ -424,7 +438,7 @@ func (f *Feature) mcpStockSet(ctx context.Context, _ *mcp.CallToolRequest, in mc
 }
 
 func (f *Feature) mcpStockRemove(ctx context.Context, _ *mcp.CallToolRequest, in mcpItemRef) (*mcp.CallToolResult, mcpRemoveOutput, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpRemoveOutput{}, err
 	}
@@ -438,8 +452,8 @@ func (f *Feature) mcpStockRemove(ctx context.Context, _ *mcp.CallToolRequest, in
 	return nil, mcpRemoveOutput{ItemID: id, Removed: true}, nil
 }
 
-func (f *Feature) mcpItemCreate(ctx context.Context, _ *mcp.CallToolRequest, in mcpItemData) (*mcp.CallToolResult, mcpItem, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+func (f *Feature) mcpItemCreate(ctx context.Context, _ *mcp.CallToolRequest, in mcpItemCreateInput) (*mcp.CallToolResult, mcpItem, error) {
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpItem{}, err
 	}
@@ -451,7 +465,7 @@ func (f *Feature) mcpItemCreate(ctx context.Context, _ *mcp.CallToolRequest, in 
 }
 
 func (f *Feature) mcpItemUpdate(ctx context.Context, _ *mcp.CallToolRequest, in mcpItemUpdateInput) (*mcp.CallToolResult, mcpItem, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpItem{}, err
 	}
@@ -463,7 +477,7 @@ func (f *Feature) mcpItemUpdate(ctx context.Context, _ *mcp.CallToolRequest, in 
 }
 
 func (f *Feature) mcpItemDelete(ctx context.Context, _ *mcp.CallToolRequest, in mcpItemIDInput) (*mcp.CallToolResult, mcpRemoveOutput, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpRemoveOutput{}, err
 	}
@@ -474,7 +488,7 @@ func (f *Feature) mcpItemDelete(ctx context.Context, _ *mcp.CallToolRequest, in 
 }
 
 func (f *Feature) mcpItemLink(ctx context.Context, _ *mcp.CallToolRequest, in mcpLinkInput) (*mcp.CallToolResult, mcpStock, error) {
-	user, ws, err := f.access(ctx, auth.ScopeCraftWrite)
+	user, ws, err := f.access(ctx, auth.ScopeCraftWrite, in.Space)
 	if err != nil {
 		return nil, mcpStock{}, err
 	}

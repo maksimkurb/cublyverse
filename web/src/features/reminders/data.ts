@@ -6,9 +6,9 @@ import { $api } from "../../api/query";
 /** Query key of `GET /reminders`, as built by openapi-react-query. */
 export const remindersQueryKey = ["get", "/reminders"] as const;
 
-/** Loads every reminder of the signed-in user. */
-export function useRemindersQuery() {
-  return $api.useQuery("get", "/reminders");
+/** Loads the reminders of one space. */
+export function useRemindersQuery(spaceId: string) {
+  return $api.useQuery("get", "/reminders", { params: { query: { space_id: spaceId } } }, { enabled: spaceId !== "" });
 }
 
 /** Creates one reminder. */

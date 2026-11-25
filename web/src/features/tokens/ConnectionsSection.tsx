@@ -62,7 +62,6 @@ export function ConnectionsSection() {
           <li key={connection.id} className="card token">
             <div className="token__head">
               <span className="token__name">{connection.client_name}</span>
-              {connection.workspace_name && <span className="badge">{connection.workspace_name}</span>}
             </div>
             <ul className="scope-chips" aria-label="Области доступа">
               {connection.scopes.map((scope) => (

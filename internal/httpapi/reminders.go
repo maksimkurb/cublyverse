@@ -18,14 +18,21 @@ const (
 )
 
 // ListReminders implements GET /api/v1/reminders.
-func (h *handlers) ListReminders(ctx context.Context, _ gen.ListRemindersRequestObject) (gen.ListRemindersResponseObject, error) {
+func (h *handlers) ListReminders(ctx context.Context, request gen.ListRemindersRequestObject) (gen.ListRemindersResponseObject, error) {
 	principal, ok := h.principalID(ctx)
 	if !ok {
 		return gen.ListReminders401JSONResponse{
 			UnauthorizedJSONResponse: gen.UnauthorizedJSONResponse(errorPayload(codeUnauthorized, msgLoginRequired)),
 		}, nil
 	}
-	items, err := h.deps.Reminders.List(ctx, principal)
+	space := ""
+	if request.Params.SpaceId != nil {
+		space = *request.Params.SpaceId
+	}
+	items, err := h.deps.Reminders.ListSpace(ctx, principal, space)
+	if errors.Is(err, reminders.ErrSpaceNotFound) {
+		return gen.ListReminders200JSONResponse{}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -49,6 +56,9 @@ func (h *handlers) CreateReminder(ctx context.Context, request gen.CreateReminde
 	}
 	reminder, err := h.deps.Reminders.Create(ctx, principal, createReminderInput(*request.Body))
 	if err != nil {
+		if errors.Is(err, reminders.ErrSpaceNotFound) {
+			return gen.CreateReminder400JSONResponse(errorPayload(codeBadRequest, msgWorkspaceNotFound)), nil
+		}
 		var invalid *reminders.ValidationError
 		if errors.As(err, &invalid) {
 			return gen.CreateReminder400JSONResponse(errorPayload(codeBadRequest, invalid.Message)), nil
@@ -93,6 +103,8 @@ func (h *handlers) UpdateReminder(ctx context.Context, request gen.UpdateReminde
 	if err != nil {
 		var invalid *reminders.ValidationError
 		switch {
+		case errors.Is(err, reminders.ErrSpaceNotFound):
+			return gen.UpdateReminder400JSONResponse(errorPayload(codeBadRequest, msgWorkspaceNotFound)), nil
 		case errors.As(err, &invalid):
 			return gen.UpdateReminder400JSONResponse(errorPayload(codeBadRequest, invalid.Message)), nil
 		case errors.Is(err, reminders.ErrNotFound):
@@ -169,6 +181,10 @@ func createReminderInput(body gen.CreateReminderRequest) reminders.Input {
 		TimeHHMM:      body.Time,
 		RepeatMinutes: reminders.DefaultRepeatMinutes,
 		Enabled:       true,
+		SpaceID:       stringValue(body.SpaceId),
+	}
+	if body.RecipientIds != nil {
+		input.Recipients = *body.RecipientIds
 	}
 	applyRecurrence(&input, body.Interval, body.MonthWeekPosition, body.MonthWeekday,
 		body.StartDate, endKindName(body.EndKind), body.EndDate, body.EndCount)
@@ -191,6 +207,10 @@ func updateReminderInput(body gen.UpdateReminderRequest) reminders.Input {
 		TimeHHMM:      body.Time,
 		RepeatMinutes: body.RepeatMinutes,
 		Enabled:       body.Enabled,
+		SpaceID:       stringValue(body.SpaceId),
+	}
+	if body.RecipientIds != nil {
+		input.Recipients = *body.RecipientIds
 	}
 	applyRecurrence(&input, body.Interval, body.MonthWeekPosition, body.MonthWeekday,
 		body.StartDate, stringValue(body.EndKind), body.EndDate, body.EndCount)
@@ -259,7 +279,14 @@ func daysFromAPI(days *[]int) []int {
 
 // reminderToAPI maps the service model to the API schema.
 func reminderToAPI(reminder reminders.Reminder) gen.Reminder {
+	recipients := reminder.Recipients
+	if recipients == nil {
+		recipients = []string{}
+	}
 	out := gen.Reminder{
+		SpaceId:           reminder.SpaceID,
+		AuthorId:          reminder.AuthorID,
+		RecipientIds:      recipients,
 		Id:                reminder.ID,
 		Message:           reminder.Message,
 		Timezone:          reminder.Timezone,

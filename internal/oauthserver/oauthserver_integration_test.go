@@ -34,12 +34,11 @@ func (f *fakeIdentity) ResolveSession(context.Context, *http.Request) (auth.Sess
 }
 
 type env struct {
-	t          *testing.T
-	svc        *oauthserver.Service
-	srv        *httptest.Server
-	identity   *fakeIdentity
-	workspaces *workspace.Service
-	user, ws   string
+	t        *testing.T
+	svc      *oauthserver.Service
+	srv      *httptest.Server
+	identity *fakeIdentity
+	user     string
 }
 
 func newEnv(t *testing.T, cfgMod func(*oauthserver.Config)) *env {
@@ -61,20 +60,15 @@ func newEnv(t *testing.T, cfgMod func(*oauthserver.Config)) *env {
 		t.Fatal(err)
 	}
 	userID := workspace.FormatID(u.ID)
-	workspaces := workspace.New(st)
-	ws, err := workspaces.Create(ctx, userID, "Дом")
-	if err != nil {
-		t.Fatal(err)
-	}
 	cfg := oauthserver.Config{Issuer: issuer, Logger: logger}
 	if cfgMod != nil {
 		cfgMod(&cfg)
 	}
 	identity := &fakeIdentity{user: userID}
-	svc := oauthserver.New(cfg, st, identity, workspaces)
+	svc := oauthserver.New(cfg, st, identity)
 	srv := httptest.NewServer(svc.Handler())
 	t.Cleanup(srv.Close)
-	return &env{t: t, svc: svc, srv: srv, identity: identity, workspaces: workspaces, user: userID, ws: ws.ID}
+	return &env{t: t, svc: svc, srv: srv, identity: identity, user: userID}
 }
 
 // noRedirect returns the response of a request without following redirects.
@@ -153,7 +147,6 @@ func (e *env) authorize(clientID, redirect, challenge, resource string) string {
 	}
 	form.Set("csrf", csrf.Value)
 	form.Set("decision", "allow")
-	form.Set("workspace_id", e.ws)
 	resp := e.do("POST", "/oauth/authorize", form, csrf)
 	if resp.StatusCode != http.StatusFound {
 		b, _ := io.ReadAll(resp.Body)
@@ -186,7 +179,7 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	redirect := "http://127.0.0.1:33333/callback"
 	clientID := e.register(redirect)
 	verifier, challenge := pkce()
-	resource := issuer + "/mcp/w/" + e.ws
+	resource := issuer + "/mcp"
 
 	// A loopback client may use another port (RFC 8252).
 	code := e.authorize(clientID, "http://127.0.0.1:44444/callback", challenge, resource)
@@ -207,7 +200,7 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	}
 
 	tok, err := e.svc.Verify(context.Background(), out.AccessToken)
-	if err != nil || tok.WorkspaceID != e.ws || tok.UserID != e.user || tok.Resource != resource {
+	if err != nil || tok.UserID != e.user || tok.Resource != resource {
 		t.Fatalf("Verify = %+v, %v", tok, err)
 	}
 
@@ -226,7 +219,7 @@ func TestRefreshRotationAndReuse(t *testing.T) {
 	redirect := "http://localhost:1/cb"
 	clientID := e.register(redirect)
 	verifier, challenge := pkce()
-	code := e.authorize(clientID, redirect, challenge, issuer+"/mcp/w/"+e.ws)
+	code := e.authorize(clientID, redirect, challenge, issuer+"/mcp")
 	_, first := e.token(url.Values{"grant_type": {"authorization_code"}, "client_id": {clientID}, "code": {code},
 		"redirect_uri": {redirect}, "code_verifier": {verifier}})
 
@@ -336,9 +329,12 @@ func TestMetadataDocuments(t *testing.T) {
 	if status != 200 || m["issuer"] != issuer || m["client_id_metadata_document_supported"] != true {
 		t.Fatalf("AS metadata = %d %v", status, m)
 	}
-	status, m = get("/.well-known/oauth-protected-resource/mcp/w/" + e.ws)
-	if status != 200 || m["resource"] != issuer+"/mcp/w/"+e.ws {
+	status, m = get("/.well-known/oauth-protected-resource/mcp")
+	if status != 200 || m["resource"] != issuer+"/mcp" {
 		t.Fatalf("resource metadata = %d %v", status, m)
+	}
+	if status, _ = get("/.well-known/oauth-protected-resource/mcp/w/00000000-0000-0000-0000-000000000000"); status != 404 {
+		t.Fatalf("removed per-space resource status = %d, want 404", status)
 	}
 	if status, _ = get("/.well-known/oauth-protected-resource/other"); status != 404 {
 		t.Fatalf("foreign resource path status = %d, want 404", status)

@@ -511,7 +511,7 @@ func (s *Service) LinkToCatalog(ctx context.Context, userID, workspaceID, privat
 // --- internals -------------------------------------------------------------
 
 func (s *Service) authorize(ctx context.Context, userID, workspaceID string) (pgtype.UUID, error) {
-	ws, err := s.workspaces.Require(ctx, userID, workspaceID)
+	ws, err := s.workspaces.RequireApp(ctx, userID, workspaceID, workspace.AppWarehouse)
 	if errors.Is(err, workspace.ErrNotFound) {
 		return pgtype.UUID{}, workspace.ErrNotFound
 	}
@@ -845,4 +845,18 @@ func mapUnique(err error, what string) error {
 		return invalid("Позиция с таким производителем и артикулом уже есть.")
 	}
 	return fmt.Errorf("%s: %w", what, err)
+}
+
+// ResolveSpace finds the warehouse a client named by id or name and returns its
+// id. An empty reference works when the user has exactly one.
+func (s *Service) ResolveSpace(ctx context.Context, userID, ref string) (string, error) {
+	space, err := s.workspaces.Resolve(ctx, userID, workspace.AppWarehouse, ref)
+	var invalidSpace *workspace.ValidationError
+	if errors.As(err, &invalidSpace) {
+		return "", invalid("%s", invalidSpace.Message)
+	}
+	if err != nil {
+		return "", err
+	}
+	return space.ID, nil
 }

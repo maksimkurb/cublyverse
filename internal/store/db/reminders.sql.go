@@ -12,6 +12,47 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addReminderRecipient = `-- name: AddReminderRecipient :exec
+INSERT INTO reminder_recipients (reminder_id, user_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type AddReminderRecipientParams struct {
+	ReminderID pgtype.UUID `json:"reminder_id"`
+	UserID     pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) AddReminderRecipient(ctx context.Context, arg AddReminderRecipientParams) error {
+	_, err := q.db.Exec(ctx, addReminderRecipient, arg.ReminderID, arg.UserID)
+	return err
+}
+
+const canAccessReminder = `-- name: CanAccessReminder :one
+SELECT EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = $1::uuid
+      ) AS allowed
+FROM reminders r
+WHERE r.id = $2::uuid
+`
+
+type CanAccessReminderParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	ID     pgtype.UUID `json:"id"`
+}
+
+// Deliberately returns a row for a foreign reminder too: a confirmation has to
+// tell "not your reminder" from "gone". The id comes from a button of that chat
+// and is not enumerable.
+func (q *Queries) CanAccessReminder(ctx context.Context, arg CanAccessReminderParams) (bool, error) {
+	row := q.db.QueryRow(ctx, canAccessReminder, arg.UserID, arg.ID)
+	var allowed bool
+	err := row.Scan(&allowed)
+	return allowed, err
+}
+
 const cancelActiveOccurrence = `-- name: CancelActiveOccurrence :execrows
 UPDATE reminder_occurrences
 SET status         = 'cancelled',
@@ -63,7 +104,7 @@ UPDATE reminders r
 SET lock_until = $1::timestamptz
 FROM due
 WHERE r.id = due.id
-RETURNING r.id, r.user_id, r.message, r.timezone, r.schedule_kind, r.schedule_days, r.time_hhmm, r.repeat_minutes, r.enabled, r.next_due_at, r.last_error, r.lock_until, r.created_at, r.updated_at, r.interval_count, r.month_week_position, r.month_weekday, r.start_date, r.end_kind, r.end_date, r.end_count, r.occurrences_fired, r.finished_at
+RETURNING r.id, r.user_id, r.message, r.timezone, r.schedule_kind, r.schedule_days, r.time_hhmm, r.repeat_minutes, r.enabled, r.next_due_at, r.last_error, r.lock_until, r.created_at, r.updated_at, r.interval_count, r.month_week_position, r.month_weekday, r.start_date, r.end_kind, r.end_date, r.end_count, r.occurrences_fired, r.finished_at, r.workspace_id
 `
 
 type ClaimDueRemindersParams struct {
@@ -110,6 +151,7 @@ func (q *Queries) ClaimDueReminders(ctx context.Context, arg ClaimDueRemindersPa
 			&i.EndCount,
 			&i.OccurrencesFired,
 			&i.FinishedAt,
+			&i.WorkspaceID,
 		); err != nil {
 			return nil, err
 		}
@@ -119,6 +161,16 @@ func (q *Queries) ClaimDueReminders(ctx context.Context, arg ClaimDueRemindersPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const clearReminderRecipients = `-- name: ClearReminderRecipients :exec
+DELETE FROM reminder_recipients
+WHERE reminder_id = $1
+`
+
+func (q *Queries) ClearReminderRecipients(ctx context.Context, reminderID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearReminderRecipients, reminderID)
+	return err
 }
 
 const completeOccurrence = `-- name: CompleteOccurrence :one
@@ -131,7 +183,11 @@ FROM reminders r
 WHERE o.id = $2::uuid
   AND o.reminder_id = r.id
   AND r.id = $3::uuid
-  AND r.user_id = $4::uuid
+  AND EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = $4::uuid
+      )
   AND o.status = 'active'
 RETURNING o.id, o.reminder_id, o.scheduled_at, o.first_sent_at, o.repeat_count, o.next_repeat_at, o.status, o.completed_at, o.deliveries, o.created_at, o.updated_at
 `
@@ -143,8 +199,8 @@ type CompleteOccurrenceParams struct {
 	UserID       pgtype.UUID `json:"user_id"`
 }
 
-// Confirms one specific occurrence of the owner's reminder. The WHERE clause is
-// the guard: only an active occurrence changes, and the owner check is part of
+// Confirms one specific occurrence of a reminder. The WHERE clause is the
+// guard: only an active occurrence changes, and the membership check is part of
 // the same statement, so the chat button, the HTTP API and MCP have exactly one
 // winner and one answer.
 func (q *Queries) CompleteOccurrence(ctx context.Context, arg CompleteOccurrenceParams) (ReminderOccurrence, error) {
@@ -279,11 +335,12 @@ INSERT INTO reminders (
     start_date,
     end_kind,
     end_date,
-    end_count
+    end_count,
+    workspace_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
 )
-RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at, workspace_id
 `
 
 type CreateReminderParams struct {
@@ -303,6 +360,7 @@ type CreateReminderParams struct {
 	EndKind           string             `json:"end_kind"`
 	EndDate           pgtype.Date        `json:"end_date"`
 	EndCount          *int32             `json:"end_count"`
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
 }
 
 func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) (Reminder, error) {
@@ -323,6 +381,7 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 		arg.EndKind,
 		arg.EndDate,
 		arg.EndCount,
+		arg.WorkspaceID,
 	)
 	var i Reminder
 	err := row.Scan(
@@ -349,14 +408,19 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 		&i.EndCount,
 		&i.OccurrencesFired,
 		&i.FinishedAt,
+		&i.WorkspaceID,
 	)
 	return i, err
 }
 
 const deleteReminder = `-- name: DeleteReminder :execrows
-DELETE FROM reminders
-WHERE id = $1
-  AND user_id = $2
+DELETE FROM reminders r
+WHERE r.id = $1::uuid
+  AND EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = $2::uuid
+      )
 `
 
 type DeleteReminderParams struct {
@@ -379,21 +443,19 @@ SET enabled     = false,
     finished_at = $1::timestamptz,
     updated_at  = $1::timestamptz
 WHERE id = $2::uuid
-  AND user_id = $3::uuid
-RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at, workspace_id
 `
 
 type FinishReminderParams struct {
 	FinishedAt time.Time   `json:"finished_at"`
 	ReminderID pgtype.UUID `json:"reminder_id"`
-	UserID     pgtype.UUID `json:"user_id"`
 }
 
 // Closes a rule whose recurrence has no future occurrence: the last occurrence
 // was confirmed and the reminder must never fire again. It stays visible as
 // «завершено», so only `enabled` and `next_due_at` change, not the rule itself.
 func (q *Queries) FinishReminder(ctx context.Context, arg FinishReminderParams) (Reminder, error) {
-	row := q.db.QueryRow(ctx, finishReminder, arg.FinishedAt, arg.ReminderID, arg.UserID)
+	row := q.db.QueryRow(ctx, finishReminder, arg.FinishedAt, arg.ReminderID)
 	var i Reminder
 	err := row.Scan(
 		&i.ID,
@@ -419,6 +481,7 @@ func (q *Queries) FinishReminder(ctx context.Context, arg FinishReminderParams) 
 		&i.EndCount,
 		&i.OccurrencesFired,
 		&i.FinishedAt,
+		&i.WorkspaceID,
 	)
 	return i, err
 }
@@ -433,7 +496,7 @@ SET next_due_at       = $1,
 WHERE id = $3::uuid
   AND lock_until = $4::timestamptz
   AND updated_at = $5::timestamptz
-RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at, workspace_id
 `
 
 type FinishReminderFirstFireParams struct {
@@ -482,6 +545,7 @@ func (q *Queries) FinishReminderFirstFire(ctx context.Context, arg FinishReminde
 		&i.EndCount,
 		&i.OccurrencesFired,
 		&i.FinishedAt,
+		&i.WorkspaceID,
 	)
 	return i, err
 }
@@ -493,7 +557,7 @@ SET last_error = NULL,
     updated_at = $1::timestamptz
 WHERE id = $2::uuid
   AND lock_until = $3::timestamptz
-RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at
+RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at, workspace_id
 `
 
 type FinishReminderRepeatParams struct {
@@ -531,6 +595,7 @@ func (q *Queries) FinishReminderRepeat(ctx context.Context, arg FinishReminderRe
 		&i.EndCount,
 		&i.OccurrencesFired,
 		&i.FinishedAt,
+		&i.WorkspaceID,
 	)
 	return i, err
 }
@@ -593,9 +658,13 @@ func (q *Queries) GetOccurrence(ctx context.Context, arg GetOccurrenceParams) (R
 }
 
 const getReminder = `-- name: GetReminder :one
-SELECT id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at FROM reminders
-WHERE id = $1
-  AND user_id = $2
+SELECT r.id, r.user_id, r.message, r.timezone, r.schedule_kind, r.schedule_days, r.time_hhmm, r.repeat_minutes, r.enabled, r.next_due_at, r.last_error, r.lock_until, r.created_at, r.updated_at, r.interval_count, r.month_week_position, r.month_weekday, r.start_date, r.end_kind, r.end_date, r.end_count, r.occurrences_fired, r.finished_at, r.workspace_id FROM reminders r
+WHERE r.id = $1::uuid
+  AND EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = $2::uuid
+      )
 `
 
 type GetReminderParams struct {
@@ -603,8 +672,8 @@ type GetReminderParams struct {
 	UserID pgtype.UUID `json:"user_id"`
 }
 
-// Ownership is part of the lookup: a foreign id is indistinguishable from an
-// unknown one.
+// Membership of the reminder's space is part of the lookup: a foreign id is
+// indistinguishable from an unknown one.
 func (q *Queries) GetReminder(ctx context.Context, arg GetReminderParams) (Reminder, error) {
 	row := q.db.QueryRow(ctx, getReminder, arg.ID, arg.UserID)
 	var i Reminder
@@ -632,30 +701,16 @@ func (q *Queries) GetReminder(ctx context.Context, arg GetReminderParams) (Remin
 		&i.EndCount,
 		&i.OccurrencesFired,
 		&i.FinishedAt,
+		&i.WorkspaceID,
 	)
 	return i, err
-}
-
-const getReminderOwner = `-- name: GetReminderOwner :one
-SELECT user_id FROM reminders
-WHERE id = $1
-`
-
-// Deliberately not scoped by the owner: a confirmation has to tell "already
-// confirmed" from "not your reminder" from "gone", so the owner id is compared
-// in Go. The id comes from a button of that chat and is not enumerable.
-func (q *Queries) GetReminderOwner(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, getReminderOwner, id)
-	var user_id pgtype.UUID
-	err := row.Scan(&user_id)
-	return user_id, err
 }
 
 const listActiveOccurrencesByUser = `-- name: ListActiveOccurrencesByUser :many
 SELECT o.id, o.reminder_id, o.scheduled_at, o.first_sent_at, o.repeat_count, o.next_repeat_at, o.status, o.completed_at, o.deliveries, o.created_at, o.updated_at FROM reminder_occurrences o
 JOIN reminders r ON r.id = o.reminder_id
-WHERE r.user_id = $1
-  AND o.status = 'active'
+JOIN workspace_members m ON m.workspace_id = r.workspace_id AND m.user_id = $1
+WHERE o.status = 'active'
 `
 
 // One query for the whole list answer: the active occurrence of every reminder
@@ -692,14 +747,56 @@ func (q *Queries) ListActiveOccurrencesByUser(ctx context.Context, userID pgtype
 	return items, nil
 }
 
-const listReminders = `-- name: ListReminders :many
-SELECT id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at FROM reminders
-WHERE user_id = $1
-ORDER BY time_hhmm, created_at, id
+const listReminderRecipients = `-- name: ListReminderRecipients :many
+SELECT rr.reminder_id, rr.user_id
+FROM reminder_recipients rr
+JOIN reminders r ON r.id = rr.reminder_id
+JOIN workspace_members m ON m.workspace_id = r.workspace_id AND m.user_id = rr.user_id
+WHERE rr.reminder_id = ANY ($1::uuid[])
+ORDER BY rr.reminder_id, m.created_at, rr.user_id
 `
 
-func (q *Queries) ListReminders(ctx context.Context, userID pgtype.UUID) ([]Reminder, error) {
-	rows, err := q.db.Query(ctx, listReminders, userID)
+// Chosen recipients that are still members of the reminder's space.
+func (q *Queries) ListReminderRecipients(ctx context.Context, reminderIds []pgtype.UUID) ([]ReminderRecipient, error) {
+	rows, err := q.db.Query(ctx, listReminderRecipients, reminderIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReminderRecipient{}
+	for rows.Next() {
+		var i ReminderRecipient
+		if err := rows.Scan(&i.ReminderID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReminders = `-- name: ListReminders :many
+SELECT r.id, r.user_id, r.message, r.timezone, r.schedule_kind, r.schedule_days, r.time_hhmm, r.repeat_minutes, r.enabled, r.next_due_at, r.last_error, r.lock_until, r.created_at, r.updated_at, r.interval_count, r.month_week_position, r.month_weekday, r.start_date, r.end_kind, r.end_date, r.end_count, r.occurrences_fired, r.finished_at, r.workspace_id FROM reminders r
+WHERE ($1::uuid IS NULL OR r.workspace_id = $1::uuid)
+  AND EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = $2::uuid
+      )
+ORDER BY r.time_hhmm, r.created_at, r.id
+`
+
+type ListRemindersParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	UserID      pgtype.UUID `json:"user_id"`
+}
+
+// Reminders of every space of the user, or of one space when workspace_id is
+// given.
+func (q *Queries) ListReminders(ctx context.Context, arg ListRemindersParams) ([]Reminder, error) {
+	rows, err := q.db.Query(ctx, listReminders, arg.WorkspaceID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -731,6 +828,7 @@ func (q *Queries) ListReminders(ctx context.Context, userID pgtype.UUID) ([]Remi
 			&i.EndCount,
 			&i.OccurrencesFired,
 			&i.FinishedAt,
+			&i.WorkspaceID,
 		); err != nil {
 			return nil, err
 		}
@@ -821,33 +919,36 @@ func (q *Queries) ReleaseReminderLease(ctx context.Context, arg ReleaseReminderL
 }
 
 const updateReminder = `-- name: UpdateReminder :one
-UPDATE reminders
-SET message             = $3,
-    timezone            = $4,
-    schedule_kind       = $5,
-    schedule_days       = $6,
-    time_hhmm           = $7,
-    repeat_minutes      = $8,
-    enabled             = $9,
-    next_due_at         = $10,
-    interval_count      = $11,
-    month_week_position = $12,
-    month_weekday       = $13,
-    start_date          = $14,
-    end_kind            = $15,
-    end_date            = $16,
-    end_count           = $17,
+UPDATE reminders r
+SET message             = $1,
+    timezone            = $2,
+    schedule_kind       = $3,
+    schedule_days       = $4,
+    time_hhmm           = $5,
+    repeat_minutes      = $6,
+    enabled             = $7,
+    next_due_at         = $8,
+    interval_count      = $9,
+    month_week_position = $10,
+    month_weekday       = $11,
+    start_date          = $12,
+    end_kind            = $13,
+    end_date            = $14,
+    end_count           = $15,
+    workspace_id        = $16,
     occurrences_fired   = 0,
     finished_at         = NULL,
     updated_at          = now()
-WHERE id = $1
-  AND user_id = $2
-RETURNING id, user_id, message, timezone, schedule_kind, schedule_days, time_hhmm, repeat_minutes, enabled, next_due_at, last_error, lock_until, created_at, updated_at, interval_count, month_week_position, month_weekday, start_date, end_kind, end_date, end_count, occurrences_fired, finished_at
+WHERE r.id = $17::uuid
+  AND EXISTS (
+        SELECT 1 FROM workspace_members m
+        WHERE m.workspace_id = r.workspace_id
+          AND m.user_id = $18::uuid
+      )
+RETURNING r.id, r.user_id, r.message, r.timezone, r.schedule_kind, r.schedule_days, r.time_hhmm, r.repeat_minutes, r.enabled, r.next_due_at, r.last_error, r.lock_until, r.created_at, r.updated_at, r.interval_count, r.month_week_position, r.month_weekday, r.start_date, r.end_kind, r.end_date, r.end_count, r.occurrences_fired, r.finished_at, r.workspace_id
 `
 
 type UpdateReminderParams struct {
-	ID                pgtype.UUID        `json:"id"`
-	UserID            pgtype.UUID        `json:"user_id"`
 	Message           string             `json:"message"`
 	Timezone          string             `json:"timezone"`
 	ScheduleKind      string             `json:"schedule_kind"`
@@ -863,15 +964,16 @@ type UpdateReminderParams struct {
 	EndKind           string             `json:"end_kind"`
 	EndDate           pgtype.Date        `json:"end_date"`
 	EndCount          *int32             `json:"end_count"`
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	ID                pgtype.UUID        `json:"id"`
+	UserID            pgtype.UUID        `json:"user_id"`
 }
 
-// A full replacement of the rule (PUT semantics). The owner check makes a
+// A full replacement of the rule (PUT semantics). The membership check makes a
 // foreign id answer with no rows. The fired counter and the finished marker are
 // reset: a changed recurrence is a new cycle, exactly as the first one.
 func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) (Reminder, error) {
 	row := q.db.QueryRow(ctx, updateReminder,
-		arg.ID,
-		arg.UserID,
 		arg.Message,
 		arg.Timezone,
 		arg.ScheduleKind,
@@ -887,6 +989,9 @@ func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) 
 		arg.EndKind,
 		arg.EndDate,
 		arg.EndCount,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.UserID,
 	)
 	var i Reminder
 	err := row.Scan(
@@ -913,6 +1018,7 @@ func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) 
 		&i.EndCount,
 		&i.OccurrencesFired,
 		&i.FinishedAt,
+		&i.WorkspaceID,
 	)
 	return i, err
 }

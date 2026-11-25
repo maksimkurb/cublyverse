@@ -103,7 +103,7 @@ func (s *Service) exchangeCode(ctx context.Context, client Client, code, redirec
 		return tokenResponse{}, grantError{"invalid_target", "resource не совпадает с запрошенным при авторизации."}
 	}
 	return s.issue(ctx, issueParams{
-		family: row.FamilyID, clientID: client.ID, userID: row.UserID, workspaceID: row.WorkspaceID,
+		family: row.FamilyID, clientID: client.ID, userID: row.UserID,
 		scopes: row.Scopes, resource: row.Resource,
 	})
 }
@@ -141,15 +141,15 @@ func (s *Service) refresh(ctx context.Context, client Client, refreshToken strin
 		return tokenResponse{}, fmt.Errorf("use refresh token: %w", err)
 	}
 	return s.issue(ctx, issueParams{
-		family: row.FamilyID, clientID: row.ClientID, userID: row.UserID, workspaceID: row.WorkspaceID,
+		family: row.FamilyID, clientID: row.ClientID, userID: row.UserID,
 		scopes: row.Scopes, resource: row.Resource,
 	})
 }
 
 type issueParams struct {
-	family, userID, workspaceID pgtype.UUID
-	clientID, resource          string
-	scopes                      []string
+	family, userID     pgtype.UUID
+	clientID, resource string
+	scopes             []string
 }
 
 func (s *Service) issue(ctx context.Context, p issueParams) (tokenResponse, error) {
@@ -163,7 +163,7 @@ func (s *Service) issue(ctx context.Context, p issueParams) (tokenResponse, erro
 	}
 	now := s.now()
 	if _, err := s.st.Queries().CreateOAuthToken(ctx, db.CreateOAuthTokenParams{
-		FamilyID: p.family, ClientID: p.clientID, UserID: p.userID, WorkspaceID: p.workspaceID,
+		FamilyID: p.family, ClientID: p.clientID, UserID: p.userID,
 		Scopes: p.scopes, Resource: p.resource,
 		AccessHash: hashSecret(access), AccessExpiresAt: now.Add(accessTokenTTL),
 		RefreshHash: hashSecret(refresh), RefreshExpiresAt: now.Add(refreshTokenTTL),

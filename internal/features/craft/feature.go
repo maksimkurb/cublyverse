@@ -48,7 +48,7 @@ func (f *Feature) Service() *Service { return f.service }
 // RegisterBot registers nothing: the feature has no chat commands.
 func (f *Feature) RegisterBot(*bot.Router) {}
 
-// RegisterMCP adds the craft tools to the per-workspace MCP endpoint.
+// RegisterMCP adds the warehouse tools to the MCP server.
 func (f *Feature) RegisterMCP(server *mcpserver.Server) { f.registerMCP(server) }
 
 // Jobs returns the catalogue sync job when it is enabled.

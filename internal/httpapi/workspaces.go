@@ -17,14 +17,18 @@ const (
 )
 
 // ListWorkspaces implements GET /api/v1/workspaces.
-func (h *handlers) ListWorkspaces(ctx context.Context, _ gen.ListWorkspacesRequestObject) (gen.ListWorkspacesResponseObject, error) {
+func (h *handlers) ListWorkspaces(ctx context.Context, request gen.ListWorkspacesRequestObject) (gen.ListWorkspacesResponseObject, error) {
 	principal, ok := h.principalID(ctx)
 	if !ok {
 		return gen.ListWorkspaces401JSONResponse{
 			UnauthorizedJSONResponse: gen.UnauthorizedJSONResponse(errorPayload(codeUnauthorized, msgLoginRequired)),
 		}, nil
 	}
-	items, err := h.deps.Workspaces.List(ctx, principal)
+	app := ""
+	if request.Params.App != nil {
+		app = string(*request.Params.App)
+	}
+	items, err := h.deps.Workspaces.List(ctx, principal, app)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +50,7 @@ func (h *handlers) CreateWorkspace(ctx context.Context, request gen.CreateWorksp
 	if request.Body == nil {
 		return gen.CreateWorkspace400JSONResponse(errorPayload(codeBadRequest, msgBadRequest)), nil
 	}
-	created, err := h.deps.Workspaces.Create(ctx, principal, request.Body.Name)
+	created, err := h.deps.Workspaces.Create(ctx, principal, string(request.Body.App), request.Body.Name)
 	if err != nil {
 		var invalid *workspace.ValidationError
 		if errors.As(err, &invalid) {
@@ -201,7 +205,7 @@ func (h *handlers) ListWorkspaceMemberCandidates(ctx context.Context, request ge
 }
 
 func workspaceToAPI(item workspace.Workspace) gen.Workspace {
-	return gen.Workspace{Id: item.ID, Name: item.Name, CreatedAt: item.CreatedAt}
+	return gen.Workspace{Id: item.ID, Name: item.Name, App: gen.SpaceApp(item.App), Personal: item.Personal, CreatedAt: item.CreatedAt}
 }
 
 func memberToAPI(member workspace.Member) gen.WorkspaceMember {

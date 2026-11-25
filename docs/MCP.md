@@ -63,8 +63,8 @@ server для MCP-клиентов (`internal/oauthserver`). Пользоват�
 регистрация клиентов. Клиент находит всё сам:
 
 ```text
-POST /mcp/w/{workspace_id}                              → 401 + WWW-Authenticate: Bearer resource_metadata="…"
-GET  /.well-known/oauth-protected-resource/mcp/w/{id}   (RFC 9728)
+POST /mcp                                               → 401 + WWW-Authenticate: Bearer resource_metadata="…"
+GET  /.well-known/oauth-protected-resource/mcp          (RFC 9728)
 GET  /.well-known/oauth-authorization-server            (RFC 8414)
 POST /oauth/register                                    (RFC 7591, динамическая регистрация)
 GET  /oauth/authorize → вход через SSO → экран согласия → redirect с кодом
@@ -80,31 +80,37 @@ POST /oauth/revoke    (RFC 7009)
 - **Токены:** непрозрачные, `cv_oat_…` (access, 1 час) и `cv_ort_…` (refresh,
   30 дней, ротация; повторное использование погашенного refresh-токена или кода
   отзывает всю цепочку). В БД хранятся только sha256.
-- **Привязка к ресурсу (RFC 8707):** токен выдаётся для конкретного
-  `resource` — `/mcp` или `/mcp/w/{workspace_id}` — и на другом ресурсе
-  отвергается. На экране согласия пользователь выбирает workspace; без
-  workspace области `craft:*` не выдаются.
+- **Привязка к ресурсу (RFC 8707):** ресурс один — `/mcp`. Доступ действует
+  на все пространства пользователя в пределах областей, подтверждённых на экране
+  согласия.
 - Токены PAT продолжают работать на тех же адресах.
 - Отозвать доступ приложения можно в WebApp («Профиль» → «Подключённые приложения»), через `DELETE /api/v1/connections/{id}` или `POST /oauth/revoke`.
 - Раз в час фоновая задача `oauth.cleanup` удаляет просроченные коды и токены и динамически зарегистрированных клиентов, которые за неделю так и не получили доступ.
 
-## Эндпоинты
+## Эндпоинт и пространства
 
-`/mcp` — напоминания пользователя (`whoami`, `reminders_*`);
-`/mcp/w/{workspace_id}` — один workspace («Бусинки»: `whoami`, `craft_*`).
-На каждом адресе виден только свой набор инструментов. Чужой или
-несуществующий workspace отвечает `404`; рабочие инструменты требуют scope
-`craft:read` / `craft:write`.
+Все инструменты живут на одном адресе `/mcp`. Каждый мини-апп хранит данные в
+пространствах, поэтому инструменты принимают аргумент `space` — id или название
+пространства. Список с участниками отдаёт `spaces_list`.
+
+- Склад (`craft_*`): `space` можно не указывать, если склад один; иначе ошибка
+  перечисляет доступные.
+- Напоминания: `reminders_list` без `space` показывает все пространства,
+  `reminders_create` без `space` пишет в личное, `reminders_update` без `space`
+  не переносит напоминание. Получатели задаются `recipient_ids` (id участников
+  из `spaces_list`).
+
+Чужое и несуществующее пространство неотличимы.
 
 ### Области доступа
 
 | Scope | Что разрешает |
 |---|---|
-| `profile:read` | `whoami`; выдается неявно, если у токена есть любой другой scope |
+| `profile:read` | `whoami`, `spaces_list`; выдается неявно, если у токена есть любой другой scope |
 | `reminders:read` | `reminders_list`, `reminders_get` |
 | `reminders:write` | `reminders_create`, `reminders_update`, `reminders_delete`, `reminders_complete` |
-| `craft:read` | чтение каталога, запасов, проектов и wishlist workspace (инструменты `craft_*` на `/mcp/w/{id}`) |
-| `craft:write` | изменение каталога, запасов, проектов и wishlist workspace |
+| `craft:read` | чтение каталога, запасов, закупок и проектов складов (инструменты `craft_*`) |
+| `craft:write` | изменение каталога, запасов, закупок и проектов складов |
 
 Неизвестный, просроченный или отозванный токен → `401` (тот же ответ для всех
 трёх случаев, чтобы нельзя было перебором отличить причину). Недостаточная
@@ -131,13 +137,6 @@ reverse proxy (в бэклоге — `docs/PLAN.md` §7).
 
 | Инструмент | Название | Доступ |
 |---|---|---|
-| `reminders_complete` | Complete a reminder occurrence | изменяет |
-| `reminders_create` | Create a reminder | изменяет |
-| `reminders_delete` | Delete a reminder | изменяет и удаляет |
-| `reminders_get` | Get a reminder | только чтение |
-| `reminders_list` | List reminders | только чтение |
-| `reminders_update` | Update a reminder | изменяет |
-| `whoami` | Who am I | только чтение |
 | `craft_catalog_search` | Search the catalogue | только чтение |
 | `craft_inventory_list` | List stock | только чтение |
 | `craft_item_create` | Create a private item | изменяет |
@@ -161,1383 +160,14 @@ reverse proxy (в бэклоге — `docs/PLAN.md` §7).
 | `craft_wishlist_mark_bought` | Mark a wish as bought | изменяет |
 | `craft_wishlist_remove` | Remove a wish | изменяет и удаляет |
 | `craft_wishlist_update` | Update a wish | изменяет |
-
-### `reminders_complete`
-
-Complete a reminder occurrence
-
-Confirm the occurrence that is waiting for confirmation, exactly like the «✅ Выполнено» button in the chat. Repeats stop and the delivered chat message is updated. If the reminder has not fired, was already completed or was edited, the call is a tool error: there is nothing to confirm.
-
-**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
-
-**Входная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "id": {
-      "description": "reminder id (UUID) whose pending occurrence is confirmed",
-      "type": "string"
-    }
-  },
-  "required": [
-    "id"
-  ],
-  "type": "object"
-}
-```
-
-**Выходная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "active_occurrence": {
-      "additionalProperties": false,
-      "description": "the firing that waits for confirmation, absent otherwise",
-      "properties": {
-        "completed_at": {
-          "description": "confirmation time in RFC 3339 UTC",
-          "type": "string"
-        },
-        "first_sent_at": {
-          "description": "time of the first delivered message in RFC 3339 UTC",
-          "type": "string"
-        },
-        "id": {
-          "description": "occurrence id (UUID)",
-          "type": "string"
-        },
-        "next_repeat_at": {
-          "description": "next repeat time in RFC 3339 UTC, empty when there is none",
-          "type": "string"
-        },
-        "repeat_count": {
-          "description": "number of delivered messages, including the first one",
-          "type": "integer"
-        },
-        "scheduled_at": {
-          "description": "due time in RFC 3339 UTC",
-          "type": "string"
-        },
-        "status": {
-          "description": "active while waiting for confirmation, completed after confirmation, cancelled when the rule changed",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "status",
-        "scheduled_at",
-        "repeat_count"
-      ],
-      "type": [
-        "null",
-        "object"
-      ]
-    },
-    "count": {
-      "description": "total number of occurrences, zero when there is no count end",
-      "type": "integer"
-    },
-    "created_at": {
-      "description": "creation time in RFC 3339 UTC",
-      "type": "string"
-    },
-    "enabled": {
-      "description": "whether the reminder is scheduled",
-      "type": "boolean"
-    },
-    "finished": {
-      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
-      "type": "boolean"
-    },
-    "finished_at": {
-      "description": "finish time in RFC 3339 UTC, empty while not finished",
-      "type": "string"
-    },
-    "id": {
-      "description": "reminder id (UUID)",
-      "type": "string"
-    },
-    "interval": {
-      "description": "every N days/weeks/months/years",
-      "type": "integer"
-    },
-    "last_error": {
-      "description": "last delivery error, empty when the reminder is delivered",
-      "type": "string"
-    },
-    "message": {
-      "description": "reminder text",
-      "type": "string"
-    },
-    "month_days": {
-      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
-      "items": {
-        "type": "integer"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    },
-    "next_due_at": {
-      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
-      "type": "string"
-    },
-    "nth_weekday": {
-      "additionalProperties": false,
-      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
-      "properties": {
-        "position": {
-          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
-          "type": "integer"
-        },
-        "weekday": {
-          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
-          "type": "string"
-        }
-      },
-      "required": [
-        "position",
-        "weekday"
-      ],
-      "type": [
-        "null",
-        "object"
-      ]
-    },
-    "occurrences_fired": {
-      "description": "how many occurrences already fired; editing resets it",
-      "type": "integer"
-    },
-    "repeat": {
-      "description": "once, daily, weekly, monthly or yearly",
-      "type": "string"
-    },
-    "repeat_minutes": {
-      "description": "interval in minutes between repeats of an unconfirmed occurrence",
-      "type": "integer"
-    },
-    "schedule_kind": {
-      "description": "alias of repeat, kept for older clients",
-      "type": "string"
-    },
-    "start_date": {
-      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
-      "type": "string"
-    },
-    "time": {
-      "description": "local wall clock time HH:MM",
-      "type": "string"
-    },
-    "time_zone": {
-      "description": "IANA time zone of the schedule",
-      "type": "string"
-    },
-    "until": {
-      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
-      "type": "string"
-    },
-    "updated_at": {
-      "description": "last change time in RFC 3339 UTC",
-      "type": "string"
-    },
-    "weekdays": {
-      "description": "weekly days as mon..sun, present when repeat is weekly",
-      "items": {
-        "type": "string"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    }
-  },
-  "required": [
-    "id",
-    "message",
-    "repeat",
-    "schedule_kind",
-    "interval",
-    "start_date",
-    "occurrences_fired",
-    "finished",
-    "time",
-    "time_zone",
-    "repeat_minutes",
-    "enabled",
-    "created_at",
-    "updated_at"
-  ],
-  "type": "object"
-}
-```
-
-### `reminders_create`
-
-Create a reminder
-
-Create a reminder for the current user. The recurrence is chosen with repeat: once (needs date), daily, weekly (needs weekdays), monthly (month_days or nth_weekday such as the second Tuesday or the last Friday) or yearly. interval makes it every N days/weeks/months/years and is relative to start_date; until or count stops the repetition. The old shape without repeat still works: weekdays means weekly and month_days means monthly. Without a time zone the user's profile time zone is used. Returns the stored reminder with its next due time in UTC.
-
-**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
-
-**Входная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "count": {
-      "description": "total number of occurrences, 1..10000; the reminder stops after them. Do not combine with until",
-      "type": "integer"
-    },
-    "date": {
-      "description": "date of a one-time reminder as YYYY-MM-DD in the reminder time zone. Also accepted as start_date for repeat=once",
-      "type": "string"
-    },
-    "enabled": {
-      "description": "create the reminder already scheduled. Default true",
-      "type": [
-        "null",
-        "boolean"
-      ]
-    },
-    "interval": {
-      "description": "every N days/weeks/months/years, 1..1000. Default 1, for example interval=2 with repeat=weekly means every second week",
-      "type": "integer"
-    },
-    "message": {
-      "description": "reminder text in the user's language, 1 to 1500 characters",
-      "type": "string"
-    },
-    "month_days": {
-      "description": "monthly day-of-month schedule: days 1..31. A day the month does not have means its last day. Use either weekdays, month_days or nth_weekday",
-      "items": {
-        "type": "integer"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    },
-    "nth_weekday": {
-      "additionalProperties": false,
-      "description": "monthly nth-weekday schedule, for example the second Tuesday. Use either weekdays, month_days or nth_weekday",
-      "properties": {
-        "position": {
-          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
-          "type": "integer"
-        },
-        "weekday": {
-          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
-          "type": "string"
-        }
-      },
-      "required": [
-        "position",
-        "weekday"
-      ],
-      "type": [
-        "null",
-        "object"
-      ]
-    },
-    "repeat": {
-      "description": "recurrence kind: once, daily, weekly, monthly or yearly. Omit it to use the old shape: weekdays means weekly, month_days means monthly",
-      "type": "string"
-    },
-    "repeat_minutes": {
-      "description": "how often an unconfirmed occurrence repeats, 1..1440 minutes. Default 10",
-      "type": [
-        "null",
-        "integer"
-      ]
-    },
-    "start_date": {
-      "description": "first possible day as YYYY-MM-DD in the reminder time zone; defaults to today. For repeat=yearly its month and day are the anniversary",
-      "type": "string"
-    },
-    "time": {
-      "description": "local wall clock time as HH:MM in 24-hour form, for example 09:30",
-      "type": "string"
-    },
-    "timezone": {
-      "description": "IANA time zone such as Europe/Moscow. Defaults to the user's profile time zone",
-      "type": "string"
-    },
-    "until": {
-      "description": "last allowed day as YYYY-MM-DD; the reminder stops after it. Do not combine with count",
-      "type": "string"
-    },
-    "weekdays": {
-      "description": "weekly schedule: day names mon,tue,wed,thu,fri,sat,sun or ISO numbers 1..7 (1 = Monday). Use either weekdays, month_days or nth_weekday",
-      "items": {
-        "type": "string"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    }
-  },
-  "required": [
-    "message",
-    "time"
-  ],
-  "type": "object"
-}
-```
-
-**Выходная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "active_occurrence": {
-      "additionalProperties": false,
-      "description": "the firing that waits for confirmation, absent otherwise",
-      "properties": {
-        "completed_at": {
-          "description": "confirmation time in RFC 3339 UTC",
-          "type": "string"
-        },
-        "first_sent_at": {
-          "description": "time of the first delivered message in RFC 3339 UTC",
-          "type": "string"
-        },
-        "id": {
-          "description": "occurrence id (UUID)",
-          "type": "string"
-        },
-        "next_repeat_at": {
-          "description": "next repeat time in RFC 3339 UTC, empty when there is none",
-          "type": "string"
-        },
-        "repeat_count": {
-          "description": "number of delivered messages, including the first one",
-          "type": "integer"
-        },
-        "scheduled_at": {
-          "description": "due time in RFC 3339 UTC",
-          "type": "string"
-        },
-        "status": {
-          "description": "active while waiting for confirmation, completed after confirmation, cancelled when the rule changed",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "status",
-        "scheduled_at",
-        "repeat_count"
-      ],
-      "type": [
-        "null",
-        "object"
-      ]
-    },
-    "count": {
-      "description": "total number of occurrences, zero when there is no count end",
-      "type": "integer"
-    },
-    "created_at": {
-      "description": "creation time in RFC 3339 UTC",
-      "type": "string"
-    },
-    "enabled": {
-      "description": "whether the reminder is scheduled",
-      "type": "boolean"
-    },
-    "finished": {
-      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
-      "type": "boolean"
-    },
-    "finished_at": {
-      "description": "finish time in RFC 3339 UTC, empty while not finished",
-      "type": "string"
-    },
-    "id": {
-      "description": "reminder id (UUID)",
-      "type": "string"
-    },
-    "interval": {
-      "description": "every N days/weeks/months/years",
-      "type": "integer"
-    },
-    "last_error": {
-      "description": "last delivery error, empty when the reminder is delivered",
-      "type": "string"
-    },
-    "message": {
-      "description": "reminder text",
-      "type": "string"
-    },
-    "month_days": {
-      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
-      "items": {
-        "type": "integer"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    },
-    "next_due_at": {
-      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
-      "type": "string"
-    },
-    "nth_weekday": {
-      "additionalProperties": false,
-      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
-      "properties": {
-        "position": {
-          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
-          "type": "integer"
-        },
-        "weekday": {
-          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
-          "type": "string"
-        }
-      },
-      "required": [
-        "position",
-        "weekday"
-      ],
-      "type": [
-        "null",
-        "object"
-      ]
-    },
-    "occurrences_fired": {
-      "description": "how many occurrences already fired; editing resets it",
-      "type": "integer"
-    },
-    "repeat": {
-      "description": "once, daily, weekly, monthly or yearly",
-      "type": "string"
-    },
-    "repeat_minutes": {
-      "description": "interval in minutes between repeats of an unconfirmed occurrence",
-      "type": "integer"
-    },
-    "schedule_kind": {
-      "description": "alias of repeat, kept for older clients",
-      "type": "string"
-    },
-    "start_date": {
-      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
-      "type": "string"
-    },
-    "time": {
-      "description": "local wall clock time HH:MM",
-      "type": "string"
-    },
-    "time_zone": {
-      "description": "IANA time zone of the schedule",
-      "type": "string"
-    },
-    "until": {
-      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
-      "type": "string"
-    },
-    "updated_at": {
-      "description": "last change time in RFC 3339 UTC",
-      "type": "string"
-    },
-    "weekdays": {
-      "description": "weekly days as mon..sun, present when repeat is weekly",
-      "items": {
-        "type": "string"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    }
-  },
-  "required": [
-    "id",
-    "message",
-    "repeat",
-    "schedule_kind",
-    "interval",
-    "start_date",
-    "occurrences_fired",
-    "finished",
-    "time",
-    "time_zone",
-    "repeat_minutes",
-    "enabled",
-    "created_at",
-    "updated_at"
-  ],
-  "type": "object"
-}
-```
-
-### `reminders_delete`
-
-Delete a reminder
-
-Delete a reminder and its occurrence history. Deleting an already deleted reminder is reported as not found.
-
-**Доступ:** изменяет и удаляет. Вызов может удалить данные; клиент должен подтверждать его у пользователя.
-
-**Входная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "id": {
-      "description": "reminder id (UUID) to delete",
-      "type": "string"
-    }
-  },
-  "required": [
-    "id"
-  ],
-  "type": "object"
-}
-```
-
-**Выходная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "deleted": {
-      "description": "always true on success",
-      "type": "boolean"
-    },
-    "id": {
-      "description": "id of the deleted reminder",
-      "type": "string"
-    }
-  },
-  "required": [
-    "id",
-    "deleted"
-  ],
-  "type": "object"
-}
-```
-
-### `reminders_get`
-
-Get a reminder
-
-Return one reminder by id together with its pending occurrence, if any. A reminder of another user is reported as not found.
-
-**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
-
-**Входная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "id": {
-      "description": "reminder id (UUID) returned by reminders_list or reminders_create",
-      "type": "string"
-    }
-  },
-  "required": [
-    "id"
-  ],
-  "type": "object"
-}
-```
-
-**Выходная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "active_occurrence": {
-      "additionalProperties": false,
-      "description": "the firing that waits for confirmation, absent otherwise",
-      "properties": {
-        "completed_at": {
-          "description": "confirmation time in RFC 3339 UTC",
-          "type": "string"
-        },
-        "first_sent_at": {
-          "description": "time of the first delivered message in RFC 3339 UTC",
-          "type": "string"
-        },
-        "id": {
-          "description": "occurrence id (UUID)",
-          "type": "string"
-        },
-        "next_repeat_at": {
-          "description": "next repeat time in RFC 3339 UTC, empty when there is none",
-          "type": "string"
-        },
-        "repeat_count": {
-          "description": "number of delivered messages, including the first one",
-          "type": "integer"
-        },
-        "scheduled_at": {
-          "description": "due time in RFC 3339 UTC",
-          "type": "string"
-        },
-        "status": {
-          "description": "active while waiting for confirmation, completed after confirmation, cancelled when the rule changed",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "status",
-        "scheduled_at",
-        "repeat_count"
-      ],
-      "type": [
-        "null",
-        "object"
-      ]
-    },
-    "count": {
-      "description": "total number of occurrences, zero when there is no count end",
-      "type": "integer"
-    },
-    "created_at": {
-      "description": "creation time in RFC 3339 UTC",
-      "type": "string"
-    },
-    "enabled": {
-      "description": "whether the reminder is scheduled",
-      "type": "boolean"
-    },
-    "finished": {
-      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
-      "type": "boolean"
-    },
-    "finished_at": {
-      "description": "finish time in RFC 3339 UTC, empty while not finished",
-      "type": "string"
-    },
-    "id": {
-      "description": "reminder id (UUID)",
-      "type": "string"
-    },
-    "interval": {
-      "description": "every N days/weeks/months/years",
-      "type": "integer"
-    },
-    "last_error": {
-      "description": "last delivery error, empty when the reminder is delivered",
-      "type": "string"
-    },
-    "message": {
-      "description": "reminder text",
-      "type": "string"
-    },
-    "month_days": {
-      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
-      "items": {
-        "type": "integer"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    },
-    "next_due_at": {
-      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
-      "type": "string"
-    },
-    "nth_weekday": {
-      "additionalProperties": false,
-      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
-      "properties": {
-        "position": {
-          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
-          "type": "integer"
-        },
-        "weekday": {
-          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
-          "type": "string"
-        }
-      },
-      "required": [
-        "position",
-        "weekday"
-      ],
-      "type": [
-        "null",
-        "object"
-      ]
-    },
-    "occurrences_fired": {
-      "description": "how many occurrences already fired; editing resets it",
-      "type": "integer"
-    },
-    "repeat": {
-      "description": "once, daily, weekly, monthly or yearly",
-      "type": "string"
-    },
-    "repeat_minutes": {
-      "description": "interval in minutes between repeats of an unconfirmed occurrence",
-      "type": "integer"
-    },
-    "schedule_kind": {
-      "description": "alias of repeat, kept for older clients",
-      "type": "string"
-    },
-    "start_date": {
-      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
-      "type": "string"
-    },
-    "time": {
-      "description": "local wall clock time HH:MM",
-      "type": "string"
-    },
-    "time_zone": {
-      "description": "IANA time zone of the schedule",
-      "type": "string"
-    },
-    "until": {
-      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
-      "type": "string"
-    },
-    "updated_at": {
-      "description": "last change time in RFC 3339 UTC",
-      "type": "string"
-    },
-    "weekdays": {
-      "description": "weekly days as mon..sun, present when repeat is weekly",
-      "items": {
-        "type": "string"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    }
-  },
-  "required": [
-    "id",
-    "message",
-    "repeat",
-    "schedule_kind",
-    "interval",
-    "start_date",
-    "occurrences_fired",
-    "finished",
-    "time",
-    "time_zone",
-    "repeat_minutes",
-    "enabled",
-    "created_at",
-    "updated_at"
-  ],
-  "type": "object"
-}
-```
-
-### `reminders_list`
-
-List reminders
-
-List every reminder of the current user with its schedule, next due time and, when a reminder has fired and waits for confirmation, its pending occurrence. Returns an empty array when the user has no reminders.
-
-**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
-
-**Входная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "type": "object"
-}
-```
-
-**Выходная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "reminders": {
-      "description": "every reminder of the user; empty when there are none",
-      "items": {
-        "additionalProperties": false,
-        "properties": {
-          "active_occurrence": {
-            "additionalProperties": false,
-            "description": "the firing that waits for confirmation, absent otherwise",
-            "properties": {
-              "completed_at": {
-                "description": "confirmation time in RFC 3339 UTC",
-                "type": "string"
-              },
-              "first_sent_at": {
-                "description": "time of the first delivered message in RFC 3339 UTC",
-                "type": "string"
-              },
-              "id": {
-                "description": "occurrence id (UUID)",
-                "type": "string"
-              },
-              "next_repeat_at": {
-                "description": "next repeat time in RFC 3339 UTC, empty when there is none",
-                "type": "string"
-              },
-              "repeat_count": {
-                "description": "number of delivered messages, including the first one",
-                "type": "integer"
-              },
-              "scheduled_at": {
-                "description": "due time in RFC 3339 UTC",
-                "type": "string"
-              },
-              "status": {
-                "description": "active while waiting for confirmation, completed after confirmation, cancelled when the rule changed",
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "status",
-              "scheduled_at",
-              "repeat_count"
-            ],
-            "type": [
-              "null",
-              "object"
-            ]
-          },
-          "count": {
-            "description": "total number of occurrences, zero when there is no count end",
-            "type": "integer"
-          },
-          "created_at": {
-            "description": "creation time in RFC 3339 UTC",
-            "type": "string"
-          },
-          "enabled": {
-            "description": "whether the reminder is scheduled",
-            "type": "boolean"
-          },
-          "finished": {
-            "description": "true when the recurrence has no future occurrence and the last one was confirmed",
-            "type": "boolean"
-          },
-          "finished_at": {
-            "description": "finish time in RFC 3339 UTC, empty while not finished",
-            "type": "string"
-          },
-          "id": {
-            "description": "reminder id (UUID)",
-            "type": "string"
-          },
-          "interval": {
-            "description": "every N days/weeks/months/years",
-            "type": "integer"
-          },
-          "last_error": {
-            "description": "last delivery error, empty when the reminder is delivered",
-            "type": "string"
-          },
-          "message": {
-            "description": "reminder text",
-            "type": "string"
-          },
-          "month_days": {
-            "description": "days of month, present when repeat is monthly and nth_weekday is absent",
-            "items": {
-              "type": "integer"
-            },
-            "type": [
-              "null",
-              "array"
-            ]
-          },
-          "next_due_at": {
-            "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
-            "type": "string"
-          },
-          "nth_weekday": {
-            "additionalProperties": false,
-            "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
-            "properties": {
-              "position": {
-                "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
-                "type": "integer"
-              },
-              "weekday": {
-                "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
-                "type": "string"
-              }
-            },
-            "required": [
-              "position",
-              "weekday"
-            ],
-            "type": [
-              "null",
-              "object"
-            ]
-          },
-          "occurrences_fired": {
-            "description": "how many occurrences already fired; editing resets it",
-            "type": "integer"
-          },
-          "repeat": {
-            "description": "once, daily, weekly, monthly or yearly",
-            "type": "string"
-          },
-          "repeat_minutes": {
-            "description": "interval in minutes between repeats of an unconfirmed occurrence",
-            "type": "integer"
-          },
-          "schedule_kind": {
-            "description": "alias of repeat, kept for older clients",
-            "type": "string"
-          },
-          "start_date": {
-            "description": "first possible day as YYYY-MM-DD in the reminder time zone",
-            "type": "string"
-          },
-          "time": {
-            "description": "local wall clock time HH:MM",
-            "type": "string"
-          },
-          "time_zone": {
-            "description": "IANA time zone of the schedule",
-            "type": "string"
-          },
-          "until": {
-            "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
-            "type": "string"
-          },
-          "updated_at": {
-            "description": "last change time in RFC 3339 UTC",
-            "type": "string"
-          },
-          "weekdays": {
-            "description": "weekly days as mon..sun, present when repeat is weekly",
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "null",
-              "array"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "message",
-          "repeat",
-          "schedule_kind",
-          "interval",
-          "start_date",
-          "occurrences_fired",
-          "finished",
-          "time",
-          "time_zone",
-          "repeat_minutes",
-          "enabled",
-          "created_at",
-          "updated_at"
-        ],
-        "type": "object"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    }
-  },
-  "required": [
-    "reminders"
-  ],
-  "type": "object"
-}
-```
-
-### `reminders_update`
-
-Update a reminder
-
-Change a reminder. Omitted fields keep their current values: message, repeat and its interval/weekdays/month_days/nth_weekday/date/start_date/until/count, time, time_zone, repeat_minutes and enabled are all optional apart from the id. A recurrence change cancels the pending occurrence, resets the fired counter and recomputes the next due time. Returns the updated reminder.
-
-**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
-
-**Входная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "count": {
-      "description": "new total number of occurrences 1..10000; removes an until end. Omit to keep the current end",
-      "type": [
-        "null",
-        "integer"
-      ]
-    },
-    "date": {
-      "description": "new date of a one-time reminder as YYYY-MM-DD. Omit to keep the current date",
-      "type": "string"
-    },
-    "enabled": {
-      "description": "enable or disable the reminder. Omit to keep the current state",
-      "type": [
-        "null",
-        "boolean"
-      ]
-    },
-    "id": {
-      "description": "reminder id (UUID) to change",
-      "type": "string"
-    },
-    "interval": {
-      "description": "every N days/weeks/months/years, 1..1000. Omit to keep the current interval",
-      "type": [
-        "null",
-        "integer"
-      ]
-    },
-    "message": {
-      "description": "new reminder text, 1 to 1500 characters. Omit to keep the current text",
-      "type": "string"
-    },
-    "month_days": {
-      "description": "monthly day-of-month schedule: days 1..31. Omit to keep the current schedule",
-      "items": {
-        "type": "integer"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    },
-    "nth_weekday": {
-      "additionalProperties": false,
-      "description": "monthly nth-weekday schedule. Omit to keep the current schedule",
-      "properties": {
-        "position": {
-          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
-          "type": "integer"
-        },
-        "weekday": {
-          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
-          "type": "string"
-        }
-      },
-      "required": [
-        "position",
-        "weekday"
-      ],
-      "type": [
-        "null",
-        "object"
-      ]
-    },
-    "repeat": {
-      "description": "new recurrence kind: once, daily, weekly, monthly or yearly. Omit to keep the current one",
-      "type": "string"
-    },
-    "repeat_minutes": {
-      "description": "new repeat interval 1..1440 minutes. Omit to keep the current one",
-      "type": [
-        "null",
-        "integer"
-      ]
-    },
-    "start_date": {
-      "description": "new first possible day as YYYY-MM-DD. Omit to keep the current one",
-      "type": "string"
-    },
-    "time": {
-      "description": "new local wall clock time HH:MM. Omit to keep the current time",
-      "type": "string"
-    },
-    "timezone": {
-      "description": "new IANA time zone. Omit to keep the current one",
-      "type": "string"
-    },
-    "until": {
-      "description": "new last allowed day as YYYY-MM-DD; removes a count end. Omit to keep the current end",
-      "type": "string"
-    },
-    "weekdays": {
-      "description": "weekly schedule: day names mon..sun or ISO numbers 1..7. Omit to keep the current schedule",
-      "items": {
-        "type": "string"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    }
-  },
-  "required": [
-    "id"
-  ],
-  "type": "object"
-}
-```
-
-**Выходная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "active_occurrence": {
-      "additionalProperties": false,
-      "description": "the firing that waits for confirmation, absent otherwise",
-      "properties": {
-        "completed_at": {
-          "description": "confirmation time in RFC 3339 UTC",
-          "type": "string"
-        },
-        "first_sent_at": {
-          "description": "time of the first delivered message in RFC 3339 UTC",
-          "type": "string"
-        },
-        "id": {
-          "description": "occurrence id (UUID)",
-          "type": "string"
-        },
-        "next_repeat_at": {
-          "description": "next repeat time in RFC 3339 UTC, empty when there is none",
-          "type": "string"
-        },
-        "repeat_count": {
-          "description": "number of delivered messages, including the first one",
-          "type": "integer"
-        },
-        "scheduled_at": {
-          "description": "due time in RFC 3339 UTC",
-          "type": "string"
-        },
-        "status": {
-          "description": "active while waiting for confirmation, completed after confirmation, cancelled when the rule changed",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "status",
-        "scheduled_at",
-        "repeat_count"
-      ],
-      "type": [
-        "null",
-        "object"
-      ]
-    },
-    "count": {
-      "description": "total number of occurrences, zero when there is no count end",
-      "type": "integer"
-    },
-    "created_at": {
-      "description": "creation time in RFC 3339 UTC",
-      "type": "string"
-    },
-    "enabled": {
-      "description": "whether the reminder is scheduled",
-      "type": "boolean"
-    },
-    "finished": {
-      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
-      "type": "boolean"
-    },
-    "finished_at": {
-      "description": "finish time in RFC 3339 UTC, empty while not finished",
-      "type": "string"
-    },
-    "id": {
-      "description": "reminder id (UUID)",
-      "type": "string"
-    },
-    "interval": {
-      "description": "every N days/weeks/months/years",
-      "type": "integer"
-    },
-    "last_error": {
-      "description": "last delivery error, empty when the reminder is delivered",
-      "type": "string"
-    },
-    "message": {
-      "description": "reminder text",
-      "type": "string"
-    },
-    "month_days": {
-      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
-      "items": {
-        "type": "integer"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    },
-    "next_due_at": {
-      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
-      "type": "string"
-    },
-    "nth_weekday": {
-      "additionalProperties": false,
-      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
-      "properties": {
-        "position": {
-          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
-          "type": "integer"
-        },
-        "weekday": {
-          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
-          "type": "string"
-        }
-      },
-      "required": [
-        "position",
-        "weekday"
-      ],
-      "type": [
-        "null",
-        "object"
-      ]
-    },
-    "occurrences_fired": {
-      "description": "how many occurrences already fired; editing resets it",
-      "type": "integer"
-    },
-    "repeat": {
-      "description": "once, daily, weekly, monthly or yearly",
-      "type": "string"
-    },
-    "repeat_minutes": {
-      "description": "interval in minutes between repeats of an unconfirmed occurrence",
-      "type": "integer"
-    },
-    "schedule_kind": {
-      "description": "alias of repeat, kept for older clients",
-      "type": "string"
-    },
-    "start_date": {
-      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
-      "type": "string"
-    },
-    "time": {
-      "description": "local wall clock time HH:MM",
-      "type": "string"
-    },
-    "time_zone": {
-      "description": "IANA time zone of the schedule",
-      "type": "string"
-    },
-    "until": {
-      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
-      "type": "string"
-    },
-    "updated_at": {
-      "description": "last change time in RFC 3339 UTC",
-      "type": "string"
-    },
-    "weekdays": {
-      "description": "weekly days as mon..sun, present when repeat is weekly",
-      "items": {
-        "type": "string"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    }
-  },
-  "required": [
-    "id",
-    "message",
-    "repeat",
-    "schedule_kind",
-    "interval",
-    "start_date",
-    "occurrences_fired",
-    "finished",
-    "time",
-    "time_zone",
-    "repeat_minutes",
-    "enabled",
-    "created_at",
-    "updated_at"
-  ],
-  "type": "object"
-}
-```
-
-### `whoami`
-
-Who am I
-
-Return the Cublyverse user behind the personal access token: principal id, profile fields, time zone and the scopes of the token. Use it to learn the default time zone before creating a reminder and to check what the token is allowed to do.
-
-**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
-
-**Входная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "type": "object"
-}
-```
-
-**Выходная схема**
-
-```json
-{
-  "additionalProperties": false,
-  "properties": {
-    "display_name": {
-      "description": "display name from the SSO profile, empty when unavailable",
-      "type": "string"
-    },
-    "email": {
-      "description": "e-mail from the SSO profile, empty when the provider does not send one",
-      "type": "string"
-    },
-    "principal_id": {
-      "description": "stable user id (UUID) that owns every object this token can reach",
-      "type": "string"
-    },
-    "scopes": {
-      "description": "scopes granted to the token used for this call",
-      "items": {
-        "type": "string"
-      },
-      "type": [
-        "null",
-        "array"
-      ]
-    },
-    "time_zone": {
-      "description": "IANA time zone of the user, the default for new reminders",
-      "type": "string"
-    }
-  },
-  "required": [
-    "principal_id",
-    "time_zone",
-    "scopes"
-  ],
-  "type": "object"
-}
-```
+| `reminders_complete` | Complete a reminder occurrence | изменяет |
+| `reminders_create` | Create a reminder | изменяет |
+| `reminders_delete` | Delete a reminder | изменяет и удаляет |
+| `reminders_get` | Get a reminder | только чтение |
+| `reminders_list` | List reminders | только чтение |
+| `reminders_update` | Update a reminder | изменяет |
+| `spaces_list` | List spaces | только чтение |
+| `whoami` | Who am I | только чтение |
 
 ### `craft_catalog_search`
 
@@ -1575,6 +205,10 @@ Search the shared catalogue (manufacturer catalogues such as PRECIOSA or DMC) an
     },
     "query": {
       "description": "article prefix or part of the name or colour name",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
       "type": "string"
     }
   },
@@ -1734,6 +368,10 @@ List what the workspace holds: items with quantity and unit, optionally filtered
     },
     "query": {
       "description": "article prefix or part of the name or colour name",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
       "type": "string"
     }
   },
@@ -1948,6 +586,10 @@ Create a catalogue item private to this workspace, for material that is in no ma
       "description": "size, free text",
       "type": "string"
     },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    },
     "unit": {
       "description": "unit; the category default when omitted",
       "type": "string"
@@ -2074,6 +716,10 @@ Delete a private item together with its stock. Global catalogue items cannot be 
     "item_id": {
       "description": "catalogue item id (UUID)",
       "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
     }
   },
   "required": [
@@ -2122,6 +768,10 @@ Move the stock of a private item to another catalogue item (usually the official
   "properties": {
     "private_item_id": {
       "description": "the private item to merge away",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
       "type": "string"
     },
     "target_item_id": {
@@ -2332,6 +982,10 @@ Replace the data of a private item of this workspace. All fields are replaced, s
       "description": "size, free text",
       "type": "string"
     },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    },
     "unit": {
       "description": "unit; the category default when omitted",
       "type": "string"
@@ -2462,6 +1116,10 @@ Create a craft project with a name and optional notes. Materials are added with 
     },
     "notes": {
       "description": "free-text notes",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
       "type": "string"
     }
   },
@@ -2653,6 +1311,10 @@ Return one project with its materials: planned quantity, quantity already used, 
     "project_id": {
       "description": "project id (UUID)",
       "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
     }
   },
   "required": [
@@ -2839,6 +1501,12 @@ List the craft projects of the workspace with the number of materials planned in
 ```json
 {
   "additionalProperties": false,
+  "properties": {
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    }
+  },
   "type": "object"
 }
 ```
@@ -3063,6 +1731,10 @@ Add a catalogue item to the project plan or change its planned quantity. Identif
         "null",
         "number"
       ]
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
     }
   },
   "required": [
@@ -3252,6 +1924,10 @@ Add every material of the project whose shortage is positive (the quantity still
   "properties": {
     "project_id": {
       "description": "project id (UUID)",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
       "type": "string"
     }
   },
@@ -3522,6 +2198,10 @@ Withdraw material from the stock for a project: decreases the stock and increase
     "qty": {
       "description": "quantity to withdraw from the stock and mark used, positive",
       "type": "number"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
     }
   },
   "required": [
@@ -3709,6 +2389,12 @@ List the material categories (slug, name, default unit) and the known manufactur
 ```json
 {
   "additionalProperties": false,
+  "properties": {
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    }
+  },
   "type": "object"
 }
 ```
@@ -3815,6 +2501,10 @@ Add to or use up material: delta is positive to add and negative to use. Identif
     },
     "reason": {
       "description": "why, for example the project name",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
       "type": "string"
     }
   },
@@ -3979,6 +2669,10 @@ Delete the stock row of an item (the catalogue item itself stays).
     "manufacturer": {
       "description": "manufacturer name, with article, instead of item_id",
       "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
     }
   },
   "type": "object"
@@ -4044,6 +2738,10 @@ Set the quantity of an item to an absolute value (a stocktake). Identify the ite
     },
     "reason": {
       "description": "why, for example stocktake",
+      "type": "string"
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
       "type": "string"
     }
   },
@@ -4211,6 +2909,10 @@ Add an entry to the wish list: either a catalogue item (catalog_item_id) or free
         "null",
         "number"
       ]
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
     },
     "title": {
       "description": "what is wanted; defaults to the item name when catalog_item_id is set",
@@ -4464,6 +3166,10 @@ Attach a shop page where the wished item can be bought: an http(s) url, the shop
       "description": "shop name",
       "type": "string"
     },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    },
     "url": {
       "description": "shop page, must start with http:// or https://",
       "type": "string"
@@ -4549,6 +3255,10 @@ Delete one shop link of a wish list entry.
       "description": "shop link id (UUID)",
       "type": "string"
     },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    },
     "wish_id": {
       "description": "wish list entry id (UUID)",
       "type": "string"
@@ -4604,6 +3314,10 @@ List what the workspace wants to buy. By default only entries with status wanted
 {
   "additionalProperties": false,
   "properties": {
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    },
     "status": {
       "description": "wanted (default), ordered, bought or all",
       "type": "string"
@@ -4854,6 +3568,10 @@ Mark a wish list entry as bought. With add_to_stock set and a catalogue item, th
       "description": "add the wanted quantity to the stock when the entry points at a catalogue item",
       "type": "boolean"
     },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    },
     "wish_id": {
       "description": "wish list entry id (UUID)",
       "type": "string"
@@ -5087,6 +3805,10 @@ Delete a wish list entry together with its links. The stock is not changed.
 {
   "additionalProperties": false,
   "properties": {
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
+    },
     "wish_id": {
       "description": "wish list entry id (UUID)",
       "type": "string"
@@ -5156,6 +3878,10 @@ Change the quantity, priority, note or status of a wish list entry. Omitted fiel
         "null",
         "number"
       ]
+    },
+    "space": {
+      "description": "warehouse space id or name (see spaces_list); may be omitted when the user has exactly one",
+      "type": "string"
     },
     "status": {
       "description": "wanted, ordered or bought; omit to keep the current status",
@@ -5380,6 +4106,1595 @@ Change the quantity, priority, note or status of a wish list entry. Omitted fiel
 }
 ```
 
+### `reminders_complete`
+
+Complete a reminder occurrence
+
+Confirm the occurrence that is waiting for confirmation, exactly like the «✅ Выполнено» button in the chat. Repeats stop and the delivered chat message is updated. If the reminder has not fired, was already completed or was edited, the call is a tool error: there is nothing to confirm.
+
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "reminder id (UUID) whose pending occurrence is confirmed",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "active_occurrence": {
+      "additionalProperties": false,
+      "description": "the firing that waits for confirmation, absent otherwise",
+      "properties": {
+        "completed_at": {
+          "description": "confirmation time in RFC 3339 UTC",
+          "type": "string"
+        },
+        "first_sent_at": {
+          "description": "time of the first delivered message in RFC 3339 UTC",
+          "type": "string"
+        },
+        "id": {
+          "description": "occurrence id (UUID)",
+          "type": "string"
+        },
+        "next_repeat_at": {
+          "description": "next repeat time in RFC 3339 UTC, empty when there is none",
+          "type": "string"
+        },
+        "repeat_count": {
+          "description": "number of delivered messages, including the first one",
+          "type": "integer"
+        },
+        "scheduled_at": {
+          "description": "due time in RFC 3339 UTC",
+          "type": "string"
+        },
+        "status": {
+          "description": "active while waiting for confirmation, completed after confirmation, cancelled when the rule changed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "scheduled_at",
+        "repeat_count"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "count": {
+      "description": "total number of occurrences, zero when there is no count end",
+      "type": "integer"
+    },
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "enabled": {
+      "description": "whether the reminder is scheduled",
+      "type": "boolean"
+    },
+    "finished": {
+      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
+      "type": "boolean"
+    },
+    "finished_at": {
+      "description": "finish time in RFC 3339 UTC, empty while not finished",
+      "type": "string"
+    },
+    "id": {
+      "description": "reminder id (UUID)",
+      "type": "string"
+    },
+    "interval": {
+      "description": "every N days/weeks/months/years",
+      "type": "integer"
+    },
+    "last_error": {
+      "description": "last delivery error, empty when the reminder is delivered",
+      "type": "string"
+    },
+    "message": {
+      "description": "reminder text",
+      "type": "string"
+    },
+    "month_days": {
+      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
+      "items": {
+        "type": "integer"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "next_due_at": {
+      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
+      "type": "string"
+    },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "occurrences_fired": {
+      "description": "how many occurrences already fired; editing resets it",
+      "type": "integer"
+    },
+    "recipient_ids": {
+      "description": "user ids who get the message",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "repeat": {
+      "description": "once, daily, weekly, monthly or yearly",
+      "type": "string"
+    },
+    "repeat_minutes": {
+      "description": "interval in minutes between repeats of an unconfirmed occurrence",
+      "type": "integer"
+    },
+    "schedule_kind": {
+      "description": "alias of repeat, kept for older clients",
+      "type": "string"
+    },
+    "space_id": {
+      "description": "reminders space the rule belongs to",
+      "type": "string"
+    },
+    "start_date": {
+      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
+      "type": "string"
+    },
+    "time": {
+      "description": "local wall clock time HH:MM",
+      "type": "string"
+    },
+    "time_zone": {
+      "description": "IANA time zone of the schedule",
+      "type": "string"
+    },
+    "until": {
+      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "last change time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "weekdays": {
+      "description": "weekly days as mon..sun, present when repeat is weekly",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "space_id",
+    "recipient_ids",
+    "id",
+    "message",
+    "repeat",
+    "schedule_kind",
+    "interval",
+    "start_date",
+    "occurrences_fired",
+    "finished",
+    "time",
+    "time_zone",
+    "repeat_minutes",
+    "enabled",
+    "created_at",
+    "updated_at"
+  ],
+  "type": "object"
+}
+```
+
+### `reminders_create`
+
+Create a reminder
+
+Create a reminder for the current user. The recurrence is chosen with repeat: once (needs date), daily, weekly (needs weekdays), monthly (month_days or nth_weekday such as the second Tuesday or the last Friday) or yearly. interval makes it every N days/weeks/months/years and is relative to start_date; until or count stops the repetition. The old shape without repeat still works: weekdays means weekly and month_days means monthly. Without a time zone the user's profile time zone is used. Returns the stored reminder with its next due time in UTC.
+
+**Доступ:** изменяет. Каждый вызов создаёт новое состояние.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "count": {
+      "description": "total number of occurrences, 1..10000; the reminder stops after them. Do not combine with until",
+      "type": "integer"
+    },
+    "date": {
+      "description": "date of a one-time reminder as YYYY-MM-DD in the reminder time zone. Also accepted as start_date for repeat=once",
+      "type": "string"
+    },
+    "enabled": {
+      "description": "create the reminder already scheduled. Default true",
+      "type": [
+        "null",
+        "boolean"
+      ]
+    },
+    "interval": {
+      "description": "every N days/weeks/months/years, 1..1000. Default 1, for example interval=2 with repeat=weekly means every second week",
+      "type": "integer"
+    },
+    "message": {
+      "description": "reminder text in the user's language, 1 to 1500 characters",
+      "type": "string"
+    },
+    "month_days": {
+      "description": "monthly day-of-month schedule: days 1..31. A day the month does not have means its last day. Use either weekdays, month_days or nth_weekday",
+      "items": {
+        "type": "integer"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "monthly nth-weekday schedule, for example the second Tuesday. Use either weekdays, month_days or nth_weekday",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "recipient_ids": {
+      "description": "user ids of space members who get the message (see spaces_list). Default: only the current user",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "repeat": {
+      "description": "recurrence kind: once, daily, weekly, monthly or yearly. Omit it to use the old shape: weekdays means weekly, month_days means monthly",
+      "type": "string"
+    },
+    "repeat_minutes": {
+      "description": "how often an unconfirmed occurrence repeats, 1..1440 minutes. Default 10",
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "space": {
+      "description": "reminders space id or name (see spaces_list). Default: the user's own personal space",
+      "type": "string"
+    },
+    "start_date": {
+      "description": "first possible day as YYYY-MM-DD in the reminder time zone; defaults to today. For repeat=yearly its month and day are the anniversary",
+      "type": "string"
+    },
+    "time": {
+      "description": "local wall clock time as HH:MM in 24-hour form, for example 09:30",
+      "type": "string"
+    },
+    "timezone": {
+      "description": "IANA time zone such as Europe/Moscow. Defaults to the user's profile time zone",
+      "type": "string"
+    },
+    "until": {
+      "description": "last allowed day as YYYY-MM-DD; the reminder stops after it. Do not combine with count",
+      "type": "string"
+    },
+    "weekdays": {
+      "description": "weekly schedule: day names mon,tue,wed,thu,fri,sat,sun or ISO numbers 1..7 (1 = Monday). Use either weekdays, month_days or nth_weekday",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "message",
+    "time"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "active_occurrence": {
+      "additionalProperties": false,
+      "description": "the firing that waits for confirmation, absent otherwise",
+      "properties": {
+        "completed_at": {
+          "description": "confirmation time in RFC 3339 UTC",
+          "type": "string"
+        },
+        "first_sent_at": {
+          "description": "time of the first delivered message in RFC 3339 UTC",
+          "type": "string"
+        },
+        "id": {
+          "description": "occurrence id (UUID)",
+          "type": "string"
+        },
+        "next_repeat_at": {
+          "description": "next repeat time in RFC 3339 UTC, empty when there is none",
+          "type": "string"
+        },
+        "repeat_count": {
+          "description": "number of delivered messages, including the first one",
+          "type": "integer"
+        },
+        "scheduled_at": {
+          "description": "due time in RFC 3339 UTC",
+          "type": "string"
+        },
+        "status": {
+          "description": "active while waiting for confirmation, completed after confirmation, cancelled when the rule changed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "scheduled_at",
+        "repeat_count"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "count": {
+      "description": "total number of occurrences, zero when there is no count end",
+      "type": "integer"
+    },
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "enabled": {
+      "description": "whether the reminder is scheduled",
+      "type": "boolean"
+    },
+    "finished": {
+      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
+      "type": "boolean"
+    },
+    "finished_at": {
+      "description": "finish time in RFC 3339 UTC, empty while not finished",
+      "type": "string"
+    },
+    "id": {
+      "description": "reminder id (UUID)",
+      "type": "string"
+    },
+    "interval": {
+      "description": "every N days/weeks/months/years",
+      "type": "integer"
+    },
+    "last_error": {
+      "description": "last delivery error, empty when the reminder is delivered",
+      "type": "string"
+    },
+    "message": {
+      "description": "reminder text",
+      "type": "string"
+    },
+    "month_days": {
+      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
+      "items": {
+        "type": "integer"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "next_due_at": {
+      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
+      "type": "string"
+    },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "occurrences_fired": {
+      "description": "how many occurrences already fired; editing resets it",
+      "type": "integer"
+    },
+    "recipient_ids": {
+      "description": "user ids who get the message",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "repeat": {
+      "description": "once, daily, weekly, monthly or yearly",
+      "type": "string"
+    },
+    "repeat_minutes": {
+      "description": "interval in minutes between repeats of an unconfirmed occurrence",
+      "type": "integer"
+    },
+    "schedule_kind": {
+      "description": "alias of repeat, kept for older clients",
+      "type": "string"
+    },
+    "space_id": {
+      "description": "reminders space the rule belongs to",
+      "type": "string"
+    },
+    "start_date": {
+      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
+      "type": "string"
+    },
+    "time": {
+      "description": "local wall clock time HH:MM",
+      "type": "string"
+    },
+    "time_zone": {
+      "description": "IANA time zone of the schedule",
+      "type": "string"
+    },
+    "until": {
+      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "last change time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "weekdays": {
+      "description": "weekly days as mon..sun, present when repeat is weekly",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "space_id",
+    "recipient_ids",
+    "id",
+    "message",
+    "repeat",
+    "schedule_kind",
+    "interval",
+    "start_date",
+    "occurrences_fired",
+    "finished",
+    "time",
+    "time_zone",
+    "repeat_minutes",
+    "enabled",
+    "created_at",
+    "updated_at"
+  ],
+  "type": "object"
+}
+```
+
+### `reminders_delete`
+
+Delete a reminder
+
+Delete a reminder and its occurrence history. Deleting an already deleted reminder is reported as not found.
+
+**Доступ:** изменяет и удаляет. Вызов может удалить данные; клиент должен подтверждать его у пользователя.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "reminder id (UUID) to delete",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "deleted": {
+      "description": "always true on success",
+      "type": "boolean"
+    },
+    "id": {
+      "description": "id of the deleted reminder",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "deleted"
+  ],
+  "type": "object"
+}
+```
+
+### `reminders_get`
+
+Get a reminder
+
+Return one reminder by id together with its pending occurrence, if any. A reminder of another user is reported as not found.
+
+**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "reminder id (UUID) returned by reminders_list or reminders_create",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "active_occurrence": {
+      "additionalProperties": false,
+      "description": "the firing that waits for confirmation, absent otherwise",
+      "properties": {
+        "completed_at": {
+          "description": "confirmation time in RFC 3339 UTC",
+          "type": "string"
+        },
+        "first_sent_at": {
+          "description": "time of the first delivered message in RFC 3339 UTC",
+          "type": "string"
+        },
+        "id": {
+          "description": "occurrence id (UUID)",
+          "type": "string"
+        },
+        "next_repeat_at": {
+          "description": "next repeat time in RFC 3339 UTC, empty when there is none",
+          "type": "string"
+        },
+        "repeat_count": {
+          "description": "number of delivered messages, including the first one",
+          "type": "integer"
+        },
+        "scheduled_at": {
+          "description": "due time in RFC 3339 UTC",
+          "type": "string"
+        },
+        "status": {
+          "description": "active while waiting for confirmation, completed after confirmation, cancelled when the rule changed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "scheduled_at",
+        "repeat_count"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "count": {
+      "description": "total number of occurrences, zero when there is no count end",
+      "type": "integer"
+    },
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "enabled": {
+      "description": "whether the reminder is scheduled",
+      "type": "boolean"
+    },
+    "finished": {
+      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
+      "type": "boolean"
+    },
+    "finished_at": {
+      "description": "finish time in RFC 3339 UTC, empty while not finished",
+      "type": "string"
+    },
+    "id": {
+      "description": "reminder id (UUID)",
+      "type": "string"
+    },
+    "interval": {
+      "description": "every N days/weeks/months/years",
+      "type": "integer"
+    },
+    "last_error": {
+      "description": "last delivery error, empty when the reminder is delivered",
+      "type": "string"
+    },
+    "message": {
+      "description": "reminder text",
+      "type": "string"
+    },
+    "month_days": {
+      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
+      "items": {
+        "type": "integer"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "next_due_at": {
+      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
+      "type": "string"
+    },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "occurrences_fired": {
+      "description": "how many occurrences already fired; editing resets it",
+      "type": "integer"
+    },
+    "recipient_ids": {
+      "description": "user ids who get the message",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "repeat": {
+      "description": "once, daily, weekly, monthly or yearly",
+      "type": "string"
+    },
+    "repeat_minutes": {
+      "description": "interval in minutes between repeats of an unconfirmed occurrence",
+      "type": "integer"
+    },
+    "schedule_kind": {
+      "description": "alias of repeat, kept for older clients",
+      "type": "string"
+    },
+    "space_id": {
+      "description": "reminders space the rule belongs to",
+      "type": "string"
+    },
+    "start_date": {
+      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
+      "type": "string"
+    },
+    "time": {
+      "description": "local wall clock time HH:MM",
+      "type": "string"
+    },
+    "time_zone": {
+      "description": "IANA time zone of the schedule",
+      "type": "string"
+    },
+    "until": {
+      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "last change time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "weekdays": {
+      "description": "weekly days as mon..sun, present when repeat is weekly",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "space_id",
+    "recipient_ids",
+    "id",
+    "message",
+    "repeat",
+    "schedule_kind",
+    "interval",
+    "start_date",
+    "occurrences_fired",
+    "finished",
+    "time",
+    "time_zone",
+    "repeat_minutes",
+    "enabled",
+    "created_at",
+    "updated_at"
+  ],
+  "type": "object"
+}
+```
+
+### `reminders_list`
+
+List reminders
+
+List the reminders of every space of the current user (or of one space) with the schedule, next due time and, when a reminder has fired and waits for confirmation, its pending occurrence. Returns an empty array when the user has no reminders.
+
+**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "space": {
+      "description": "reminders space id or name (see spaces_list). Omit to list every space",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "reminders": {
+      "description": "every reminder of the user; empty when there are none",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "active_occurrence": {
+            "additionalProperties": false,
+            "description": "the firing that waits for confirmation, absent otherwise",
+            "properties": {
+              "completed_at": {
+                "description": "confirmation time in RFC 3339 UTC",
+                "type": "string"
+              },
+              "first_sent_at": {
+                "description": "time of the first delivered message in RFC 3339 UTC",
+                "type": "string"
+              },
+              "id": {
+                "description": "occurrence id (UUID)",
+                "type": "string"
+              },
+              "next_repeat_at": {
+                "description": "next repeat time in RFC 3339 UTC, empty when there is none",
+                "type": "string"
+              },
+              "repeat_count": {
+                "description": "number of delivered messages, including the first one",
+                "type": "integer"
+              },
+              "scheduled_at": {
+                "description": "due time in RFC 3339 UTC",
+                "type": "string"
+              },
+              "status": {
+                "description": "active while waiting for confirmation, completed after confirmation, cancelled when the rule changed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "scheduled_at",
+              "repeat_count"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "count": {
+            "description": "total number of occurrences, zero when there is no count end",
+            "type": "integer"
+          },
+          "created_at": {
+            "description": "creation time in RFC 3339 UTC",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "whether the reminder is scheduled",
+            "type": "boolean"
+          },
+          "finished": {
+            "description": "true when the recurrence has no future occurrence and the last one was confirmed",
+            "type": "boolean"
+          },
+          "finished_at": {
+            "description": "finish time in RFC 3339 UTC, empty while not finished",
+            "type": "string"
+          },
+          "id": {
+            "description": "reminder id (UUID)",
+            "type": "string"
+          },
+          "interval": {
+            "description": "every N days/weeks/months/years",
+            "type": "integer"
+          },
+          "last_error": {
+            "description": "last delivery error, empty when the reminder is delivered",
+            "type": "string"
+          },
+          "message": {
+            "description": "reminder text",
+            "type": "string"
+          },
+          "month_days": {
+            "description": "days of month, present when repeat is monthly and nth_weekday is absent",
+            "items": {
+              "type": "integer"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "next_due_at": {
+            "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
+            "type": "string"
+          },
+          "nth_weekday": {
+            "additionalProperties": false,
+            "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
+            "properties": {
+              "position": {
+                "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+                "type": "integer"
+              },
+              "weekday": {
+                "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+                "type": "string"
+              }
+            },
+            "required": [
+              "position",
+              "weekday"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "occurrences_fired": {
+            "description": "how many occurrences already fired; editing resets it",
+            "type": "integer"
+          },
+          "recipient_ids": {
+            "description": "user ids who get the message",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "repeat": {
+            "description": "once, daily, weekly, monthly or yearly",
+            "type": "string"
+          },
+          "repeat_minutes": {
+            "description": "interval in minutes between repeats of an unconfirmed occurrence",
+            "type": "integer"
+          },
+          "schedule_kind": {
+            "description": "alias of repeat, kept for older clients",
+            "type": "string"
+          },
+          "space_id": {
+            "description": "reminders space the rule belongs to",
+            "type": "string"
+          },
+          "start_date": {
+            "description": "first possible day as YYYY-MM-DD in the reminder time zone",
+            "type": "string"
+          },
+          "time": {
+            "description": "local wall clock time HH:MM",
+            "type": "string"
+          },
+          "time_zone": {
+            "description": "IANA time zone of the schedule",
+            "type": "string"
+          },
+          "until": {
+            "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "last change time in RFC 3339 UTC",
+            "type": "string"
+          },
+          "weekdays": {
+            "description": "weekly days as mon..sun, present when repeat is weekly",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "space_id",
+          "recipient_ids",
+          "id",
+          "message",
+          "repeat",
+          "schedule_kind",
+          "interval",
+          "start_date",
+          "occurrences_fired",
+          "finished",
+          "time",
+          "time_zone",
+          "repeat_minutes",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "reminders"
+  ],
+  "type": "object"
+}
+```
+
+### `reminders_update`
+
+Update a reminder
+
+Change a reminder. Omitted fields keep their current values: message, repeat and its interval/weekdays/month_days/nth_weekday/date/start_date/until/count, time, time_zone, repeat_minutes and enabled are all optional apart from the id. A recurrence change cancels the pending occurrence, resets the fired counter and recomputes the next due time. Returns the updated reminder.
+
+**Доступ:** изменяет. Повторный вызов не создаёт нового состояния; ответ может отличаться (например, «уже подтверждено»).
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "count": {
+      "description": "new total number of occurrences 1..10000; removes an until end. Omit to keep the current end",
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "date": {
+      "description": "new date of a one-time reminder as YYYY-MM-DD. Omit to keep the current date",
+      "type": "string"
+    },
+    "enabled": {
+      "description": "enable or disable the reminder. Omit to keep the current state",
+      "type": [
+        "null",
+        "boolean"
+      ]
+    },
+    "id": {
+      "description": "reminder id (UUID) to change",
+      "type": "string"
+    },
+    "interval": {
+      "description": "every N days/weeks/months/years, 1..1000. Omit to keep the current interval",
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "message": {
+      "description": "new reminder text, 1 to 1500 characters. Omit to keep the current text",
+      "type": "string"
+    },
+    "month_days": {
+      "description": "monthly day-of-month schedule: days 1..31. Omit to keep the current schedule",
+      "items": {
+        "type": "integer"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "monthly nth-weekday schedule. Omit to keep the current schedule",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "recipient_ids": {
+      "description": "new recipients: user ids of space members. Omit to keep the current ones",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "repeat": {
+      "description": "new recurrence kind: once, daily, weekly, monthly or yearly. Omit to keep the current one",
+      "type": "string"
+    },
+    "repeat_minutes": {
+      "description": "new repeat interval 1..1440 minutes. Omit to keep the current one",
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "space": {
+      "description": "move the reminder to this reminders space (id or name). Omit to keep it where it is",
+      "type": "string"
+    },
+    "start_date": {
+      "description": "new first possible day as YYYY-MM-DD. Omit to keep the current one",
+      "type": "string"
+    },
+    "time": {
+      "description": "new local wall clock time HH:MM. Omit to keep the current time",
+      "type": "string"
+    },
+    "timezone": {
+      "description": "new IANA time zone. Omit to keep the current one",
+      "type": "string"
+    },
+    "until": {
+      "description": "new last allowed day as YYYY-MM-DD; removes a count end. Omit to keep the current end",
+      "type": "string"
+    },
+    "weekdays": {
+      "description": "weekly schedule: day names mon..sun or ISO numbers 1..7. Omit to keep the current schedule",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "active_occurrence": {
+      "additionalProperties": false,
+      "description": "the firing that waits for confirmation, absent otherwise",
+      "properties": {
+        "completed_at": {
+          "description": "confirmation time in RFC 3339 UTC",
+          "type": "string"
+        },
+        "first_sent_at": {
+          "description": "time of the first delivered message in RFC 3339 UTC",
+          "type": "string"
+        },
+        "id": {
+          "description": "occurrence id (UUID)",
+          "type": "string"
+        },
+        "next_repeat_at": {
+          "description": "next repeat time in RFC 3339 UTC, empty when there is none",
+          "type": "string"
+        },
+        "repeat_count": {
+          "description": "number of delivered messages, including the first one",
+          "type": "integer"
+        },
+        "scheduled_at": {
+          "description": "due time in RFC 3339 UTC",
+          "type": "string"
+        },
+        "status": {
+          "description": "active while waiting for confirmation, completed after confirmation, cancelled when the rule changed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "scheduled_at",
+        "repeat_count"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "count": {
+      "description": "total number of occurrences, zero when there is no count end",
+      "type": "integer"
+    },
+    "created_at": {
+      "description": "creation time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "enabled": {
+      "description": "whether the reminder is scheduled",
+      "type": "boolean"
+    },
+    "finished": {
+      "description": "true when the recurrence has no future occurrence and the last one was confirmed",
+      "type": "boolean"
+    },
+    "finished_at": {
+      "description": "finish time in RFC 3339 UTC, empty while not finished",
+      "type": "string"
+    },
+    "id": {
+      "description": "reminder id (UUID)",
+      "type": "string"
+    },
+    "interval": {
+      "description": "every N days/weeks/months/years",
+      "type": "integer"
+    },
+    "last_error": {
+      "description": "last delivery error, empty when the reminder is delivered",
+      "type": "string"
+    },
+    "message": {
+      "description": "reminder text",
+      "type": "string"
+    },
+    "month_days": {
+      "description": "days of month, present when repeat is monthly and nth_weekday is absent",
+      "items": {
+        "type": "integer"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "next_due_at": {
+      "description": "next firing in RFC 3339 UTC, empty while the reminder is disabled or finished",
+      "type": "string"
+    },
+    "nth_weekday": {
+      "additionalProperties": false,
+      "description": "nth weekday of the month, present when repeat is monthly and month_days is absent",
+      "properties": {
+        "position": {
+          "description": "position of the weekday in the month: 1 = first, 2 = second, 3 = third, 4 = fourth, -1 = last",
+          "type": "integer"
+        },
+        "weekday": {
+          "description": "weekday name mon..sun or ISO number 1..7 (1 = Monday)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "weekday"
+      ],
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "occurrences_fired": {
+      "description": "how many occurrences already fired; editing resets it",
+      "type": "integer"
+    },
+    "recipient_ids": {
+      "description": "user ids who get the message",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "repeat": {
+      "description": "once, daily, weekly, monthly or yearly",
+      "type": "string"
+    },
+    "repeat_minutes": {
+      "description": "interval in minutes between repeats of an unconfirmed occurrence",
+      "type": "integer"
+    },
+    "schedule_kind": {
+      "description": "alias of repeat, kept for older clients",
+      "type": "string"
+    },
+    "space_id": {
+      "description": "reminders space the rule belongs to",
+      "type": "string"
+    },
+    "start_date": {
+      "description": "first possible day as YYYY-MM-DD in the reminder time zone",
+      "type": "string"
+    },
+    "time": {
+      "description": "local wall clock time HH:MM",
+      "type": "string"
+    },
+    "time_zone": {
+      "description": "IANA time zone of the schedule",
+      "type": "string"
+    },
+    "until": {
+      "description": "last allowed day as YYYY-MM-DD, empty when there is no date end",
+      "type": "string"
+    },
+    "updated_at": {
+      "description": "last change time in RFC 3339 UTC",
+      "type": "string"
+    },
+    "weekdays": {
+      "description": "weekly days as mon..sun, present when repeat is weekly",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "space_id",
+    "recipient_ids",
+    "id",
+    "message",
+    "repeat",
+    "schedule_kind",
+    "interval",
+    "start_date",
+    "occurrences_fired",
+    "finished",
+    "time",
+    "time_zone",
+    "repeat_minutes",
+    "enabled",
+    "created_at",
+    "updated_at"
+  ],
+  "type": "object"
+}
+```
+
+### `spaces_list`
+
+List spaces
+
+List the spaces of the user: every mini-app (warehouse, reminders) keeps its data in spaces that can be shared with other people. Warehouse and reminder tools take a space argument (id or name); call this to learn the valid values and the members.
+
+**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "app": {
+      "description": "only spaces of this mini-app: warehouse or reminders",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "spaces": {
+      "description": "spaces the user is a member of",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "app": {
+            "description": "mini-app of the space: warehouse or reminders",
+            "type": "string"
+          },
+          "id": {
+            "description": "space id (UUID); pass it as the space argument of other tools",
+            "type": "string"
+          },
+          "members": {
+            "description": "people who share the space",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "description": "display name, or e-mail when there is no name",
+                  "type": "string"
+                },
+                "user_id": {
+                  "description": "user id (UUID), for example a reminder recipient",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "user_id",
+                "name"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "name": {
+            "description": "space name",
+            "type": "string"
+          },
+          "personal": {
+            "description": "the user's own default space of this mini-app",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "app",
+          "personal",
+          "members"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    }
+  },
+  "required": [
+    "spaces"
+  ],
+  "type": "object"
+}
+```
+
+### `whoami`
+
+Who am I
+
+Return the Cublyverse user behind the personal access token: principal id, profile fields, time zone and the scopes of the token. Use it to learn the default time zone before creating a reminder and to check what the token is allowed to do.
+
+**Доступ:** только чтение. Инструмент ничего не меняет, его можно вызывать свободно.
+
+**Входная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "type": "object"
+}
+```
+
+**Выходная схема**
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "display_name": {
+      "description": "display name from the SSO profile, empty when unavailable",
+      "type": "string"
+    },
+    "email": {
+      "description": "e-mail from the SSO profile, empty when the provider does not send one",
+      "type": "string"
+    },
+    "principal_id": {
+      "description": "stable user id (UUID) that owns every object this token can reach",
+      "type": "string"
+    },
+    "scopes": {
+      "description": "scopes granted to the token used for this call",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "array"
+      ]
+    },
+    "time_zone": {
+      "description": "IANA time zone of the user, the default for new reminders",
+      "type": "string"
+    }
+  },
+  "required": [
+    "principal_id",
+    "time_zone",
+    "scopes"
+  ],
+  "type": "object"
+}
+```
+
 <!-- END GENERATED MCP TOOLS -->
 
 Блок между маркерами генерируется из кода командой
@@ -5596,8 +5911,8 @@ application/json` и `Accept: application/json, text/event-stream`. Ответ
 
 ### Бусинки: wishlist и проекты
 
-Инструменты `craft_*` живут только на `/mcp/w/{id}`, потому что все их данные
-принадлежат workspace. Примеры ниже — те же `tools/call`, что и выше.
+Инструменты `craft_*` работают с одним складом: он задаётся аргументом `space`,
+если складов несколько. Примеры ниже — те же `tools/call`, что и выше.
 
 Добавить в wishlist позицию каталога и свободный текст:
 

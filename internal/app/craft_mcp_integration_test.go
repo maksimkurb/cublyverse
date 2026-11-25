@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -37,27 +38,27 @@ func (a *mcpTestApp) call(session *mcp.ClientSession, name string, args map[stri
 	return result
 }
 
-// TestCraftMCPPerWorkspace covers the per-workspace endpoint: tool list,
-// stock changes, scopes and workspace isolation.
-func TestCraftMCPPerWorkspace(t *testing.T) {
+// TestCraftMCP covers the warehouse tools on the single endpoint: tool list,
+// stock changes, scopes, choosing a space and isolation between users.
+func TestCraftMCP(t *testing.T) {
 	env := newMCPTestApp(t)
 	ctx := context.Background()
 	q := env.app.Store().Queries()
 
 	owner, _ := workspace.ParseID(env.user.ID)
-	ws, err := q.CreateWorkspace(ctx, db.CreateWorkspaceParams{Name: "Дом", CreatedBy: owner})
+	ws, err := q.CreateWorkspace(ctx, db.CreateWorkspaceParams{Name: "Дом", CreatedBy: owner, App: workspace.AppWarehouse})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := q.AddWorkspaceMember(ctx, db.AddWorkspaceMemberParams{WorkspaceID: ws.ID, UserID: owner, AddedBy: owner}); err != nil {
 		t.Fatal(err)
 	}
-	path := "/mcp/w/" + workspace.FormatID(ws.ID)
+	const path = "/mcp"
 
 	full := env.issueToken(auth.ScopeCraftRead, auth.ScopeCraftWrite)
 	session, err := env.connectAt(path, full)
 	if err != nil {
-		t.Fatalf("connect workspace endpoint: %v", err)
+		t.Fatalf("connect mcp endpoint: %v", err)
 	}
 	tools, err := session.ListTools(ctx, nil)
 	if err != nil {
@@ -67,13 +68,10 @@ func TestCraftMCPPerWorkspace(t *testing.T) {
 	for _, tool := range tools.Tools {
 		have[tool.Name] = true
 	}
-	for _, want := range []string{"whoami", "craft_reference", "craft_catalog_search", "craft_stock_adjust", "craft_item_create"} {
+	for _, want := range []string{"whoami", "spaces_list", "reminders_list", "craft_reference", "craft_catalog_search", "craft_stock_adjust", "craft_item_create"} {
 		if !have[want] {
-			t.Errorf("workspace endpoint lacks %s; has %v", want, have)
+			t.Errorf("endpoint lacks %s; has %v", want, have)
 		}
-	}
-	if have["reminders_list"] {
-		t.Error("reminders must not be exposed on the workspace endpoint")
 	}
 
 	created := env.call(session, "craft_item_create", map[string]any{
@@ -105,9 +103,31 @@ func TestCraftMCPPerWorkspace(t *testing.T) {
 		t.Fatal("read-only token must not adjust stock")
 	}
 
-	// A user outside the workspace cannot reach it at all.
+	// A second warehouse makes the space argument necessary; a name picks one.
+	garage, err := q.CreateWorkspace(ctx, db.CreateWorkspaceParams{Name: "Гараж", CreatedBy: owner, App: workspace.AppWarehouse})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := q.AddWorkspaceMember(ctx, db.AddWorkspaceMemberParams{WorkspaceID: garage.ID, UserID: owner, AddedBy: owner}); err != nil {
+		t.Fatal(err)
+	}
+	if ambiguous := env.call(session, "craft_inventory_list", map[string]any{}); !ambiguous.IsError || !strings.Contains(toolText(ambiguous), "Гараж") {
+		t.Fatalf("ambiguous space must list the choices: %s", toolText(ambiguous))
+	}
+	home := env.call(session, "craft_inventory_list", map[string]any{"space": "дом"})
+	if home.IsError || len(structured(t, home)["stock"].([]any)) != 1 {
+		t.Fatalf("inventory by name: %s", toolText(home))
+	}
+
+	// A user outside the space cannot reach it, neither by id nor by name.
 	stranger := env.createUser("stranger")
-	if _, err := env.connectAt(path, env.issueTokenFor(stranger, auth.ScopeCraftRead)); err == nil {
-		t.Fatal("non-member must not connect to the workspace endpoint")
+	other, err := env.connectAt(path, env.issueTokenFor(stranger, auth.ScopeCraftRead))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"Дом", workspace.FormatID(ws.ID), ""} {
+		if denied := env.call(other, "craft_inventory_list", map[string]any{"space": ref}); !denied.IsError {
+			t.Fatalf("non-member must not read the space %q", ref)
+		}
 	}
 }

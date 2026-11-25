@@ -10,7 +10,7 @@
 //	client ─ /oauth/authorize ─▶ sign-in with the SSO session ─▶ consent page
 //	       ◀─ code ────────────────────────────────────────────────┘
 //	client ─ /oauth/token (code + PKCE verifier) ─▶ access + refresh token
-//	client ─ /mcp/w/{workspace} (Bearer access token)
+//	client ─ /mcp (Bearer access token)
 //
 // Supported: authorization code with mandatory PKCE (S256), refresh token
 // rotation with reuse detection, dynamic client registration (RFC 7591),
@@ -31,7 +31,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -88,18 +87,17 @@ type Config struct {
 
 // Service is the authorization server.
 type Service struct {
-	cfg        Config
-	st         *store.Store
-	identity   Identity
-	workspaces *workspace.Service
-	http       *http.Client
+	cfg      Config
+	st       *store.Store
+	identity Identity
+	http     *http.Client
 
 	mu       sync.Mutex
 	registry map[string]*bucket // DCR rate limit per remote address
 }
 
 // New returns the service.
-func New(cfg Config, st *store.Store, identity Identity, workspaces *workspace.Service) *Service {
+func New(cfg Config, st *store.Store, identity Identity) *Service {
 	cfg.Issuer = strings.TrimRight(cfg.Issuer, "/")
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
@@ -111,7 +109,7 @@ func New(cfg Config, st *store.Store, identity Identity, workspaces *workspace.S
 	if client == nil {
 		client = newFetchClient()
 	}
-	return &Service{cfg: cfg, st: st, identity: identity, workspaces: workspaces, http: client, registry: map[string]*bucket{}}
+	return &Service{cfg: cfg, st: st, identity: identity, http: client, registry: map[string]*bucket{}}
 }
 
 // Enabled reports whether the server can run: it needs an absolute issuer.
@@ -137,8 +135,8 @@ func (s *Service) Handler() http.Handler {
 	return mux
 }
 
-// ResourceMetadataURL is the RFC 9728 metadata URL of a resource path such as
-// /mcp/w/<id>; the 401 challenge points clients to it.
+// ResourceMetadataURL is the RFC 9728 metadata URL of the MCP resource path;
+// the 401 challenge points clients to it.
 func (s *Service) ResourceMetadataURL(resourcePath string) string {
 	return s.cfg.Issuer + "/.well-known/oauth-protected-resource" + resourcePath
 }
@@ -170,7 +168,7 @@ func (s *Service) handleServerMetadata(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	const prefix = "/.well-known/oauth-protected-resource"
 	resourcePath := strings.TrimPrefix(r.URL.Path, prefix)
-	if _, ok := parseResourcePath(resourcePath); !ok {
+	if resourcePath != ResourcePath {
 		http.NotFound(w, r)
 		return
 	}
@@ -183,25 +181,8 @@ func (s *Service) handleResourceMetadata(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-var resourcePathRE = regexp.MustCompile(`^/mcp(?:/w/([0-9a-fA-F-]{36}))?$`)
-
-// parseResourcePath validates an MCP resource path and returns the workspace id
-// it names, empty for the workspace-less /mcp.
-func parseResourcePath(path string) (workspaceID string, ok bool) {
-	m := resourcePathRE.FindStringSubmatch(path)
-	if m == nil {
-		return "", false
-	}
-	if m[1] != "" {
-		if _, err := workspace.ParseID(m[1]); err != nil {
-			return "", false
-		}
-	}
-	return strings.ToLower(m[1]), true
-}
-
-// ParseResourcePath is the exported form for the MCP handler.
-func ParseResourcePath(path string) (workspaceID string, ok bool) { return parseResourcePath(path) }
+// ResourcePath is the one protected resource: the MCP endpoint.
+const ResourcePath = "/mcp"
 
 func handleCORS(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
@@ -271,12 +252,11 @@ func grantedScopes(requested string) []string {
 
 // Token is a verified access token.
 type Token struct {
-	ID          string
-	ClientID    string
-	UserID      string
-	WorkspaceID string
-	Scopes      []string
-	Resource    string
+	ID       string
+	ClientID string
+	UserID   string
+	Scopes   []string
+	Resource string
 }
 
 // ErrInvalidToken means the access token is unknown, expired or revoked.
@@ -297,20 +277,17 @@ func (s *Service) Verify(ctx context.Context, raw string) (Token, error) {
 	_ = s.st.Queries().TouchOAuthToken(ctx, row.ID)
 	return Token{
 		ID: workspace.FormatID(row.ID), ClientID: row.ClientID, UserID: workspace.FormatID(row.UserID),
-		WorkspaceID: workspace.FormatID(row.WorkspaceID), Scopes: row.Scopes, Resource: row.Resource,
+		Scopes: row.Scopes, Resource: row.Resource,
 	}, nil
 }
 
 // Grant is a live authorization shown in the WebApp.
 type Grant struct {
-	ID          string
-	ClientName  string
-	WorkspaceID string
-	// WorkspaceName is empty when the grant has no workspace.
-	WorkspaceName string
-	Scopes        []string
-	CreatedAt     time.Time
-	LastUsedAt    *time.Time
+	ID         string
+	ClientName string
+	Scopes     []string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
 }
 
 // Grants lists the live authorizations of a user.
@@ -325,7 +302,7 @@ func (s *Service) Grants(ctx context.Context, userID string) ([]Grant, error) {
 	}
 	out := make([]Grant, 0, len(rows))
 	for _, r := range rows {
-		g := Grant{ID: workspace.FormatID(r.FamilyID), ClientName: r.ClientName, WorkspaceID: workspace.FormatID(r.WorkspaceID), WorkspaceName: deref(r.WorkspaceName), Scopes: r.Scopes, CreatedAt: r.CreatedAt}
+		g := Grant{ID: workspace.FormatID(r.FamilyID), ClientName: r.ClientName, Scopes: r.Scopes, CreatedAt: r.CreatedAt}
 		if r.LastUsedAt.Valid {
 			t := r.LastUsedAt.Time
 			g.LastUsedAt = &t

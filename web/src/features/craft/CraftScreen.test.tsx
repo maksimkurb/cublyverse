@@ -105,9 +105,7 @@ beforeEach(() => {
 });
 
 describe("CraftScreen", () => {
-  it("lists the stock and changes it with the quick buttons and the exact value", async () => {
-    const adjust = mutation();
-    adjustMock.mockReturnValue(adjust as never);
+  it("lists the stock and changes the quantity in the dialog", async () => {
     const setStock = mutation();
     setStockMock.mockReturnValue(setStock as never);
     const setMeta = mutation();
@@ -122,12 +120,8 @@ describe("CraftScreen", () => {
     expect(screen.getByText(/Ящик 2/)).toBeInTheDocument();
     expect(screen.getByText("Куплено на ярмарке")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Добавить 1: Жемчуг айвори 2 мм" }));
-    await waitFor(() => expect(adjust.mutateAsync).toHaveBeenCalledTimes(1));
-    expect(adjust.mutateAsync.mock.calls[0][0]).toMatchObject({
-      params: { path: { id: makeWorkspace().id, item_id: makeItem().id } },
-      body: { delta: 1 },
-    });
+    // The row has only the pencil; the stepper lives in the dialog.
+    expect(screen.queryByRole("button", { name: /Увеличить/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("switch", { name: /Только малое количество/ }));
     await waitFor(() => {
@@ -136,7 +130,10 @@ describe("CraftScreen", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Изменить остаток: Жемчуг айвори 2 мм" }));
-    fireEvent.change(screen.getByLabelText("Количество, шт"), { target: { value: "12" } });
+    fireEvent.change(screen.getByLabelText("Количество, шт"), { target: { value: "11" } });
+    fireEvent.click(screen.getByRole("button", { name: "Увеличить на 1" }));
+    // Pieces have no gram buttons.
+    expect(screen.queryByRole("button", { name: "+5" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(setStock.mutateAsync).toHaveBeenCalledTimes(1));
@@ -247,6 +244,22 @@ describe("CraftScreen", () => {
     fireEvent.change(await screen.findByLabelText("HEX"), { target: { value: "#00ff88" } });
     fireEvent.click(screen.getByRole("button", { name: "Найти похожие" }));
     await waitFor(() => expect(lastFilter()).toMatchObject({ q: "жемчуг", color: "#00FF88" }));
+  });
+
+  it("changes beads by the usual weights", async () => {
+    const setStock = mutation();
+    setStockMock.mockReturnValue(setStock as never);
+    inventoryMock.mockReturnValue(queryResult({ data: [makeStock({ qty: 7, item: makeItem({ unit: "г" }) })] }));
+    renderWithHost(<CraftScreen />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Изменить остаток: Жемчуг айвори 2 мм" }));
+    fireEvent.click(screen.getByRole("button", { name: "+50" }));
+    fireEvent.click(screen.getByRole("button", { name: "−5" }));
+    expect(screen.getByLabelText("Количество, г")).toHaveValue("52");
+    // The quantity never goes below zero.
+    fireEvent.click(screen.getByRole("button", { name: "−50" }));
+    fireEvent.click(screen.getByRole("button", { name: "−10" }));
+    expect(screen.getByLabelText("Количество, г")).toHaveValue("0");
   });
 
   it("shows the purchase list as a tab next to the stock", () => {

@@ -111,8 +111,8 @@ func TestPreciosaFetchWalksPagesAndReadsColourNames(t *testing.T) {
 		if entry.Category != CategorySeedBeads || entry.Manufacturer != ManufacturerPreciosa {
 			t.Fatalf("entry %q category/manufacturer = %q/%q", entry.Article, entry.Category, entry.Manufacturer)
 		}
-		if entry.Unit != UnitPack {
-			t.Fatalf("entry %q unit = %q, want %q", entry.Article, entry.Unit, UnitPack)
+		if entry.Unit != UnitGram {
+			t.Fatalf("entry %q unit = %q, want %q", entry.Article, entry.Unit, UnitGram)
 		}
 		if entry.ColorHex != "" || entry.ColorSource != "" {
 			t.Fatalf("entry %q has a colour the manufacturer does not publish", entry.Article)

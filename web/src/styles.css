@@ -1287,7 +1287,68 @@ ul {
 
 .craft-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Several actions share the width and wrap instead of leaving the screen. */
+.craft-actions--fill > * {
+  flex: 1 1 auto;
+}
+
+/* A stock row is one line: the quantity and the pencil stay beside the name.
+   Two classes, so that .craft-row below does not undo it. */
+.craft-row.stock-row {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.stock-row .craft-row__text {
+  min-width: 0;
+}
+
+.stock-row .cv-iconbtn {
+  flex: none;
+}
+
+.qty-field {
+  display: grid;
+  gap: 8px;
+}
+
+.qty-field__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.qty-field__row .cv-field {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The label starts at the left edge, above the − button. */
+.qty-field__row .cv-field__label {
+  margin-left: -54px;
+  white-space: nowrap;
+}
+
+.qty-field__step {
+  flex: none;
+  width: 46px;
+  height: 46px;
+}
+
+.qty-field__chips {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.qty-field__chips .cv-btn {
+  min-width: 0;
+  padding: 0;
 }
 
 .craft-row {
@@ -1393,16 +1454,6 @@ button.craft-swatch--photo {
   font-family: var(--font-mono);
   font-weight: 600;
   white-space: nowrap;
-}
-
-.craft-stepper {
-  display: flex;
-  gap: 4px;
-}
-
-.craft-stepper .cv-iconbtn {
-  width: 44px;
-  height: 44px;
 }
 
 .craft-color {
@@ -1922,6 +1973,21 @@ a.wish-link:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.project-detail__name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.project-detail__name .page__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-detail__name .cv-iconbtn {
+  flex: none;
 }
 
 .project-detail__title {

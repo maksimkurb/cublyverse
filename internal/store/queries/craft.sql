@@ -86,7 +86,18 @@ WHERE (
   AND i.deprecated_at IS NULL
   AND (sqlc.arg(category)::text = '' OR COALESCE(sc.slug, rc.slug) = sqlc.arg(category))
   AND (sqlc.arg(manufacturer)::text = '' OR m.name ILIKE sqlc.arg(manufacturer))
-  AND (sqlc.arg(query)::text = '' OR i.article ILIKE sqlc.arg(query) || '%' OR i.name ILIKE '%' || sqlc.arg(query) || '%' OR i.color_name ILIKE '%' || sqlc.arg(query) || '%' OR inv.attrs->>'color_name' ILIKE '%' || sqlc.arg(query) || '%')
+  -- Every word of the query (a regular expression made by searchTerms) must be
+  -- found: in the texts, at the start of the article or, from four characters
+  -- on, anywhere in it.
+  AND NOT EXISTS (
+        SELECT 1 FROM unnest(sqlc.arg(terms)::text[]) AS term
+        WHERE NOT (
+            craft_search_text(concat_ws(' ', i.name, i.series, i.color_name, inv.attrs->>'color_name',
+                i.size, m.name, COALESCE(sc.name, rc.name),
+                CASE WHEN length(term) >= 4 THEN i.article END)) ~ term
+            OR craft_search_text(i.article) ~ ('^' || term)
+        )
+      )
   AND (sqlc.arg(only_in_stock)::boolean = false OR inv.catalog_item_id IS NOT NULL)
 ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
@@ -109,7 +120,18 @@ LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 WHERE inv.workspace_id = sqlc.arg(workspace_id)::uuid
   AND (sqlc.arg(category)::text = '' OR COALESCE(sc.slug, rc.slug) = sqlc.arg(category))
   AND (sqlc.arg(manufacturer)::text = '' OR m.name ILIKE sqlc.arg(manufacturer))
-  AND (sqlc.arg(query)::text = '' OR i.article ILIKE sqlc.arg(query) || '%' OR i.name ILIKE '%' || sqlc.arg(query) || '%' OR i.color_name ILIKE '%' || sqlc.arg(query) || '%' OR inv.attrs->>'color_name' ILIKE '%' || sqlc.arg(query) || '%')
+  -- Every word of the query (a regular expression made by searchTerms) must be
+  -- found: in the texts, at the start of the article or, from four characters
+  -- on, anywhere in it.
+  AND NOT EXISTS (
+        SELECT 1 FROM unnest(sqlc.arg(terms)::text[]) AS term
+        WHERE NOT (
+            craft_search_text(concat_ws(' ', i.name, i.series, i.color_name, inv.attrs->>'color_name',
+                i.size, m.name, COALESCE(sc.name, rc.name),
+                CASE WHEN length(term) >= 4 THEN i.article END)) ~ term
+            OR craft_search_text(i.article) ~ ('^' || term)
+        )
+      )
   AND (sqlc.narg(max_qty)::numeric IS NULL OR inv.qty <= sqlc.narg(max_qty))
 ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);

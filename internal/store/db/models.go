@@ -272,6 +272,10 @@ type OauthToken struct {
 	CreatedAt        time.Time          `json:"created_at"`
 }
 
+type PackedBead struct {
+	ID pgtype.UUID `json:"id"`
+}
+
 type Reminder struct {
 	ID                pgtype.UUID        `json:"id"`
 	UserID            pgtype.UUID        `json:"user_id"`

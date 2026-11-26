@@ -175,7 +175,7 @@ type mcpFilter struct {
 	mcpSpace
 	Category     string `json:"category,omitempty" jsonschema:"category slug or name, see craft_reference"`
 	Manufacturer string `json:"manufacturer,omitempty" jsonschema:"manufacturer name, case-insensitive exact match"`
-	Query        string `json:"query,omitempty" jsonschema:"article prefix or part of the name or colour name"`
+	Query        string `json:"query,omitempty" jsonschema:"words that must all match: article, names, brand or category; diacritics are ignored and common Russian words are understood"`
 	Color        string `json:"color,omitempty" jsonschema:"colour as #RRGGBB: only items with a colour, closest first"`
 	Limit        int    `json:"limit,omitempty" jsonschema:"page size 1..200, default 50"`
 	Offset       int    `json:"offset,omitempty" jsonschema:"number of results to skip"`

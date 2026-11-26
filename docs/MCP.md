@@ -216,7 +216,7 @@ Search the shared catalogue (manufacturer catalogues such as PRECIOSA or DMC) an
       "type": "boolean"
     },
     "query": {
-      "description": "article prefix or part of the name or colour name",
+      "description": "words that must all match: article, names, brand or category; diacritics are ignored and common Russian words are understood",
       "type": "string"
     },
     "space": {
@@ -677,7 +677,7 @@ List what the workspace holds: items with quantity and unit, optionally filtered
       "type": "integer"
     },
     "query": {
-      "description": "article prefix or part of the name or colour name",
+      "description": "words that must all match: article, names, brand or category; diacritics are ignored and common Russian words are understood",
       "type": "string"
     },
     "space": {

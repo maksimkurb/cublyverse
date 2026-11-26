@@ -7,6 +7,7 @@ import { Button, Notice, Sheet, TextField } from "../../ui/controls";
 import { CraftItemDialog } from "./CraftDialogs";
 import { ColorTag } from "./ColorTag";
 import { useAdjustCraftStock, useCraftCatalog, useUpdateCraftStockMeta } from "./data";
+import { QtyField } from "./QtyField";
 import { SearchBar, useCraftSearch } from "./SearchBar";
 import { Swatch } from "./Swatch";
 import { formatQty, itemMeta } from "./format";
@@ -106,7 +107,8 @@ function QuantityStep({ workspaceId, item, onClose }: { workspaceId: string; ite
   const host = useHost();
   const adjust = useAdjustCraftStock();
   const setMeta = useUpdateCraftStockMeta();
-  const [qty, setQty] = useState("1");
+  // Beads are usually bought five grams at a time.
+  const [qty, setQty] = useState(item.unit === "г" ? "5" : "1");
   const [location, setLocation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -156,7 +158,7 @@ function QuantityStep({ workspaceId, item, onClose }: { workspaceId: string; ite
           {item.name}
           {item.in_inventory ? ` — уже есть ${formatQty(item.stock_qty)} ${item.unit}` : ""}
         </p>
-        <TextField label={`Сколько добавить, ${item.unit}`} inputMode="decimal" mono disabled={added !== null} value={qty} onChange={(event) => setQty(event.target.value)} />
+        <QtyField label={`Сколько добавить, ${item.unit}`} unit={item.unit} disabled={added !== null} value={qty} onChange={setQty} />
         <TextField label="Где хранится" placeholder="Необязательно" value={location} onChange={(event) => setLocation(event.target.value)} />
         <Button type="submit" variant="primary" block loading={busy}>
           Добавить

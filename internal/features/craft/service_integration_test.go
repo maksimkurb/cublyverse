@@ -63,7 +63,7 @@ func (e *env) globalItem(t *testing.T, article string) string {
 	}
 	item, err := q.CreateCraftCatalogItem(ctx, db.CreateCraftCatalogItemParams{
 		CategoryID: cat.ID, ManufacturerID: m.ID, Article: article, Name: "PRECIOSA " + article,
-		Unit: "упаковка", Attrs: []byte("{}"), Source: "preciosa",
+		Unit: "г", Attrs: []byte("{}"), Source: "preciosa",
 	})
 	if err != nil {
 		t.Fatal(err)

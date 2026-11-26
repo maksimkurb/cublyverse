@@ -761,8 +761,8 @@ export interface paths {
         /**
          * Search the catalogue
          * @description Searches the shared catalogue and the private items of the workspace.
-         *     Filters combine with AND; an empty filter means "any". `q` matches an
-         *     article prefix or a part of the item or colour name. Every result carries
+         *     Filters combine with AND; an empty filter means "any". `q` is split into
+         *     words, see the parameter. Every result carries
          *     the quantity this workspace holds.
          */
         get: operations["searchCraftCatalog"];
@@ -4364,7 +4364,12 @@ export interface operations {
                 category?: string;
                 /** @description Manufacturer name, case-insensitive exact match. */
                 manufacturer?: string;
-                /** @description Article prefix, or part of the item or colour name. */
+                /**
+                 * @description Words that must all be found, in any order, in the article, names,
+                 *     colour, brand or category. Case and Latin diacritics are ignored
+                 *     and common Russian words match English catalogue names. An article
+                 *     matches from its start, or anywhere from four characters on.
+                 */
                 q?: string;
                 /** @description Keep only items the workspace holds. */
                 only_in_stock?: boolean;
@@ -4657,7 +4662,12 @@ export interface operations {
                 category?: string;
                 /** @description Manufacturer name, case-insensitive exact match. */
                 manufacturer?: string;
-                /** @description Article prefix, or part of the item or colour name. */
+                /**
+                 * @description Words that must all be found, in any order, in the article, names,
+                 *     colour, brand or category. Case and Latin diacritics are ignored
+                 *     and common Russian words match English catalogue names. An article
+                 *     matches from its start, or anywhere from four characters on.
+                 */
                 q?: string;
                 /** @description Keep rows whose quantity is at most this value. */
                 max_qty?: number;

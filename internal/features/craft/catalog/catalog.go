@@ -26,7 +26,7 @@ const (
 	ManufacturerPreciosa = "PRECIOSA Ornela"
 
 	UnitSkein = "моток"
-	UnitPack  = "упаковка"
+	UnitGram  = "г"
 )
 
 // userAgent identifies the scraper to the manufacturers. It is intentionally

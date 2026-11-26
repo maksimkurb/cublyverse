@@ -142,7 +142,7 @@ func TestWarehouseReference(t *testing.T) {
 	if len(beads) != 1 || beads[0].CatalogSlug != "seed-beads" {
 		t.Fatalf("connecting must add the category: %+v", beads)
 	}
-	if _, err := e.craft.SaveCategory(ctx, user, garage.ID, beads[0].ID, craft.CategoryInput{Name: "Мой бисер", DefaultUnit: "упаковка"}); err != nil {
+	if _, err := e.craft.SaveCategory(ctx, user, garage.ID, beads[0].ID, craft.CategoryInput{Name: "Мой бисер", DefaultUnit: "г"}); err != nil {
 		t.Fatal(err)
 	}
 	if found = search(garage.ID); found[0].CategoryName != "Мой бисер" || search(home.ID)[0].CategoryName != "Бисер" {

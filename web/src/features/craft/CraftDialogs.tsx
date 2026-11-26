@@ -6,6 +6,7 @@ import { useHost, useHostBackButton } from "../../host/HostContext";
 import { Button, Checkbox, Notice, SelectField, Sheet, TextAreaField, TextField } from "../../ui/controls";
 import { IconPipette } from "../../ui/icons";
 import { ColorPickSheet } from "./ColorPickSheet";
+import { QtyField } from "./QtyField";
 import {
   useCraftCatalog,
   useCraftReference,
@@ -101,13 +102,7 @@ export function StockEditDialog({ workspaceId, entry, onClose }: StockEditDialog
             {error}
           </Notice>
         )}
-        <TextField
-          label={`Количество, ${entry.item.unit}`}
-          inputMode="decimal"
-          mono
-          value={qty}
-          onChange={(event) => setQtyValue(event.target.value)}
-        />
+        <QtyField label={`Количество, ${entry.item.unit}`} unit={entry.item.unit} value={qty} onChange={setQtyValue} />
         <TextField label="Где хранится" placeholder="Например: Ящик 2" value={location} onChange={(event) => setLocation(event.target.value)} />
         <TextAreaField label="Заметки" value={notes} onChange={(event) => setNotes(event.target.value)} />
         <Button type="submit" variant="primary" block loading={busy}>

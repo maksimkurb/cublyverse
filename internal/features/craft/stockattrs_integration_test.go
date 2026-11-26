@@ -20,7 +20,7 @@ func TestLinkKeepsColour(t *testing.T) {
 	}
 	official := e.globalItem(t, "311-19001")
 	private, err := e.craft.CreateItem(ctx, user, home.ID, craft.ItemInput{
-		Category: "seed-beads", Name: "Старый бисер", ColorName: "салатовый", ColorHex: "#A9C33E", Unit: "упаковка",
+		Category: "seed-beads", Name: "Старый бисер", ColorName: "салатовый", ColorHex: "#A9C33E", Unit: "г",
 	})
 	if err != nil {
 		t.Fatal(err)

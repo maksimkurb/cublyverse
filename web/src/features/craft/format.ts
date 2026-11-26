@@ -5,6 +5,16 @@ export function formatQty(value: number): string {
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 3 }).format(value);
 }
 
+/**
+ * The text of a quantity field after adding delta to it; never below zero. Text
+ * that is not a number counts as zero.
+ */
+export function stepQty(value: string, delta: number): string {
+  const parsed = Number(value.trim().replace(",", "."));
+  const next = Math.max(0, (Number.isFinite(parsed) ? parsed : 0) + delta);
+  return String(Math.round(next * 1000) / 1000).replace(".", ",");
+}
+
 /** Quantity with its unit, for example «12 шт». */
 export function qtyLabel(entry: Pick<CraftStockEntry, "qty" | "item">): string {
   return `${formatQty(entry.qty)} ${entry.item.unit}`;

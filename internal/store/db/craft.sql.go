@@ -387,7 +387,18 @@ LEFT JOIN craft_manufacturers m ON m.id = i.manufacturer_id
 WHERE inv.workspace_id = $1::uuid
   AND ($2::text = '' OR COALESCE(sc.slug, rc.slug) = $2)
   AND ($3::text = '' OR m.name ILIKE $3)
-  AND ($4::text = '' OR i.article ILIKE $4 || '%' OR i.name ILIKE '%' || $4 || '%' OR i.color_name ILIKE '%' || $4 || '%' OR inv.attrs->>'color_name' ILIKE '%' || $4 || '%')
+  -- Every word of the query (a regular expression made by searchTerms) must be
+  -- found: in the texts, at the start of the article or, from four characters
+  -- on, anywhere in it.
+  AND NOT EXISTS (
+        SELECT 1 FROM unnest($4::text[]) AS term
+        WHERE NOT (
+            craft_search_text(concat_ws(' ', i.name, i.series, i.color_name, inv.attrs->>'color_name',
+                i.size, m.name, COALESCE(sc.name, rc.name),
+                CASE WHEN length(term) >= 4 THEN i.article END)) ~ term
+            OR craft_search_text(i.article) ~ ('^' || term)
+        )
+      )
   AND ($5::numeric IS NULL OR inv.qty <= $5)
 ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT $7 OFFSET $6
@@ -397,7 +408,7 @@ type ListCraftInventoryParams struct {
 	WorkspaceID  pgtype.UUID    `json:"workspace_id"`
 	Category     string         `json:"category"`
 	Manufacturer string         `json:"manufacturer"`
-	Query        string         `json:"query"`
+	Terms        []string       `json:"terms"`
 	MaxQty       pgtype.Numeric `json:"max_qty"`
 	PageOffset   int32          `json:"page_offset"`
 	PageLimit    int32          `json:"page_limit"`
@@ -438,7 +449,7 @@ func (q *Queries) ListCraftInventory(ctx context.Context, arg ListCraftInventory
 		arg.WorkspaceID,
 		arg.Category,
 		arg.Manufacturer,
-		arg.Query,
+		arg.Terms,
 		arg.MaxQty,
 		arg.PageOffset,
 		arg.PageLimit,
@@ -612,7 +623,18 @@ WHERE (
   AND i.deprecated_at IS NULL
   AND ($2::text = '' OR COALESCE(sc.slug, rc.slug) = $2)
   AND ($3::text = '' OR m.name ILIKE $3)
-  AND ($4::text = '' OR i.article ILIKE $4 || '%' OR i.name ILIKE '%' || $4 || '%' OR i.color_name ILIKE '%' || $4 || '%' OR inv.attrs->>'color_name' ILIKE '%' || $4 || '%')
+  -- Every word of the query (a regular expression made by searchTerms) must be
+  -- found: in the texts, at the start of the article or, from four characters
+  -- on, anywhere in it.
+  AND NOT EXISTS (
+        SELECT 1 FROM unnest($4::text[]) AS term
+        WHERE NOT (
+            craft_search_text(concat_ws(' ', i.name, i.series, i.color_name, inv.attrs->>'color_name',
+                i.size, m.name, COALESCE(sc.name, rc.name),
+                CASE WHEN length(term) >= 4 THEN i.article END)) ~ term
+            OR craft_search_text(i.article) ~ ('^' || term)
+        )
+      )
   AND ($5::boolean = false OR inv.catalog_item_id IS NOT NULL)
 ORDER BY COALESCE(sc.sort_order, rc.sort_order), m.name NULLS LAST, i.article, i.name
 LIMIT $7 OFFSET $6
@@ -622,7 +644,7 @@ type SearchCraftCatalogParams struct {
 	WorkspaceID  pgtype.UUID `json:"workspace_id"`
 	Category     string      `json:"category"`
 	Manufacturer string      `json:"manufacturer"`
-	Query        string      `json:"query"`
+	Terms        []string    `json:"terms"`
 	OnlyInStock  bool        `json:"only_in_stock"`
 	PageOffset   int32       `json:"page_offset"`
 	PageLimit    int32       `json:"page_limit"`
@@ -672,7 +694,7 @@ func (q *Queries) SearchCraftCatalog(ctx context.Context, arg SearchCraftCatalog
 		arg.WorkspaceID,
 		arg.Category,
 		arg.Manufacturer,
-		arg.Query,
+		arg.Terms,
 		arg.OnlyInStock,
 		arg.PageOffset,
 		arg.PageLimit,

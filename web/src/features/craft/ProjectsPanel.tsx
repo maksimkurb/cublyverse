@@ -4,7 +4,7 @@ import type { ProjectMaterial } from "../../api/client";
 import { describeApiError } from "../../api/errors";
 import { useHost, useHostBackButton } from "../../host/HostContext";
 import { Button, EmptyState, Notice } from "../../ui/controls";
-import { IconPlus } from "../../ui/icons";
+import { IconEdit, IconPlus } from "../../ui/icons";
 import { useProjects, useProject, useRemoveProjectMaterial, useShortageToWishlist } from "./data";
 import { Swatch } from "./Swatch";
 import { itemMeta } from "./format";
@@ -139,21 +139,23 @@ function ProjectDetail({ workspaceId, projectId, onBack }: { workspaceId: string
       {project && (
         <>
           <header className="project-detail__title">
-            <h2 className="page__title">{project.name}</h2>
+            <div className="project-detail__name">
+              <h2 className="page__title">{project.name}</h2>
+              <button type="button" className="cv-iconbtn" aria-label="Изменить проект" title="Изменить проект" onClick={() => setEditOpen(true)}>
+                <IconEdit />
+              </button>
+            </div>
             <span className="wish-card__meta">{materialsCountLabel(project.material_count)}</span>
           </header>
           {project.notes && <p className="page__state">{project.notes}</p>}
 
-          <div className="craft-actions">
+          <div className="craft-actions craft-actions--fill">
             <Button variant="primary" onClick={() => setAddOpen(true)}>
               <IconPlus />
               Добавить материал
             </Button>
             <Button onClick={() => void handleShortage()} loading={shortage.isPending}>
               Недостающее в закупки
-            </Button>
-            <Button aria-label="Изменить проект" onClick={() => setEditOpen(true)}>
-              Изменить
             </Button>
           </div>
 

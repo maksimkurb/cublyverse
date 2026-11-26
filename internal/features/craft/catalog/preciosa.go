@@ -126,7 +126,7 @@ func (p *Preciosa) Fetch(ctx context.Context) ([]Entry, error) {
 			ColorName:    colorName,
 			Size:         product.Size,
 			Finish:       "",
-			Unit:         UnitPack,
+			Unit:         UnitGram,
 			SourceURL:    base + product.Href,
 			ImageURL:     absolute(base, product.PhotoView),
 			ExternalID:   strings.TrimPrefix(product.Href, "/detail/"),

@@ -134,7 +134,8 @@ type StockEntry struct {
 type CatalogFilter struct {
 	Category     string // slug
 	Manufacturer string // name, case-insensitive exact match
-	// Query matches an article prefix, or a part of the name or colour name.
+	// Query is words that must all be found in the article, names, brand or
+	// category; see searchTerms.
 	Query string
 	// Color (#RRGGBB) keeps only items that have a colour and orders them from
 	// the closest one.
@@ -174,7 +175,7 @@ func (s *Service) SearchCatalog(ctx context.Context, userID, workspaceID string,
 		WorkspaceID:  wid,
 		Category:     f.Category,
 		Manufacturer: f.Manufacturer,
-		Query:        strings.TrimSpace(f.Query),
+		Terms:        searchTerms(f.Query),
 		OnlyInStock:  f.OnlyInStock,
 		PageLimit:    queryLimit,
 		PageOffset:   queryOffset,
@@ -336,7 +337,7 @@ func (s *Service) ListInventory(ctx context.Context, userID, workspaceID string,
 	}
 	rows, err := s.st.Queries().ListCraftInventory(ctx, db.ListCraftInventoryParams{
 		WorkspaceID: wid, Category: f.Category, Manufacturer: f.Manufacturer,
-		Query: strings.TrimSpace(f.Query), MaxQty: maxQty, PageLimit: queryLimit, PageOffset: queryOffset,
+		Terms: searchTerms(f.Query), MaxQty: maxQty, PageLimit: queryLimit, PageOffset: queryOffset,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list inventory: %w", err)

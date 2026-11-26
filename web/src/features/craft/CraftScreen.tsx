@@ -5,12 +5,12 @@ import { describeApiError } from "../../api/errors";
 import { useHost } from "../../host/HostContext";
 import { usePageTitle } from "../../router/router";
 import { Button, EmptyState, Notice, Segmented, SelectField, Switch } from "../../ui/controls";
-import { IconPlus } from "../../ui/icons";
+import { IconEdit, IconPlus } from "../../ui/icons";
 import { useCurrentWorkspace } from "../workspaces/selection";
 import { SpaceButton, SpaceState } from "../workspaces/SpaceBar";
 import { AddStockDialog } from "./AddStockDialog";
 import { CraftItemDialog, LinkCraftItemDialog, StockEditDialog } from "./CraftDialogs";
-import { useAdjustCraftStock, useCraftCatalog, useCraftInventory, useCraftReference, useDeleteCraftItem } from "./data";
+import { useCraftCatalog, useCraftInventory, useCraftReference, useDeleteCraftItem } from "./data";
 import { ColorTag } from "./ColorTag";
 import { SearchBar, useCraftSearch } from "./SearchBar";
 import { Swatch } from "./Swatch";
@@ -69,24 +69,20 @@ function CraftFilters({
   );
 }
 
-/** One row of the stock list with quick ±1 actions. */
+/** One row of the stock list; the pencil opens everything that changes it. */
 function StockRow({
   entry,
   showColor,
-  busy,
-  onAdjust,
   onEdit,
 }: {
   entry: CraftStockEntry;
   /** A colour search is on: show what each row was compared by. */
   showColor: boolean;
-  busy: boolean;
-  onAdjust: (entry: CraftStockEntry, delta: number) => void;
   onEdit: (entry: CraftStockEntry) => void;
 }) {
   const name = entry.item.name;
   return (
-    <li className="card craft-row">
+    <li className="card craft-row stock-row">
       <Swatch item={entry.item} zoomable />
       <div className="craft-row__text">
         <span className="craft-row__title">{name}</span>
@@ -96,32 +92,10 @@ function StockRow({
         {showColor && <ColorTag item={entry.item} />}
         {entry.notes && <span className="craft-row__notes">{entry.notes}</span>}
       </div>
-      <div className="craft-row__side">
-        <span className="craft-qty">{qtyLabel(entry)}</span>
-        <div className="craft-stepper">
-          <button
-            type="button"
-            className="cv-iconbtn"
-            aria-label={`Уменьшить на 1: ${name}`}
-            disabled={busy}
-            onClick={() => onAdjust(entry, -1)}
-          >
-            −
-          </button>
-          <button
-            type="button"
-            className="cv-iconbtn"
-            aria-label={`Добавить 1: ${name}`}
-            disabled={busy}
-            onClick={() => onAdjust(entry, 1)}
-          >
-            +
-          </button>
-        </div>
-        <Button size="s" aria-label={`Изменить остаток: ${name}`} onClick={() => onEdit(entry)}>
-          Изменить
-        </Button>
-      </div>
+      <span className="craft-qty">{qtyLabel(entry)}</span>
+      <button type="button" className="cv-iconbtn" aria-label={`Изменить остаток: ${name}`} title="Изменить остаток" onClick={() => onEdit(entry)}>
+        <IconEdit />
+      </button>
     </li>
   );
 }
@@ -136,7 +110,6 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
   const [lowOnly, setLowOnly] = useState(false);
   const [editing, setEditing] = useState<CraftStockEntry | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
 
   const query = useCraftInventory(workspaceId, {
     q,
@@ -146,24 +119,6 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
     maxQty: lowOnly ? LOW_STOCK_MAX : undefined,
     limit: 200,
   });
-  const adjust = useAdjustCraftStock();
-
-  async function handleAdjust(entry: CraftStockEntry, delta: number) {
-    setBusyId(entry.item.id);
-    try {
-      await adjust.mutateAsync({
-        params: { path: { id: workspaceId, item_id: entry.item.id } },
-        body: { delta, reason: delta > 0 ? "Быстрое добавление" : "Быстрое списание" },
-      });
-      host.haptic("success");
-    } catch (cause) {
-      host.haptic("error");
-      await host.showAlert(`Не удалось изменить остаток: ${describeApiError(cause)}`);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   const rows = query.data ?? [];
   const filtered = q.trim() !== "" || color !== "" || category !== "" || manufacturer !== "" || lowOnly;
 
@@ -219,8 +174,6 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
               key={entry.item.id}
               entry={entry}
               showColor={color !== ""}
-              busy={busyId === entry.item.id}
-              onAdjust={(item, delta) => void handleAdjust(item, delta)}
               onEdit={setEditing}
             />
           ))}

@@ -58,7 +58,7 @@ func bead(article, name, color string) catalog.Entry {
 		Name:         name,
 		ColorName:    color,
 		Size:         "10/0",
-		Unit:         catalog.UnitPack,
+		Unit:         catalog.UnitGram,
 		SourceURL:    "https://example.test/detail/" + article,
 		ImageURL:     "https://example.test/" + article + ".webp",
 		ExternalID:   article,

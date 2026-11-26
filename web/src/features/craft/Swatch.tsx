@@ -3,9 +3,11 @@ import { useState } from "react";
 import type { CraftItem } from "../../api/client";
 import { useHostBackButton } from "../../host/HostContext";
 import { Sheet } from "../../ui/controls";
+import { ColorTag } from "./ColorTag";
 import { swatchStyle } from "./format";
 
-type SwatchItem = Pick<CraftItem, "color_hex"> & Partial<Pick<CraftItem, "image_url" | "source_url" | "name">>;
+type SwatchItem = Pick<CraftItem, "color_hex"> &
+  Partial<Pick<CraftItem, "image_url" | "source_url" | "name" | "color_source">>;
 
 /**
  * The colour of an item: the manufacturer's photo when there is one (a single
@@ -56,6 +58,7 @@ function PhotoSheet({ item, onClose }: { item: SwatchItem; onClose: () => void }
     <Sheet title={item.name ?? "Фото"} onClose={onClose}>
       <div className="cv-form">
         <img className="craft-photo" src={item.image_url} alt={item.name ?? ""} referrerPolicy="no-referrer" />
+        <ColorTag item={{ color_hex: item.color_hex, color_source: item.color_source ?? "" }} />
         {item.source_url && (
           <a href={item.source_url} target="_blank" rel="noopener noreferrer">
             Страница производителя

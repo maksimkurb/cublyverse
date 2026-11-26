@@ -1353,6 +1353,15 @@ paths:
             type: boolean
             default: false
             example: true
+        - name: color
+          in: query
+          required: false
+          description: |
+            Colour as `#RRGGBB`. Keeps only entries that have a colour and
+            orders them from the closest one.
+          schema:
+            type: string
+            example: "#C21E2F"
         - name: limit
           in: query
           required: false
@@ -1379,6 +1388,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/CraftItem"
+        "400":
+          description: The colour is not `#RRGGBB`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1616,6 +1631,15 @@ paths:
             format: double
             minimum: 0
             example: 5
+        - name: color
+          in: query
+          required: false
+          description: |
+            Colour as `#RRGGBB`. Keeps only entries that have a colour and
+            orders them from the closest one.
+          schema:
+            type: string
+            example: "#C21E2F"
         - name: limit
           in: query
           required: false
@@ -1642,6 +1666,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/CraftStockEntry"
+        "400":
+          description: The colour is not `#RRGGBB`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -3975,7 +4005,8 @@ components:
           type: string
           description: |
             How trustworthy `color_hex` is: `official` (published by the
-            manufacturer), `approx` (estimated) or empty.
+            manufacturer), `approx` (estimated), `photo` (computed from the
+            product photo, rough) or empty.
           example: approx
         size:
           type: string

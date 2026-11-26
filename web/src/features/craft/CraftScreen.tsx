@@ -4,13 +4,15 @@ import type { CraftItem, CraftStockEntry } from "../../api/client";
 import { describeApiError } from "../../api/errors";
 import { useHost } from "../../host/HostContext";
 import { usePageTitle } from "../../router/router";
-import { Button, EmptyState, Notice, Segmented, SelectField, Switch, TextField } from "../../ui/controls";
+import { Button, EmptyState, Notice, Segmented, SelectField, Switch } from "../../ui/controls";
 import { IconPlus } from "../../ui/icons";
 import { useCurrentWorkspace } from "../workspaces/selection";
 import { SpaceButton, SpaceState } from "../workspaces/SpaceBar";
 import { AddStockDialog } from "./AddStockDialog";
 import { CraftItemDialog, LinkCraftItemDialog, StockEditDialog } from "./CraftDialogs";
 import { useAdjustCraftStock, useCraftCatalog, useCraftInventory, useCraftReference, useDeleteCraftItem } from "./data";
+import { ColorTag } from "./ColorTag";
+import { SearchBar, useCraftSearch } from "./SearchBar";
 import { Swatch } from "./Swatch";
 import { formatQty, itemColorLabel, itemMeta, qtyLabel } from "./format";
 import ProjectsPanel from "./ProjectsPanel";
@@ -70,11 +72,14 @@ function CraftFilters({
 /** One row of the stock list with quick ±1 actions. */
 function StockRow({
   entry,
+  showColor,
   busy,
   onAdjust,
   onEdit,
 }: {
   entry: CraftStockEntry;
+  /** A colour search is on: show what each row was compared by. */
+  showColor: boolean;
   busy: boolean;
   onAdjust: (entry: CraftStockEntry, delta: number) => void;
   onEdit: (entry: CraftStockEntry) => void;
@@ -88,6 +93,7 @@ function StockRow({
         <span className="craft-row__meta">
           {[itemMeta(entry.item), entry.item.category_name, entry.location].filter(Boolean).join(" · ")}
         </span>
+        {showColor && <ColorTag item={entry.item} />}
         {entry.notes && <span className="craft-row__notes">{entry.notes}</span>}
       </div>
       <div className="craft-row__side">
@@ -123,7 +129,8 @@ function StockRow({
 /** «Запасы»: what the workspace holds, with filters and quick changes. */
 function InventoryPanel({ workspaceId }: { workspaceId: string }) {
   const host = useHost();
-  const [q, setQ] = useState("");
+  const search = useCraftSearch();
+  const { q, color } = search;
   const [category, setCategory] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
@@ -133,6 +140,7 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
 
   const query = useCraftInventory(workspaceId, {
     q,
+    color,
     category,
     manufacturer,
     maxQty: lowOnly ? LOW_STOCK_MAX : undefined,
@@ -157,18 +165,17 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
   }
 
   const rows = query.data ?? [];
-  const filtered = q.trim() !== "" || category !== "" || manufacturer !== "" || lowOnly;
+  const filtered = q.trim() !== "" || color !== "" || category !== "" || manufacturer !== "" || lowOnly;
 
   return (
     <section className="page__section" aria-label="Запасы">
       <div className="craft-filters">
-        <div className="craft-toolbar">
-          <TextField label="Поиск" placeholder="Название, цвет или артикул" value={q} onChange={(event) => setQ(event.target.value)} />
+        <SearchBar search={search}>
           <Button variant="primary" className="craft-toolbar__add" aria-label="Добавить в запасы" onClick={() => setAddOpen(true)}>
             <IconPlus />
             <span className="craft-toolbar__label">Добавить</span>
           </Button>
-        </div>
+        </SearchBar>
         <CraftFilters workspaceId={workspaceId} category={category} manufacturer={manufacturer} onCategory={setCategory} onManufacturer={setManufacturer} />
       </div>
 
@@ -211,6 +218,7 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
             <StockRow
               key={entry.item.id}
               entry={entry}
+              showColor={color !== ""}
               busy={busyId === entry.item.id}
               onAdjust={(item, delta) => void handleAdjust(item, delta)}
               onEdit={setEditing}
@@ -228,12 +236,14 @@ function InventoryPanel({ workspaceId }: { workspaceId: string }) {
 /** One catalogue result with its stock and actions. */
 function CatalogRow({
   item,
+  showColor,
   onAdd,
   onLink,
   onEdit,
   onDelete,
 }: {
   item: CraftItem;
+  showColor: boolean;
   onEdit: (item: CraftItem) => void;
   onDelete: (item: CraftItem) => void;
   onAdd: (item: CraftItem) => void;
@@ -251,6 +261,7 @@ function CatalogRow({
         <span className="craft-row__meta">
           {[itemColorLabel(item), itemMeta(item), item.category_name].filter(Boolean).join(" · ")}
         </span>
+        {showColor && <ColorTag item={item} />}
         {stock && <span className="craft-qty">{stock}</span>}
       </div>
       <button
@@ -284,7 +295,8 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
   const host = useHost();
   const remove = useDeleteCraftItem();
   const [editing, setEditing] = useState<CraftItem | null>(null);
-  const [q, setQ] = useState("");
+  const search = useCraftSearch();
+  const { q, color } = search;
   const [category, setCategory] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [onlyInStock, setOnlyInStock] = useState(false);
@@ -294,13 +306,14 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
 
   const query = useCraftCatalog(workspaceId, {
     q,
+    color,
     category,
     manufacturer,
     onlyInStock,
     limit: 100,
   });
   const items = query.data ?? [];
-  const filtered = q.trim() !== "" || category !== "" || manufacturer !== "" || onlyInStock;
+  const filtered = q.trim() !== "" || color !== "" || category !== "" || manufacturer !== "" || onlyInStock;
 
   async function handleDelete(item: CraftItem) {
     if (!(await host.showConfirm(`Удалить «${item.name}» вместе с остатком, закупками и планами проектов?`))) {
@@ -318,13 +331,12 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
   return (
     <section className="page__section" aria-label="Каталог">
       <div className="craft-filters">
-        <div className="craft-toolbar">
-          <TextField label="Поиск" placeholder="Название, цвет или артикул" value={q} onChange={(event) => setQ(event.target.value)} />
+        <SearchBar search={search}>
           <Button variant="primary" className="craft-toolbar__add" aria-label="Новая позиция" onClick={() => setCreateOpen(true)}>
             <IconPlus />
             <span className="craft-toolbar__label">Новая</span>
           </Button>
-        </div>
+        </SearchBar>
         <CraftFilters workspaceId={workspaceId} category={category} manufacturer={manufacturer} onCategory={setCategory} onManufacturer={setManufacturer} />
       </div>
 
@@ -358,6 +370,7 @@ function CatalogPanel({ workspaceId }: { workspaceId: string }) {
             <CatalogRow
               key={item.id}
               item={item}
+              showColor={color !== ""}
               onAdd={setAdding}
               onLink={setLinking}
               onEdit={setEditing}

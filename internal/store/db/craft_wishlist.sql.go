@@ -187,6 +187,7 @@ SELECT w.id, w.workspace_id, w.catalog_item_id, w.title, w.qty_wanted, w.priorit
        i.color_name    AS item_color_name,
        i.color_hex     AS item_color_hex,
        i.color_source  AS item_color_source,
+       i.photo_color_hex AS item_photo_color_hex,
        i.size          AS item_size,
        i.finish        AS item_finish,
        i.unit          AS item_unit,
@@ -221,39 +222,40 @@ type ListCraftWishlistItemsParams struct {
 }
 
 type ListCraftWishlistItemsRow struct {
-	ID               pgtype.UUID    `json:"id"`
-	WorkspaceID      pgtype.UUID    `json:"workspace_id"`
-	CatalogItemID    pgtype.UUID    `json:"catalog_item_id"`
-	Title            string         `json:"title"`
-	QtyWanted        pgtype.Numeric `json:"qty_wanted"`
-	Priority         int16          `json:"priority"`
-	Note             string         `json:"note"`
-	Status           string         `json:"status"`
-	CreatedBy        pgtype.UUID    `json:"created_by"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	ItemID           pgtype.UUID    `json:"item_id"`
-	ItemWorkspaceID  pgtype.UUID    `json:"item_workspace_id"`
-	ItemArticle      *string        `json:"item_article"`
-	ItemSeries       *string        `json:"item_series"`
-	ItemName         *string        `json:"item_name"`
-	ItemColorName    *string        `json:"item_color_name"`
-	ItemColorHex     *string        `json:"item_color_hex"`
-	ItemColorSource  *string        `json:"item_color_source"`
-	ItemSize         *string        `json:"item_size"`
-	ItemFinish       *string        `json:"item_finish"`
-	ItemUnit         *string        `json:"item_unit"`
-	ItemPackSize     pgtype.Numeric `json:"item_pack_size"`
-	ItemAttrs        []byte         `json:"item_attrs"`
-	ItemSource       *string        `json:"item_source"`
-	ItemSourceUrl    *string        `json:"item_source_url"`
-	ItemImageUrl     *string        `json:"item_image_url"`
-	CategorySlug     string         `json:"category_slug"`
-	CategoryName     string         `json:"category_name"`
-	ManufacturerName *string        `json:"manufacturer_name"`
-	StockQty         pgtype.Numeric `json:"stock_qty"`
-	InInventory      bool           `json:"in_inventory"`
-	StockAttrs       []byte         `json:"stock_attrs"`
+	ID                pgtype.UUID    `json:"id"`
+	WorkspaceID       pgtype.UUID    `json:"workspace_id"`
+	CatalogItemID     pgtype.UUID    `json:"catalog_item_id"`
+	Title             string         `json:"title"`
+	QtyWanted         pgtype.Numeric `json:"qty_wanted"`
+	Priority          int16          `json:"priority"`
+	Note              string         `json:"note"`
+	Status            string         `json:"status"`
+	CreatedBy         pgtype.UUID    `json:"created_by"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	ItemID            pgtype.UUID    `json:"item_id"`
+	ItemWorkspaceID   pgtype.UUID    `json:"item_workspace_id"`
+	ItemArticle       *string        `json:"item_article"`
+	ItemSeries        *string        `json:"item_series"`
+	ItemName          *string        `json:"item_name"`
+	ItemColorName     *string        `json:"item_color_name"`
+	ItemColorHex      *string        `json:"item_color_hex"`
+	ItemColorSource   *string        `json:"item_color_source"`
+	ItemPhotoColorHex *string        `json:"item_photo_color_hex"`
+	ItemSize          *string        `json:"item_size"`
+	ItemFinish        *string        `json:"item_finish"`
+	ItemUnit          *string        `json:"item_unit"`
+	ItemPackSize      pgtype.Numeric `json:"item_pack_size"`
+	ItemAttrs         []byte         `json:"item_attrs"`
+	ItemSource        *string        `json:"item_source"`
+	ItemSourceUrl     *string        `json:"item_source_url"`
+	ItemImageUrl      *string        `json:"item_image_url"`
+	CategorySlug      string         `json:"category_slug"`
+	CategoryName      string         `json:"category_name"`
+	ManufacturerName  *string        `json:"manufacturer_name"`
+	StockQty          pgtype.Numeric `json:"stock_qty"`
+	InInventory       bool           `json:"in_inventory"`
+	StockAttrs        []byte         `json:"stock_attrs"`
 }
 
 // Wish list entries of one workspace with the catalogue item and the current
@@ -288,6 +290,7 @@ func (q *Queries) ListCraftWishlistItems(ctx context.Context, arg ListCraftWishl
 			&i.ItemColorName,
 			&i.ItemColorHex,
 			&i.ItemColorSource,
+			&i.ItemPhotoColorHex,
 			&i.ItemSize,
 			&i.ItemFinish,
 			&i.ItemUnit,

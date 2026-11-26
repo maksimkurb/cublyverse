@@ -72,8 +72,11 @@ type Item struct {
 	Name         string
 	ColorName    string
 	ColorHex     string
-	// ColorSource is "official", "approx" or empty.
+	// ColorSource is "official", "approx", "photo" or empty.
 	ColorSource string
+	// photoHex is the colour read from the product photo; withStockColors
+	// shows it when nothing better is known.
+	photoHex string
 	Size        string
 	Finish      string
 	Unit        string
@@ -133,6 +136,9 @@ type CatalogFilter struct {
 	Manufacturer string // name, case-insensitive exact match
 	// Query matches an article prefix, or a part of the name or colour name.
 	Query string
+	// Color (#RRGGBB) keeps only items that have a colour and orders them from
+	// the closest one.
+	Color string
 	// OnlyInStock limits catalogue search to items the workspace holds.
 	OnlyInStock bool
 	// MaxQty limits the inventory list to rows with qty <= MaxQty (low stock).
@@ -160,14 +166,18 @@ func (s *Service) SearchCatalog(ctx context.Context, userID, workspaceID string,
 		return nil, err
 	}
 	limit, offset := page(f.Limit, f.Offset)
+	target, queryLimit, queryOffset, err := colorSearch(f.Color, limit, offset)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.st.Queries().SearchCraftCatalog(ctx, db.SearchCraftCatalogParams{
 		WorkspaceID:  wid,
 		Category:     f.Category,
 		Manufacturer: f.Manufacturer,
 		Query:        strings.TrimSpace(f.Query),
 		OnlyInStock:  f.OnlyInStock,
-		PageLimit:    limit,
-		PageOffset:   offset,
+		PageLimit:    queryLimit,
+		PageOffset:   queryOffset,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("search catalogue: %w", err)
@@ -178,14 +188,36 @@ func (s *Service) SearchCatalog(ctx context.Context, userID, workspaceID string,
 			ID: r.ID, WorkspaceID: r.WorkspaceID, Article: r.Article, Series: r.Series, Name: r.Name,
 			ColorName: r.ColorName, ColorHex: r.ColorHex, ColorSource: r.ColorSource, Size: r.Size,
 			Finish: r.Finish, Unit: r.Unit, PackSize: r.PackSize, Attrs: r.Attrs, Source: r.Source,
-			SourceUrl: r.SourceUrl, ImageUrl: r.ImageUrl,
+			SourceUrl: r.SourceUrl, ImageUrl: r.ImageUrl, PhotoColorHex: r.PhotoColorHex,
 		}, r.CategorySlug, r.CategoryName, deref(r.ManufacturerName))
 		item.StockQty = numFloat(r.StockQty)
 		item.InInventory = r.InInventory
 		item = withStockColors(item, r.StockAttrs)
 		out = append(out, item)
 	}
+	if target != nil {
+		out = window(byColor(out, *target, func(i Item) string { return i.ColorHex }), limit, offset)
+	}
 	return out, nil
+}
+
+// colorScanLimit bounds how many items a colour search compares. It is far
+// above the size of the catalogues.
+const colorScanLimit = 50000
+
+// colorSearch prepares a list query. Without a colour the database pages the
+// result. With one every matching row is read and ordered here, because what
+// counts is the colour the warehouse sees, which is put together in Go.
+func colorSearch(color string, limit, offset int32) (*oklab, int32, int32, error) {
+	color = strings.TrimSpace(color)
+	if color == "" {
+		return nil, limit, offset, nil
+	}
+	target, ok := parseColor(color)
+	if !ok {
+		return nil, 0, 0, invalid("Цвет должен быть в формате #RRGGBB.")
+	}
+	return &target, colorScanLimit, 0, nil
 }
 
 // GetItem returns a catalogue item visible to the workspace.
@@ -297,9 +329,13 @@ func (s *Service) ListInventory(ctx context.Context, userID, workspaceID string,
 	if f.MaxQty != nil {
 		maxQty = numeric(*f.MaxQty)
 	}
+	target, queryLimit, queryOffset, err := colorSearch(f.Color, limit, offset)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.st.Queries().ListCraftInventory(ctx, db.ListCraftInventoryParams{
 		WorkspaceID: wid, Category: f.Category, Manufacturer: f.Manufacturer,
-		Query: strings.TrimSpace(f.Query), MaxQty: maxQty, PageLimit: limit, PageOffset: offset,
+		Query: strings.TrimSpace(f.Query), MaxQty: maxQty, PageLimit: queryLimit, PageOffset: queryOffset,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list inventory: %w", err)
@@ -311,12 +347,17 @@ func (s *Service) ListInventory(ctx context.Context, userID, workspaceID string,
 			Category: r.CategorySlug, CategoryName: r.CategoryName, Manufacturer: deref(r.ManufacturerName),
 			Article: r.Article, Series: r.Series, Name: r.Name, ColorName: r.ColorName, ColorHex: r.ColorHex,
 			ColorSource: r.ColorSource, Size: r.Size, Finish: r.Finish, Unit: r.Unit, PackSize: numFloatPtr(r.PackSize),
-			StockQty: numFloat(r.Qty), InInventory: true,
+			StockQty: numFloat(r.Qty), InInventory: true, photoHex: r.PhotoColorHex,
+			Source: r.Source, SourceURL: r.SourceUrl, ImageURL: r.ImageUrl, Attrs: map[string]any{},
 		}
+		_ = json.Unmarshal(r.ItemAttrs, &item.Attrs)
 		item = withStockColors(item, r.StockAttrs)
 		out = append(out, StockEntry{
 			Item: item, Qty: numFloat(r.Qty), Location: r.Location, Notes: r.Notes, UpdatedAt: r.UpdatedAt,
 		})
+	}
+	if target != nil {
+		out = window(byColor(out, *target, func(e StockEntry) string { return e.Item.ColorHex }), limit, offset)
 	}
 	return out, nil
 }
@@ -522,9 +563,9 @@ func (s *Service) loadItem(ctx context.Context, q *db.Queries, wid pgtype.UUID, 
 	if stock, err := q.GetCraftInventory(ctx, db.GetCraftInventoryParams{WorkspaceID: wid, CatalogItemID: iid}); err == nil {
 		item.StockQty = numFloat(stock.Qty)
 		item.InInventory = true
-		item = withStockColors(item, stock.Attrs)
+		return withStockColors(item, stock.Attrs), nil
 	}
-	return item, nil
+	return withStockColors(item, nil), nil
 }
 
 type itemParamsResult struct {
@@ -751,7 +792,7 @@ func itemFromRow(r db.CraftCatalogItem, categorySlug, categoryName, manufacturer
 		Article: r.Article, Series: r.Series, Name: r.Name, ColorName: r.ColorName,
 		ColorHex: r.ColorHex, ColorSource: r.ColorSource, Size: r.Size, Finish: r.Finish,
 		Unit: r.Unit, PackSize: numFloatPtr(r.PackSize), Attrs: attrs,
-		Source: r.Source, SourceURL: r.SourceUrl, ImageURL: r.ImageUrl,
+		Source: r.Source, SourceURL: r.SourceUrl, ImageURL: r.ImageUrl, photoHex: r.PhotoColorHex,
 	}
 }
 

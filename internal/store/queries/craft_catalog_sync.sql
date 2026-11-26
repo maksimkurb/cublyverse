@@ -94,3 +94,24 @@ WHERE source = $1
   AND status = 'ok'
 ORDER BY started_at DESC, id DESC
 LIMIT 1;
+
+-- name: ListCraftPhotoColorCandidates :many
+-- Global items of one source without a published colour whose photo has not
+-- been read yet. A photo that gave no colour is tried again after retry_before.
+SELECT id, image_url FROM craft_catalog_items
+WHERE workspace_id IS NULL
+  AND source = sqlc.arg(source)
+  AND deprecated_at IS NULL
+  AND color_hex = ''
+  AND image_url <> ''
+  AND (photo_color_url <> image_url
+       OR (photo_color_hex = '' AND photo_color_at < sqlc.arg(retry_before)::timestamptz))
+ORDER BY article, id;
+
+-- name: SetCraftPhotoColor :exec
+UPDATE craft_catalog_items
+SET photo_color_hex = sqlc.arg(hex),
+    photo_color_url = sqlc.arg(url),
+    photo_color_at  = now()
+WHERE id = sqlc.arg(id)
+  AND workspace_id IS NULL;

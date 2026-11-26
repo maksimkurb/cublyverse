@@ -1260,7 +1260,7 @@ ul {
   gap: 8px;
 }
 
-.craft-filters .craft-toolbar {
+.craft-filters > .craft-search {
   grid-column: 1 / -1;
 }
 
@@ -1280,7 +1280,7 @@ ul {
     align-items: end;
   }
 
-  .craft-filters .craft-toolbar {
+  .craft-filters > .craft-search {
     grid-column: auto;
   }
 }
@@ -1564,6 +1564,115 @@ button.craft-swatch--photo {
 
 .craft-toolbar__add {
   flex: none;
+}
+
+.craft-toolbar > .cv-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.craft-search {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.craft-search__color {
+  flex: none;
+  width: 46px;
+  height: 46px;
+}
+
+.craft-search__active {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.craft-search__active > span:nth-child(2) {
+  flex: 1;
+}
+
+.craft-search__hex {
+  font-family: var(--font-mono);
+}
+
+.craft-colordot {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: var(--border);
+  border-radius: 50%;
+}
+
+.craft-colortag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.color-pick__file {
+  cursor: pointer;
+}
+
+/* The label is the button; the input stays reachable by keyboard. */
+.color-pick__file input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.color-pick__file:focus-within {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.color-pick__stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.color-pick__stage[hidden],
+.color-pick__loupe[hidden] {
+  display: none;
+}
+
+/* Dragging over the photo picks a colour instead of scrolling the sheet. */
+.color-pick__photo {
+  max-width: 100%;
+  max-height: 55vh;
+  border-radius: 12px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.color-pick__loupe {
+  position: absolute;
+  z-index: 1;
+  border: 6px solid var(--track);
+  border-radius: 50%;
+  box-sizing: content-box;
+  margin-left: -62px;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 45%);
+}
+
+.color-pick__palette {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  padding: 2px;
+  border: var(--border);
+  border-radius: 10px;
+  background: var(--track);
 }
 
 /* Room for the longest title next to the space button and one action. */

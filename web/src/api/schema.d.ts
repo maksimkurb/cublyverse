@@ -2478,7 +2478,8 @@ export interface components {
             color_hex: string;
             /**
              * @description How trustworthy `color_hex` is: `official` (published by the
-             *     manufacturer), `approx` (estimated) or empty.
+             *     manufacturer), `approx` (estimated), `photo` (computed from the
+             *     product photo, rough) or empty.
              * @example approx
              */
             color_source: string;
@@ -4360,6 +4361,11 @@ export interface operations {
                 q?: string;
                 /** @description Keep only items the workspace holds. */
                 only_in_stock?: boolean;
+                /**
+                 * @description Colour as `#RRGGBB`. Keeps only entries that have a colour and
+                 *     orders them from the closest one.
+                 */
+                color?: string;
                 /** @description Page size, 1..200; the default is 50. */
                 limit?: number;
                 /** @description Number of matching items to skip. */
@@ -4384,6 +4390,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CraftItem"][];
+                };
+            };
+            /** @description The colour is not `#RRGGBB`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -4639,6 +4654,11 @@ export interface operations {
                 q?: string;
                 /** @description Keep rows whose quantity is at most this value. */
                 max_qty?: number;
+                /**
+                 * @description Colour as `#RRGGBB`. Keeps only entries that have a colour and
+                 *     orders them from the closest one.
+                 */
+                color?: string;
                 /** @description Page size, 1..200; the default is 50. */
                 limit?: number;
                 /** @description Number of matching rows to skip. */
@@ -4663,6 +4683,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CraftStockEntry"][];
+                };
+            };
+            /** @description The colour is not `#RRGGBB`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];

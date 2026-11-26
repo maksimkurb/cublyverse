@@ -21,12 +21,14 @@ var _ feature.Feature = (*Feature)(nil)
 // Option configures optional parts of the feature.
 type Option func(*Feature)
 
-// WithCatalogSync enables the weekly sync of the official catalogues. It is
-// wired only when CRAFT_CATALOG_SYNC=1, so a local instance never scrapes by
+// WithCatalogSync enables the weekly sync of the official catalogues and the
+// reading of colours from new product photos. It is wired only when CRAFT_CATALOG_SYNC=1, so a local instance never scrapes by
 // accident.
 func WithCatalogSync(syncer *catalog.Syncer, logger *slog.Logger) Option {
 	return func(f *Feature) {
-		f.catalogJob = NewCatalogSyncJob(syncer, logger)
+		job := NewCatalogSyncJob(syncer, logger)
+		job.photos = catalog.NewPhotoColors(syncer.Store(), logger, nil)
+		f.catalogJob = job
 	}
 }
 

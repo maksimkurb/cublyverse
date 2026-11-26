@@ -399,7 +399,7 @@ func projectMaterialFromRow(r db.ListCraftProjectMaterialsRow) ProjectMaterial {
 		ColorSource: r.ColorSource, Size: r.Size, Finish: r.Finish, Unit: r.Unit,
 		PackSize: numFloatPtr(r.PackSize), Attrs: attrs, Source: r.Source,
 		SourceURL: r.SourceUrl, ImageURL: r.ImageUrl,
-		StockQty: numFloat(r.StockQty), InInventory: r.InInventory,
+		StockQty: numFloat(r.StockQty), InInventory: r.InInventory, photoHex: r.PhotoColorHex,
 	}
 	item = withStockColors(item, r.StockAttrs)
 	used := numFloat(r.QtyUsed)

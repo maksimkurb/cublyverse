@@ -131,7 +131,7 @@ type mcpItem struct {
 	Name         string         `json:"name" jsonschema:"item name"`
 	ColorName    string         `json:"color_name,omitempty" jsonschema:"colour name"`
 	ColorHex     string         `json:"color_hex,omitempty" jsonschema:"colour as #RRGGBB"`
-	ColorSource  string         `json:"color_source,omitempty" jsonschema:"official or approx: how trustworthy color_hex is"`
+	ColorSource  string         `json:"color_source,omitempty" jsonschema:"how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)"`
 	Size         string         `json:"size,omitempty" jsonschema:"size, free text"`
 	Finish       string         `json:"finish,omitempty" jsonschema:"finish or coating, free text"`
 	Unit         string         `json:"unit" jsonschema:"unit the quantity is counted in"`
@@ -176,6 +176,7 @@ type mcpFilter struct {
 	Category     string `json:"category,omitempty" jsonschema:"category slug or name, see craft_reference"`
 	Manufacturer string `json:"manufacturer,omitempty" jsonschema:"manufacturer name, case-insensitive exact match"`
 	Query        string `json:"query,omitempty" jsonschema:"article prefix or part of the name or colour name"`
+	Color        string `json:"color,omitempty" jsonschema:"colour as #RRGGBB: only items with a colour, closest first"`
 	Limit        int    `json:"limit,omitempty" jsonschema:"page size 1..200, default 50"`
 	Offset       int    `json:"offset,omitempty" jsonschema:"number of results to skip"`
 }
@@ -296,7 +297,7 @@ func (f *Feature) mcpSearch(ctx context.Context, _ *mcp.CallToolRequest, in mcpS
 		return nil, mcpItemsOutput{}, err
 	}
 	items, err := f.service.SearchCatalog(ctx, user, ws, CatalogFilter{
-		Category: in.Category, Manufacturer: in.Manufacturer, Query: in.Query,
+		Category: in.Category, Manufacturer: in.Manufacturer, Query: in.Query, Color: in.Color,
 		OnlyInStock: in.OnlyInStock, Limit: in.Limit, Offset: in.Offset,
 	})
 	if err != nil {
@@ -315,7 +316,7 @@ func (f *Feature) mcpInventory(ctx context.Context, _ *mcp.CallToolRequest, in m
 		return nil, mcpInventoryOutput{}, err
 	}
 	rows, err := f.service.ListInventory(ctx, user, ws, CatalogFilter{
-		Category: in.Category, Manufacturer: in.Manufacturer, Query: in.Query,
+		Category: in.Category, Manufacturer: in.Manufacturer, Query: in.Query, Color: in.Color,
 		MaxQty: in.MaxQty, Limit: in.Limit, Offset: in.Offset,
 	})
 	if err != nil {

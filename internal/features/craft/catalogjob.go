@@ -22,7 +22,9 @@ type CatalogSyncJob struct {
 	syncer   *catalog.Syncer
 	sources  []catalog.Source
 	interval time.Duration
-	logger   *slog.Logger
+	// photos, when set, reads colours from new product photos after each check.
+	photos *catalog.PhotoColors
+	logger *slog.Logger
 }
 
 var _ feature.Job = (*CatalogSyncJob)(nil)
@@ -83,5 +85,11 @@ func (j *CatalogSyncJob) syncAll(ctx context.Context) {
 				slog.String("error", err.Error()),
 			)
 		}
+	}
+	if j.photos == nil || ctx.Err() != nil {
+		return
+	}
+	if _, err := j.photos.Run(ctx); err != nil && ctx.Err() == nil {
+		j.logger.Error("craft photo colours failed", slog.String("error", err.Error()))
 	}
 }

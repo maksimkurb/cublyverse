@@ -229,6 +229,26 @@ describe("CraftScreen", () => {
     expect(setMeta.mutateAsync.mock.calls[0][0].body).toEqual({ location: "Ящик 1", notes: "уже было" });
   });
 
+  it("searches by a typed or a chosen colour", async () => {
+    inventoryMock.mockReturnValue(queryResult({ data: [makeStock({ item: makeItem({ color_hex: "#C01020", color_source: "photo" }) })] }));
+    const lastFilter = () => inventoryMock.mock.calls[inventoryMock.mock.calls.length - 1][1];
+    renderWithHost(<CraftScreen />);
+
+    // A typed HEX is a colour, not a text to look for.
+    fireEvent.change(screen.getByLabelText("Поиск"), { target: { value: "#c00010" } });
+    expect(lastFilter()).toMatchObject({ q: "", color: "#C00010" });
+    expect(screen.getByText("#C01020 · по фото")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Убрать поиск по цвету" }));
+    expect(lastFilter()).toMatchObject({ q: "", color: "" });
+
+    // A chosen colour works together with the text.
+    fireEvent.change(screen.getByLabelText("Поиск"), { target: { value: "жемчуг" } });
+    fireEvent.click(screen.getByRole("button", { name: "Поиск по цвету" }));
+    fireEvent.change(await screen.findByLabelText("HEX"), { target: { value: "#00ff88" } });
+    fireEvent.click(screen.getByRole("button", { name: "Найти похожие" }));
+    await waitFor(() => expect(lastFilter()).toMatchObject({ q: "жемчуг", color: "#00FF88" }));
+  });
+
   it("shows the purchase list as a tab next to the stock", () => {
     renderWithHost(<CraftScreen />);
 

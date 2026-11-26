@@ -67,6 +67,9 @@ type CraftCatalogItem struct {
 	DeprecatedAt   pgtype.Timestamptz `json:"deprecated_at"`
 	CreatedAt      time.Time          `json:"created_at"`
 	UpdatedAt      time.Time          `json:"updated_at"`
+	PhotoColorHex  string             `json:"photo_color_hex"`
+	PhotoColorUrl  string             `json:"photo_color_url"`
+	PhotoColorAt   pgtype.Timestamptz `json:"photo_color_at"`
 }
 
 type CraftCatalogSyncRun struct {

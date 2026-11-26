@@ -9,6 +9,8 @@ export interface CraftFilter {
   manufacturer?: string;
   /** Article prefix, or part of the item or colour name. */
   q?: string;
+  /** `#RRGGBB`: only entries with a colour, closest first. */
+  color?: string;
   /** Catalogue only: items the workspace holds. */
   onlyInStock?: boolean;
   /** Stock only: rows with quantity at most this value. */
@@ -56,6 +58,7 @@ export function useCraftCatalog(workspaceId: string, filter: CraftFilter) {
         category: filter.category || undefined,
         manufacturer: filter.manufacturer || undefined,
         q: filter.q?.trim() || undefined,
+        color: filter.color || undefined,
         only_in_stock: filter.onlyInStock || undefined,
         limit: filter.limit,
         offset: filter.offset,
@@ -73,6 +76,7 @@ export function useCraftInventory(workspaceId: string, filter: CraftFilter) {
         category: filter.category || undefined,
         manufacturer: filter.manufacturer || undefined,
         q: filter.q?.trim() || undefined,
+        color: filter.color || undefined,
         max_qty: filter.maxQty,
         limit: filter.limit,
         offset: filter.offset,

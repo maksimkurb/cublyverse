@@ -195,6 +195,10 @@ Search the shared catalogue (manufacturer catalogues such as PRECIOSA or DMC) an
       "description": "category slug or name, see craft_reference",
       "type": "string"
     },
+    "color": {
+      "description": "colour as #RRGGBB: only items with a colour, closest first",
+      "type": "string"
+    },
     "limit": {
       "description": "page size 1..200, default 50",
       "type": "integer"
@@ -261,7 +265,7 @@ Search the shared catalogue (manufacturer catalogues such as PRECIOSA or DMC) an
             "type": "string"
           },
           "color_source": {
-            "description": "official or approx: how trustworthy color_hex is",
+            "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
             "type": "string"
           },
           "finish": {
@@ -649,6 +653,10 @@ List what the workspace holds: items with quantity and unit, optionally filtered
       "description": "category slug or name, see craft_reference",
       "type": "string"
     },
+    "color": {
+      "description": "colour as #RRGGBB: only items with a colour, closest first",
+      "type": "string"
+    },
     "limit": {
       "description": "page size 1..200, default 50",
       "type": "integer"
@@ -722,7 +730,7 @@ List what the workspace holds: items with quantity and unit, optionally filtered
                 "type": "string"
               },
               "color_source": {
-                "description": "official or approx: how trustworthy color_hex is",
+                "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
                 "type": "string"
               },
               "finish": {
@@ -902,7 +910,7 @@ Record an approximate colour of an item with the source it comes from. An own it
       "type": "string"
     },
     "color_source": {
-      "description": "official or approx: how trustworthy color_hex is",
+      "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
       "type": "string"
     },
     "finish": {
@@ -1089,7 +1097,7 @@ Create a catalogue item private to this workspace, for material that is in no ma
       "type": "string"
     },
     "color_source": {
-      "description": "official or approx: how trustworthy color_hex is",
+      "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
       "type": "string"
     },
     "finish": {
@@ -1282,7 +1290,7 @@ Move the stock of a private item to another catalogue item (usually the official
           "type": "string"
         },
         "color_source": {
-          "description": "official or approx: how trustworthy color_hex is",
+          "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
           "type": "string"
         },
         "finish": {
@@ -1498,7 +1506,7 @@ Replace the data of a private item of this workspace. All fields are replaced, s
       "type": "string"
     },
     "color_source": {
-      "description": "official or approx: how trustworthy color_hex is",
+      "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
       "type": "string"
     },
     "finish": {
@@ -1777,7 +1785,7 @@ Create a craft project with a name and optional notes. Materials are added with 
                 "type": "string"
               },
               "color_source": {
-                "description": "official or approx: how trustworthy color_hex is",
+                "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
                 "type": "string"
               },
               "finish": {
@@ -1975,7 +1983,7 @@ Return one project with its materials: planned quantity, quantity already used, 
                 "type": "string"
               },
               "color_source": {
-                "description": "official or approx: how trustworthy color_hex is",
+                "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
                 "type": "string"
               },
               "finish": {
@@ -2171,7 +2179,7 @@ List the craft projects of the workspace with the number of materials planned in
                       "type": "string"
                     },
                     "color_source": {
-                      "description": "official or approx: how trustworthy color_hex is",
+                      "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
                       "type": "string"
                     },
                     "finish": {
@@ -2403,7 +2411,7 @@ Add a catalogue item to the project plan or change its planned quantity. Identif
                 "type": "string"
               },
               "color_source": {
-                "description": "official or approx: how trustworthy color_hex is",
+                "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
                 "type": "string"
               },
               "finish": {
@@ -2601,7 +2609,7 @@ Add every material of the project whose shortage is positive (the quantity still
                 "type": "string"
               },
               "color_source": {
-                "description": "official or approx: how trustworthy color_hex is",
+                "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
                 "type": "string"
               },
               "finish": {
@@ -2879,7 +2887,7 @@ Withdraw material from the stock for a project: decreases the stock and increase
                 "type": "string"
               },
               "color_source": {
-                "description": "official or approx: how trustworthy color_hex is",
+                "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
                 "type": "string"
               },
               "finish": {
@@ -3294,7 +3302,7 @@ Add to or use up material: delta is positive to add and negative to use. Identif
           "type": "string"
         },
         "color_source": {
-          "description": "official or approx: how trustworthy color_hex is",
+          "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
           "type": "string"
         },
         "finish": {
@@ -3535,7 +3543,7 @@ Set the quantity of an item to an absolute value (a stocktake). Identify the ite
           "type": "string"
         },
         "color_source": {
-          "description": "official or approx: how trustworthy color_hex is",
+          "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
           "type": "string"
         },
         "finish": {
@@ -3832,7 +3840,7 @@ Add an entry to the wish list: either a catalogue item (catalog_item_id) or free
           "type": "string"
         },
         "color_source": {
-          "description": "official or approx: how trustworthy color_hex is",
+          "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
           "type": "string"
         },
         "finish": {
@@ -4245,7 +4253,7 @@ List what the workspace wants to buy. By default only entries with status wanted
                 "type": "string"
               },
               "color_source": {
-                "description": "official or approx: how trustworthy color_hex is",
+                "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
                 "type": "string"
               },
               "finish": {
@@ -4501,7 +4509,7 @@ Mark a wish list entry as bought. With add_to_stock set and a catalogue item, th
           "type": "string"
         },
         "color_source": {
-          "description": "official or approx: how trustworthy color_hex is",
+          "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
           "type": "string"
         },
         "finish": {
@@ -4820,7 +4828,7 @@ Change the quantity, priority, note or status of a wish list entry. Omitted fiel
           "type": "string"
         },
         "color_source": {
-          "description": "official or approx: how trustworthy color_hex is",
+          "description": "how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)",
           "type": "string"
         },
         "finish": {

@@ -4,6 +4,8 @@ import type { CraftItem, CraftStockEntry } from "../../api/client";
 import { describeApiError } from "../../api/errors";
 import { useHost, useHostBackButton } from "../../host/HostContext";
 import { Button, Checkbox, Notice, SelectField, Sheet, TextAreaField, TextField } from "../../ui/controls";
+import { IconPipette } from "../../ui/icons";
+import { ColorPickSheet } from "./ColorPickSheet";
 import {
   useCraftCatalog,
   useCraftReference,
@@ -157,6 +159,7 @@ export function CraftItemDialog({ workspaceId, item, onClose, onSaved }: CraftIt
   const [attrs, setAttrs] = useState<Record<string, unknown>>(item?.attrs ?? {});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
   const manufacturersListId = useId();
 
   const categories = useMemo(() => reference.data?.categories ?? [], [reference.data]);
@@ -295,7 +298,21 @@ export function CraftItemDialog({ workspaceId, item, onClose, onSaved }: CraftIt
         <div className="craft-color">
           <TextField label="Цвет" placeholder="#RRGGBB, необязательно" mono value={colorHex} onChange={(event) => setColorHex(event.target.value)} />
           <span className="craft-swatch craft-swatch--large" style={swatchStyle({ color_hex: normalizeHex(colorHex) ?? "" })} aria-hidden="true" />
+          <button type="button" className="cv-iconbtn craft-search__color" aria-label="Взять цвет с фото" title="Взять цвет с фото" onClick={() => setPicking(true)}>
+            <IconPipette />
+          </button>
         </div>
+        {picking && (
+          <ColorPickSheet
+            initial={normalizeHex(colorHex) ?? ""}
+            action="Взять этот цвет"
+            onPick={(hex) => {
+              setColorHex(hex);
+              setPicking(false);
+            }}
+            onClose={() => setPicking(false)}
+          />
+        )}
         <TextField label="Название цвета" placeholder="Например: айвори" value={colorName} onChange={(event) => setColorName(event.target.value)} />
         <TextField label="Размер" placeholder="Необязательно" value={size} onChange={(event) => setSize(event.target.value)} />
         <TextField label="Ссылка на фото" type="url" placeholder="https://… необязательно" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />

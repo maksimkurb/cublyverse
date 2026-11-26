@@ -96,6 +96,7 @@ SELECT inv.workspace_id, inv.catalog_item_id, inv.qty, inv.location, inv.notes, 
        inv.attrs AS stock_attrs,
        i.name, i.article, i.series, i.color_name, i.color_hex, i.color_source,
        i.size, i.finish, i.unit, i.pack_size, i.workspace_id AS item_workspace_id,
+       i.photo_color_hex, i.source, i.source_url, i.image_url, i.attrs AS item_attrs,
        COALESCE(sc.slug, rc.slug)::text AS category_slug,
        COALESCE(sc.name, rc.name)::text AS category_name,
        m.name AS manufacturer_name

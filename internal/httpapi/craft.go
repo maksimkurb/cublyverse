@@ -30,6 +30,7 @@ func (h *handlers) SearchCraftCatalog(ctx context.Context, request gen.SearchCra
 		Category:     stringParam(request.Params.Category),
 		Manufacturer: stringParam(request.Params.Manufacturer),
 		Query:        stringParam(request.Params.Q),
+		Color:        stringParam(request.Params.Color),
 		OnlyInStock:  request.Params.OnlyInStock != nil && *request.Params.OnlyInStock,
 		Limit:        intParam(request.Params.Limit),
 		Offset:       intParam(request.Params.Offset),
@@ -38,6 +39,8 @@ func (h *handlers) SearchCraftCatalog(ctx context.Context, request gen.SearchCra
 	if err != nil {
 		status, message := craftFailure(err)
 		switch status {
+		case http.StatusBadRequest:
+			return gen.SearchCraftCatalog400JSONResponse(errorPayload(codeBadRequest, message)), nil
 		case http.StatusNotFound:
 			return gen.SearchCraftCatalog404JSONResponse{
 				NotFoundJSONResponse: gen.NotFoundJSONResponse(errorPayload(codeNotFound, message)),
@@ -191,6 +194,7 @@ func (h *handlers) ListCraftInventory(ctx context.Context, request gen.ListCraft
 		Category:     stringParam(request.Params.Category),
 		Manufacturer: stringParam(request.Params.Manufacturer),
 		Query:        stringParam(request.Params.Q),
+		Color:        stringParam(request.Params.Color),
 		MaxQty:       request.Params.MaxQty,
 		Limit:        intParam(request.Params.Limit),
 		Offset:       intParam(request.Params.Offset),
@@ -198,6 +202,9 @@ func (h *handlers) ListCraftInventory(ctx context.Context, request gen.ListCraft
 	rows, err := h.deps.Craft.ListInventory(ctx, principal, request.Id, filter)
 	if err != nil {
 		status, message := craftFailure(err)
+		if status == http.StatusBadRequest {
+			return gen.ListCraftInventory400JSONResponse(errorPayload(codeBadRequest, message)), nil
+		}
 		if status == http.StatusNotFound {
 			return gen.ListCraftInventory404JSONResponse{
 				NotFoundJSONResponse: gen.NotFoundJSONResponse(errorPayload(codeNotFound, message)),

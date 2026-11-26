@@ -394,11 +394,11 @@ POST /auth/confirm (form: state, token)
 | `POST …/manufacturers`, `PUT/DELETE …/manufacturers/{ref_id}` | свои производители; официальные только читаются |
 | `POST …/units`, `PUT/DELETE …/units/{ref_id}` | единицы; переименование переносится в свои позиции и категории |
 | `PUT /workspaces/{id}/catalog-sources` | подключённые официальные каталоги (`dmc`, `preciosa`) |
-| `GET /workspaces/{id}/catalog?category=&manufacturer=&q=&only_in_stock=&limit=&offset=` | поиск по общему каталогу и частным позициям; в ответе остаток пространства |
+| `GET /workspaces/{id}/catalog?category=&manufacturer=&q=&color=&only_in_stock=&limit=&offset=` | поиск по общему каталогу и частным позициям; в ответе остаток пространства. `color=#RRGGBB` (в запросе `%23RRGGBB`) оставляет позиции с цветом, ближайшие первыми (расстояние в OKLab) |
 | `POST /workspaces/{id}/catalog` | создать частную позицию (`201`) |
 | `GET/PUT/DELETE /workspaces/{id}/catalog/{item_id}` | одна позиция; менять и удалять можно только частную |
 | `POST /workspaces/{id}/catalog/{item_id}/link` | связать частную позицию с каталожной: остаток переезжает, частная запись удаляется |
-| `GET /workspaces/{id}/inventory?category=&manufacturer=&q=&max_qty=&limit=&offset=` | запасы пространства |
+| `GET /workspaces/{id}/inventory?category=&manufacturer=&q=&color=&max_qty=&limit=&offset=` | запасы пространства; `color` работает как в каталоге |
 | `PUT /workspaces/{id}/inventory/{item_id}` | поставить точное количество (пересчёт) |
 | `POST /workspaces/{id}/inventory/{item_id}/adjust` | изменить на `delta`: плюс — добавить, минус — списать |
 | `PATCH /workspaces/{id}/inventory/{item_id}` | заменить `location` и `notes` строки запаса |

@@ -202,6 +202,7 @@ bin/cublyverse migrate status     # версии миграций и непри�
 bin/cublyverse migrate up         # применить (serve делает это сам)
 bin/cublyverse import-n8n file.csv --dry-run
 bin/cublyverse catalog sync all   # глобальный каталог «Бусинок» из DMC и PRECIOSA
+bin/cublyverse catalog colors     # приблизительные цвета из новых фото PRECIOSA
 bin/cublyverse docs mcp --names   # список MCP-инструментов
 bin/cublyverse docs api --check   # полнота OpenAPI-документации
 ```

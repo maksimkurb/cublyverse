@@ -5,7 +5,9 @@ import { describeApiError } from "../../api/errors";
 import { useHost, useHostBackButton } from "../../host/HostContext";
 import { Button, Notice, Sheet, TextField } from "../../ui/controls";
 import { CraftItemDialog } from "./CraftDialogs";
+import { ColorTag } from "./ColorTag";
 import { useAdjustCraftStock, useCraftCatalog, useUpdateCraftStockMeta } from "./data";
+import { SearchBar, useCraftSearch } from "./SearchBar";
 import { Swatch } from "./Swatch";
 import { formatQty, itemMeta } from "./format";
 import { parsePositiveQty } from "./wishlist";
@@ -58,14 +60,14 @@ function PickStep({
   onClose: () => void;
 }) {
   useHostBackButton(onClose);
-  const [search, setSearch] = useState("");
-  const query = useCraftCatalog(workspaceId, { q: search, limit: 20 });
+  const search = useCraftSearch();
+  const query = useCraftCatalog(workspaceId, { q: search.q, color: search.color, limit: 20 });
   const items = query.data ?? [];
 
   return (
     <Sheet title="Добавить в запасы" onClose={onClose}>
       <div className="cv-form">
-        <TextField label="Поиск в каталоге" placeholder="Название, цвет или артикул" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <SearchBar search={search} label="Поиск в каталоге" />
         <Button block onClick={onCreate}>
           Нет в каталоге — создать свою позицию
         </Button>
@@ -84,6 +86,7 @@ function PickStep({
                 <div className="craft-row__text">
                   <span className="craft-row__title">{candidate.name}</span>
                   <span className="craft-row__meta">{[itemMeta(candidate), candidate.category_name].filter(Boolean).join(" · ")}</span>
+                  {search.color && <ColorTag item={candidate} />}
                 </div>
                 <Button size="s" aria-label={`Выбрать: ${candidate.name}`} onClick={() => onPick(candidate)}>
                   Выбрать

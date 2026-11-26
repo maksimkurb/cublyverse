@@ -158,3 +158,13 @@ export function IconCopy(props: IconProps) {
     </Icon>
   );
 }
+
+export function IconPipette(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m2 22 1-4 9.5-9.5 3 3L6 21Z" />
+      <path d="m11 7 6 6" />
+      <path d="m14 10 4.5-6.5a2.1 2.1 0 0 1 3 3L15 11" />
+    </Icon>
+  );
+}

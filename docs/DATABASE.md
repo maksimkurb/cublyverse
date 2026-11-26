@@ -44,6 +44,7 @@ cublyverse migrate status
 | 00015 | `00015_spaces.sql` | Пространства по мини-аппам (`workspaces.app`, `personal`); напоминания получают `workspace_id` (существующие переезжают в личное пространство автора) и получателей `reminder_recipients`; у OAuth убрана привязка к пространству, гранты удалённых адресов `/mcp/w/…` удаляются. |
 | 00016 | `00016_craft_reference.sql` | Настраиваемый склад: `craft_categories` и `craft_manufacturers` получают `workspace_id` (строки без него — эталон официальных каталогов), у категорий — свои поля `fields` и связь `catalog_slug`; новые `craft_units` и `craft_space_catalogs`. Существующие склады получают копии категорий, все единицы и оба каталога. |
 | 00017 | `00017_craft_stock_attrs.sql` | `craft_inventory.attrs`: значения, бывшие у позиции до связи с официальной (`legacy`), и цвет склада на случай, когда в каталоге его нет. |
+| 00018 | `00018_photo_colors.sql` | `craft_catalog_items.photo_color_hex`, `photo_color_url`, `photo_color_at`: приблизительный цвет из фото товара, отдельно от опубликованного. |
 
 Нумерация не переиспользуется: следующая миграция — `00018_<тема>.sql`.
 `make check` сверяет, что каждый файл из `internal/store/migrations/*.sql`

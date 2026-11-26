@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -141,7 +142,7 @@ func (q *Queries) FinishCraftCatalogSyncRun(ctx context.Context, arg FinishCraft
 }
 
 const getGlobalCraftCatalogItemByArticle = `-- name: GetGlobalCraftCatalogItemByArticle :one
-SELECT id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at FROM craft_catalog_items
+SELECT id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at FROM craft_catalog_items
 WHERE workspace_id IS NULL
   AND manufacturer_id = $1
   AND category_id = $2
@@ -184,6 +185,9 @@ func (q *Queries) GetGlobalCraftCatalogItemByArticle(ctx context.Context, arg Ge
 		&i.DeprecatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoColorHex,
+		&i.PhotoColorUrl,
+		&i.PhotoColorAt,
 	)
 	return i, err
 }
@@ -237,6 +241,70 @@ func (q *Queries) GetLatestSuccessfulCraftCatalogSyncRun(ctx context.Context, so
 	return i, err
 }
 
+const listCraftPhotoColorCandidates = `-- name: ListCraftPhotoColorCandidates :many
+SELECT id, image_url FROM craft_catalog_items
+WHERE workspace_id IS NULL
+  AND source = $1
+  AND deprecated_at IS NULL
+  AND color_hex = ''
+  AND image_url <> ''
+  AND (photo_color_url <> image_url
+       OR (photo_color_hex = '' AND photo_color_at < $2::timestamptz))
+ORDER BY article, id
+`
+
+type ListCraftPhotoColorCandidatesParams struct {
+	Source      string    `json:"source"`
+	RetryBefore time.Time `json:"retry_before"`
+}
+
+type ListCraftPhotoColorCandidatesRow struct {
+	ID       pgtype.UUID `json:"id"`
+	ImageUrl string      `json:"image_url"`
+}
+
+// Global items of one source without a published colour whose photo has not
+// been read yet. A photo that gave no colour is tried again after retry_before.
+func (q *Queries) ListCraftPhotoColorCandidates(ctx context.Context, arg ListCraftPhotoColorCandidatesParams) ([]ListCraftPhotoColorCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listCraftPhotoColorCandidates, arg.Source, arg.RetryBefore)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCraftPhotoColorCandidatesRow{}
+	for rows.Next() {
+		var i ListCraftPhotoColorCandidatesRow
+		if err := rows.Scan(&i.ID, &i.ImageUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setCraftPhotoColor = `-- name: SetCraftPhotoColor :exec
+UPDATE craft_catalog_items
+SET photo_color_hex = $1,
+    photo_color_url = $2,
+    photo_color_at  = now()
+WHERE id = $3
+  AND workspace_id IS NULL
+`
+
+type SetCraftPhotoColorParams struct {
+	Hex string      `json:"hex"`
+	Url string      `json:"url"`
+	ID  pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) SetCraftPhotoColor(ctx context.Context, arg SetCraftPhotoColorParams) error {
+	_, err := q.db.Exec(ctx, setCraftPhotoColor, arg.Hex, arg.Url, arg.ID)
+	return err
+}
+
 const touchGlobalCraftCatalogItem = `-- name: TouchGlobalCraftCatalogItem :execrows
 UPDATE craft_catalog_items
 SET fetched_at    = $2,
@@ -279,7 +347,7 @@ SET series         = $2,
     updated_at     = now()
 WHERE id = $1
   AND workspace_id IS NULL
-RETURNING id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at
+RETURNING id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at
 `
 
 type UpdateGlobalCraftCatalogItemParams struct {
@@ -345,6 +413,9 @@ func (q *Queries) UpdateGlobalCraftCatalogItem(ctx context.Context, arg UpdateGl
 		&i.DeprecatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoColorHex,
+		&i.PhotoColorUrl,
+		&i.PhotoColorAt,
 	)
 	return i, err
 }

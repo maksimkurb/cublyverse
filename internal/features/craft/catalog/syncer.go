@@ -69,6 +69,9 @@ func NewSyncer(st *store.Store, logger *slog.Logger) *Syncer {
 	return &Syncer{st: st, logger: logger}
 }
 
+// Store is the database the syncer writes to.
+func (s *Syncer) Store() *store.Store { return s.st }
+
 // Retry pauses after a run that did not succeed.
 const (
 	// failedRetry keeps a broken source from being crawled over and over.

@@ -25,9 +25,18 @@ type stockAttrs struct {
 	Legacy map[string]any `json:"legacy,omitempty"`
 }
 
-// withStockColors shows the remembered colour of the warehouse where the
-// catalogue item has none. Values of the catalogue always win.
+// withStockColors fills the colour of an item the catalogue has none for: first
+// with what the warehouse remembered, then with the colour read from the
+// product photo. Values of the catalogue always win.
 func withStockColors(item Item, raw []byte) Item {
+	item = withRememberedColors(item, raw)
+	if item.ColorHex == "" && item.photoHex != "" {
+		item.ColorHex, item.ColorSource = item.photoHex, "photo"
+	}
+	return item
+}
+
+func withRememberedColors(item Item, raw []byte) Item {
 	if len(raw) == 0 {
 		return item
 	}

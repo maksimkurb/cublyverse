@@ -42,7 +42,7 @@ func (h *handlers) ListWishes(ctx context.Context, request gen.ListWishesRequest
 	}
 	out := make(gen.ListWishes200JSONResponse, 0, len(wishes))
 	for _, wish := range wishes {
-		out = append(out, wishToAPI(wish))
+		out = append(out, h.wishToAPI(wish))
 	}
 	return out, nil
 }
@@ -78,7 +78,7 @@ func (h *handlers) CreateWish(ctx context.Context, request gen.CreateWishRequest
 		}
 		return nil, err
 	}
-	return gen.CreateWish201JSONResponse(wishToAPI(created)), nil
+	return gen.CreateWish201JSONResponse(h.wishToAPI(created)), nil
 }
 
 // UpdateWish implements PATCH /api/v1/workspaces/{id}/wishlist/{wish_id}.
@@ -113,7 +113,7 @@ func (h *handlers) UpdateWish(ctx context.Context, request gen.UpdateWishRequest
 		}
 		return nil, err
 	}
-	return gen.UpdateWish200JSONResponse(wishToAPI(updated)), nil
+	return gen.UpdateWish200JSONResponse(h.wishToAPI(updated)), nil
 }
 
 // DeleteWish implements DELETE /api/v1/workspaces/{id}/wishlist/{wish_id}.
@@ -214,14 +214,14 @@ func (h *handlers) MarkWishBought(ctx context.Context, request gen.MarkWishBough
 		}
 		return nil, err
 	}
-	return gen.MarkWishBought200JSONResponse(wishToAPI(bought)), nil
+	return gen.MarkWishBought200JSONResponse(h.wishToAPI(bought)), nil
 }
 
 // wishToAPI maps a wish list entry of the service to the API schema.
-func wishToAPI(wish craft.Wish) gen.Wish {
+func (h *handlers) wishToAPI(wish craft.Wish) gen.Wish {
 	var item *gen.CraftItem
 	if wish.Item != nil {
-		converted := craftItemToAPI(*wish.Item)
+		converted := h.craftItemToAPI(*wish.Item)
 		item = &converted
 	}
 	links := make([]gen.WishLink, 0, len(wish.Links))

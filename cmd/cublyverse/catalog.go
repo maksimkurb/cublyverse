@@ -75,7 +75,8 @@ func openCatalogStore(ctx context.Context, flagURL string, stderr io.Writer) (*s
 	return st, logger, nil
 }
 
-// runPhotoColors reads colours from the product photos that have none yet.
+// runPhotoColors applies the shop colour table, then reads colours from the
+// product photos that have none yet.
 func runPhotoColors(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("catalog colors", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -91,6 +92,13 @@ func runPhotoColors(ctx context.Context, args []string, stdout, stderr io.Writer
 		return err
 	}
 	defer st.Close()
+	table, err := catalog.NewSyncer(st, logger).RunShopColors(ctx, catalog.NewBiserShop(nil))
+	if err != nil {
+		// The photos do not depend on the shop.
+		fmt.Fprintln(stderr, err)
+	} else {
+		printCatalogResult(stdout, table)
+	}
 	result, err := catalog.NewPhotoColors(st, logger, nil).Run(ctx)
 	fmt.Fprintf(stdout, "colored: %d\nunreadable: %d\nfailed: %d\n", result.Colored, result.Unreadable, result.Failed)
 	return err

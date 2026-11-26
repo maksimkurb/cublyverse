@@ -55,7 +55,7 @@ INSERT INTO craft_catalog_items (
     $7, $8, $9, $10, $11, $12, $13, $14,
     $15, $16, $17, $18
 )
-RETURNING id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at
+RETURNING id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at, shop_color_hex
 `
 
 type CreateCraftCatalogItemParams struct {
@@ -129,6 +129,7 @@ func (q *Queries) CreateCraftCatalogItem(ctx context.Context, arg CreateCraftCat
 		&i.PhotoColorHex,
 		&i.PhotoColorUrl,
 		&i.PhotoColorAt,
+		&i.ShopColorHex,
 	)
 	return i, err
 }
@@ -172,7 +173,7 @@ func (q *Queries) DeleteCraftInventory(ctx context.Context, arg DeleteCraftInven
 }
 
 const getCraftCatalogItem = `-- name: GetCraftCatalogItem :one
-SELECT id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at FROM craft_catalog_items
+SELECT id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at, shop_color_hex FROM craft_catalog_items
 WHERE id = $1
   AND (workspace_id IS NULL OR workspace_id = $2)
 `
@@ -214,6 +215,7 @@ func (q *Queries) GetCraftCatalogItem(ctx context.Context, arg GetCraftCatalogIt
 		&i.PhotoColorHex,
 		&i.PhotoColorUrl,
 		&i.PhotoColorAt,
+		&i.ShopColorHex,
 	)
 	return i, err
 }
@@ -372,7 +374,7 @@ SELECT inv.workspace_id, inv.catalog_item_id, inv.qty, inv.location, inv.notes, 
        inv.attrs AS stock_attrs,
        i.name, i.article, i.series, i.color_name, i.color_hex, i.color_source,
        i.size, i.finish, i.unit, i.pack_size, i.workspace_id AS item_workspace_id,
-       i.photo_color_hex, i.source, i.source_url, i.image_url, i.attrs AS item_attrs,
+       i.photo_color_hex, i.shop_color_hex, i.source, i.source_url, i.image_url, i.attrs AS item_attrs,
        COALESCE(sc.slug, rc.slug)::text AS category_slug,
        COALESCE(sc.name, rc.name)::text AS category_name,
        m.name AS manufacturer_name
@@ -421,6 +423,7 @@ type ListCraftInventoryRow struct {
 	PackSize         pgtype.Numeric `json:"pack_size"`
 	ItemWorkspaceID  pgtype.UUID    `json:"item_workspace_id"`
 	PhotoColorHex    string         `json:"photo_color_hex"`
+	ShopColorHex     string         `json:"shop_color_hex"`
 	Source           string         `json:"source"`
 	SourceUrl        string         `json:"source_url"`
 	ImageUrl         string         `json:"image_url"`
@@ -467,6 +470,7 @@ func (q *Queries) ListCraftInventory(ctx context.Context, arg ListCraftInventory
 			&i.PackSize,
 			&i.ItemWorkspaceID,
 			&i.PhotoColorHex,
+			&i.ShopColorHex,
 			&i.Source,
 			&i.SourceUrl,
 			&i.ImageUrl,
@@ -584,7 +588,7 @@ func (q *Queries) RelinkCraftInventory(ctx context.Context, arg RelinkCraftInven
 }
 
 const searchCraftCatalog = `-- name: SearchCraftCatalog :many
-SELECT i.id, i.workspace_id, i.category_id, i.manufacturer_id, i.article, i.series, i.name, i.color_name, i.color_hex, i.color_source, i.size, i.finish, i.unit, i.pack_size, i.attrs, i.source, i.source_url, i.image_url, i.external_id, i.fetched_at, i.manual_override, i.deprecated_at, i.created_at, i.updated_at, i.photo_color_hex, i.photo_color_url, i.photo_color_at,
+SELECT i.id, i.workspace_id, i.category_id, i.manufacturer_id, i.article, i.series, i.name, i.color_name, i.color_hex, i.color_source, i.size, i.finish, i.unit, i.pack_size, i.attrs, i.source, i.source_url, i.image_url, i.external_id, i.fetched_at, i.manual_override, i.deprecated_at, i.created_at, i.updated_at, i.photo_color_hex, i.photo_color_url, i.photo_color_at, i.shop_color_hex,
        COALESCE(sc.slug, rc.slug)::text AS category_slug,
        COALESCE(sc.name, rc.name)::text AS category_name,
        m.name  AS manufacturer_name,
@@ -652,6 +656,7 @@ type SearchCraftCatalogRow struct {
 	PhotoColorHex    string             `json:"photo_color_hex"`
 	PhotoColorUrl    string             `json:"photo_color_url"`
 	PhotoColorAt     pgtype.Timestamptz `json:"photo_color_at"`
+	ShopColorHex     string             `json:"shop_color_hex"`
 	CategorySlug     string             `json:"category_slug"`
 	CategoryName     string             `json:"category_name"`
 	ManufacturerName *string            `json:"manufacturer_name"`
@@ -707,6 +712,7 @@ func (q *Queries) SearchCraftCatalog(ctx context.Context, arg SearchCraftCatalog
 			&i.PhotoColorHex,
 			&i.PhotoColorUrl,
 			&i.PhotoColorAt,
+			&i.ShopColorHex,
 			&i.CategorySlug,
 			&i.CategoryName,
 			&i.ManufacturerName,
@@ -823,7 +829,7 @@ SET category_id     = $3,
     updated_at      = now()
 WHERE id = $1
   AND workspace_id = $2
-RETURNING id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at
+RETURNING id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at, shop_color_hex
 `
 
 type UpdateCraftCatalogItemParams struct {
@@ -895,6 +901,7 @@ func (q *Queries) UpdateCraftCatalogItem(ctx context.Context, arg UpdateCraftCat
 		&i.PhotoColorHex,
 		&i.PhotoColorUrl,
 		&i.PhotoColorAt,
+		&i.ShopColorHex,
 	)
 	return i, err
 }

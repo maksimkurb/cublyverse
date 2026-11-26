@@ -145,6 +145,7 @@ export function makeItem(overrides: Partial<CraftItem> = {}): CraftItem {
     source: "manual",
     source_url: "",
     image_url: "",
+    image_proxy_url: "",
     stock_qty: 7,
     in_inventory: true,
     ...overrides,

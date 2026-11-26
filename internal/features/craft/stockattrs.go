@@ -26,10 +26,14 @@ type stockAttrs struct {
 }
 
 // withStockColors fills the colour of an item the catalogue has none for: first
-// with what the warehouse remembered, then with the colour read from the
-// product photo. Values of the catalogue always win.
+// with what the warehouse remembered, then with a shop's colour table, then
+// with the colour read from the product photo. Values of the catalogue always
+// win.
 func withStockColors(item Item, raw []byte) Item {
 	item = withRememberedColors(item, raw)
+	if item.ColorHex == "" && item.shopHex != "" {
+		item.ColorHex, item.ColorSource = item.shopHex, "table"
+	}
 	if item.ColorHex == "" && item.photoHex != "" {
 		item.ColorHex, item.ColorSource = item.photoHex, "photo"
 	}

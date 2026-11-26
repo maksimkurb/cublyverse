@@ -15,6 +15,7 @@ import (
 	"github.com/maksimkurb/cublyverse/internal/features/craft"
 	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/httpapi/gen"
+	"github.com/maksimkurb/cublyverse/internal/imageproxy"
 	"github.com/maksimkurb/cublyverse/internal/oauthserver"
 	"github.com/maksimkurb/cublyverse/internal/workspace"
 )
@@ -209,6 +210,15 @@ type Deps struct {
 	// Craft backs the catalogue, stock and reference operations. It is always
 	// wired by internal/app.
 	Craft CraftService
+	// Images proxies product photos. Without it items carry no proxied address.
+	Images ImageProxy
+}
+
+// ImageProxy signs picture addresses and serves them at GET /api/v1/images. It
+// checks its own signature, so it is mounted outside the session middleware.
+type ImageProxy interface {
+	http.Handler
+	URL(raw string) string
 }
 
 // New builds the root HTTP handler: API, probes, documentation and the WebApp.
@@ -256,6 +266,9 @@ func New(deps Deps) http.Handler {
 	// describe.
 	apiMux.HandleFunc("/", notFound)
 	mux.Handle("/api/v1/", http.StripPrefix(apiBaseURL, h.sessionMiddleware(apiMux)))
+	if deps.Images != nil {
+		mux.Handle("GET "+imageproxy.Path, deps.Images)
+	}
 
 	if deps.AuthPages != nil {
 		mux.Handle("/auth/", deps.AuthPages)

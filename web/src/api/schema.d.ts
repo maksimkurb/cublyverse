@@ -2478,8 +2478,8 @@ export interface components {
             color_hex: string;
             /**
              * @description How trustworthy `color_hex` is: `official` (published by the
-             *     manufacturer), `approx` (estimated), `photo` (computed from the
-             *     product photo, rough) or empty.
+             *     manufacturer), `approx` (estimated), `table` (a shop's colour
+             *     table), `photo` (computed from the product photo, rough) or empty.
              * @example approx
              */
             color_source: string;
@@ -2527,6 +2527,13 @@ export interface components {
              * @example
              */
             image_url: string;
+            /**
+             * @description The same picture through this server, a signed relative address;
+             *     empty when there is none. Show this one, so the viewer's device does
+             *     not talk to the site that hosts the picture.
+             * @example
+             */
+            image_proxy_url: string;
             /**
              * Format: double
              * @description Quantity the workspace holds, in `unit`.

@@ -142,7 +142,7 @@ func (q *Queries) FinishCraftCatalogSyncRun(ctx context.Context, arg FinishCraft
 }
 
 const getGlobalCraftCatalogItemByArticle = `-- name: GetGlobalCraftCatalogItemByArticle :one
-SELECT id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at FROM craft_catalog_items
+SELECT id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at, shop_color_hex FROM craft_catalog_items
 WHERE workspace_id IS NULL
   AND manufacturer_id = $1
   AND category_id = $2
@@ -188,6 +188,7 @@ func (q *Queries) GetGlobalCraftCatalogItemByArticle(ctx context.Context, arg Ge
 		&i.PhotoColorHex,
 		&i.PhotoColorUrl,
 		&i.PhotoColorAt,
+		&i.ShopColorHex,
 	)
 	return i, err
 }
@@ -285,6 +286,39 @@ func (q *Queries) ListCraftPhotoColorCandidates(ctx context.Context, arg ListCra
 	return items, nil
 }
 
+const listCraftShopColorTargets = `-- name: ListCraftShopColorTargets :many
+SELECT id, article, shop_color_hex FROM craft_catalog_items
+WHERE workspace_id IS NULL
+  AND source = $1
+`
+
+type ListCraftShopColorTargetsRow struct {
+	ID           pgtype.UUID `json:"id"`
+	Article      string      `json:"article"`
+	ShopColorHex string      `json:"shop_color_hex"`
+}
+
+// Global items of one catalogue with the shop colour they have now.
+func (q *Queries) ListCraftShopColorTargets(ctx context.Context, source string) ([]ListCraftShopColorTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listCraftShopColorTargets, source)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCraftShopColorTargetsRow{}
+	for rows.Next() {
+		var i ListCraftShopColorTargetsRow
+		if err := rows.Scan(&i.ID, &i.Article, &i.ShopColorHex); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setCraftPhotoColor = `-- name: SetCraftPhotoColor :exec
 UPDATE craft_catalog_items
 SET photo_color_hex = $1,
@@ -302,6 +336,23 @@ type SetCraftPhotoColorParams struct {
 
 func (q *Queries) SetCraftPhotoColor(ctx context.Context, arg SetCraftPhotoColorParams) error {
 	_, err := q.db.Exec(ctx, setCraftPhotoColor, arg.Hex, arg.Url, arg.ID)
+	return err
+}
+
+const setCraftShopColor = `-- name: SetCraftShopColor :exec
+UPDATE craft_catalog_items
+SET shop_color_hex = $2
+WHERE id = $1
+  AND workspace_id IS NULL
+`
+
+type SetCraftShopColorParams struct {
+	ID           pgtype.UUID `json:"id"`
+	ShopColorHex string      `json:"shop_color_hex"`
+}
+
+func (q *Queries) SetCraftShopColor(ctx context.Context, arg SetCraftShopColorParams) error {
+	_, err := q.db.Exec(ctx, setCraftShopColor, arg.ID, arg.ShopColorHex)
 	return err
 }
 
@@ -347,7 +398,7 @@ SET series         = $2,
     updated_at     = now()
 WHERE id = $1
   AND workspace_id IS NULL
-RETURNING id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at
+RETURNING id, workspace_id, category_id, manufacturer_id, article, series, name, color_name, color_hex, color_source, size, finish, unit, pack_size, attrs, source, source_url, image_url, external_id, fetched_at, manual_override, deprecated_at, created_at, updated_at, photo_color_hex, photo_color_url, photo_color_at, shop_color_hex
 `
 
 type UpdateGlobalCraftCatalogItemParams struct {
@@ -416,6 +467,7 @@ func (q *Queries) UpdateGlobalCraftCatalogItem(ctx context.Context, arg UpdateGl
 		&i.PhotoColorHex,
 		&i.PhotoColorUrl,
 		&i.PhotoColorAt,
+		&i.ShopColorHex,
 	)
 	return i, err
 }

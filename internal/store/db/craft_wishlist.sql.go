@@ -188,6 +188,7 @@ SELECT w.id, w.workspace_id, w.catalog_item_id, w.title, w.qty_wanted, w.priorit
        i.color_hex     AS item_color_hex,
        i.color_source  AS item_color_source,
        i.photo_color_hex AS item_photo_color_hex,
+       i.shop_color_hex AS item_shop_color_hex,
        i.size          AS item_size,
        i.finish        AS item_finish,
        i.unit          AS item_unit,
@@ -242,6 +243,7 @@ type ListCraftWishlistItemsRow struct {
 	ItemColorHex      *string        `json:"item_color_hex"`
 	ItemColorSource   *string        `json:"item_color_source"`
 	ItemPhotoColorHex *string        `json:"item_photo_color_hex"`
+	ItemShopColorHex  *string        `json:"item_shop_color_hex"`
 	ItemSize          *string        `json:"item_size"`
 	ItemFinish        *string        `json:"item_finish"`
 	ItemUnit          *string        `json:"item_unit"`
@@ -291,6 +293,7 @@ func (q *Queries) ListCraftWishlistItems(ctx context.Context, arg ListCraftWishl
 			&i.ItemColorHex,
 			&i.ItemColorSource,
 			&i.ItemPhotoColorHex,
+			&i.ItemShopColorHex,
 			&i.ItemSize,
 			&i.ItemFinish,
 			&i.ItemUnit,

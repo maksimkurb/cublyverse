@@ -223,6 +223,10 @@ HTTP-слой генерируется из `api/openapi.yaml` (strict server): 
 тонкие адаптеры над сервисами фич, ошибки отдаются единым JSON. Подробности
 HTTP — `docs/API.md`.
 
+Фото позиций WebApp получает через `internal/imageproxy`
+(`GET /api/v1/images`, подписанные ссылки, только публичные адреса; см.
+[`API.md`](API.md)).
+
 MCP живёт на `/mcp` (`internal/mcpserver`) и использует официальный
 `github.com/modelcontextprotocol/go-sdk`:
 

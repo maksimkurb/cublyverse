@@ -27,6 +27,7 @@ type Option func(*Feature)
 func WithCatalogSync(syncer *catalog.Syncer, logger *slog.Logger) Option {
 	return func(f *Feature) {
 		job := NewCatalogSyncJob(syncer, logger)
+		job.shop = catalog.NewBiserShop(nil)
 		job.photos = catalog.NewPhotoColors(syncer.Store(), logger, nil)
 		f.catalogJob = job
 	}

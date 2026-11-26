@@ -3949,6 +3949,7 @@ components:
         - source
         - source_url
         - image_url
+        - image_proxy_url
         - stock_qty
         - in_inventory
       properties:
@@ -4005,8 +4006,8 @@ components:
           type: string
           description: |
             How trustworthy `color_hex` is: `official` (published by the
-            manufacturer), `approx` (estimated), `photo` (computed from the
-            product photo, rough) or empty.
+            manufacturer), `approx` (estimated), `table` (a shop's colour
+            table), `photo` (computed from the product photo, rough) or empty.
           example: approx
         size:
           type: string
@@ -4046,6 +4047,13 @@ components:
         image_url:
           type: string
           description: Product image URL; empty when there is none.
+          example: ""
+        image_proxy_url:
+          type: string
+          description: |
+            The same picture through this server, a signed relative address;
+            empty when there is none. Show this one, so the viewer's device does
+            not talk to the site that hosts the picture.
           example: ""
         stock_qty:
           type: number

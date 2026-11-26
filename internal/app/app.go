@@ -20,6 +20,7 @@ import (
 	"github.com/maksimkurb/cublyverse/internal/features/craft/catalog"
 	"github.com/maksimkurb/cublyverse/internal/features/reminders"
 	"github.com/maksimkurb/cublyverse/internal/httpapi"
+	"github.com/maksimkurb/cublyverse/internal/imageproxy"
 	"github.com/maksimkurb/cublyverse/internal/interaction/postgres"
 	"github.com/maksimkurb/cublyverse/internal/mcpserver"
 	"github.com/maksimkurb/cublyverse/internal/oauthserver"
@@ -173,7 +174,13 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		oauthHandler = oauth.Handler()
 		connections = oauth
 	}
+	imageKey, err := imageproxy.LoadKey(ctx, st.Queries())
+	if err != nil {
+		st.Close()
+		return nil, err
+	}
 	handler := httpapi.New(httpapi.Deps{
+		Images:      imageproxy.New(imageKey, logger),
 		OAuth:       oauthHandler,
 		Connections: connections,
 		Version:     version.String(),

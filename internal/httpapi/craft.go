@@ -50,7 +50,7 @@ func (h *handlers) SearchCraftCatalog(ctx context.Context, request gen.SearchCra
 	}
 	out := make(gen.SearchCraftCatalog200JSONResponse, 0, len(items))
 	for _, item := range items {
-		out = append(out, craftItemToAPI(item))
+		out = append(out, h.craftItemToAPI(item))
 	}
 	return out, nil
 }
@@ -79,7 +79,7 @@ func (h *handlers) CreateCraftItem(ctx context.Context, request gen.CreateCraftI
 		}
 		return nil, err
 	}
-	return gen.CreateCraftItem201JSONResponse(craftItemToAPI(created)), nil
+	return gen.CreateCraftItem201JSONResponse(h.craftItemToAPI(created)), nil
 }
 
 // GetCraftItem implements GET /api/v1/workspaces/{id}/catalog/{item_id}.
@@ -100,7 +100,7 @@ func (h *handlers) GetCraftItem(ctx context.Context, request gen.GetCraftItemReq
 		}
 		return nil, err
 	}
-	return gen.GetCraftItem200JSONResponse(craftItemToAPI(item)), nil
+	return gen.GetCraftItem200JSONResponse(h.craftItemToAPI(item)), nil
 }
 
 // UpdateCraftItem implements PUT /api/v1/workspaces/{id}/catalog/{item_id}.
@@ -129,7 +129,7 @@ func (h *handlers) UpdateCraftItem(ctx context.Context, request gen.UpdateCraftI
 		}
 		return nil, err
 	}
-	return gen.UpdateCraftItem200JSONResponse(craftItemToAPI(updated)), nil
+	return gen.UpdateCraftItem200JSONResponse(h.craftItemToAPI(updated)), nil
 }
 
 // DeleteCraftItem implements DELETE /api/v1/workspaces/{id}/catalog/{item_id}.
@@ -179,7 +179,7 @@ func (h *handlers) LinkCraftItem(ctx context.Context, request gen.LinkCraftItemR
 		}
 		return nil, err
 	}
-	return gen.LinkCraftItem200JSONResponse(craftStockToAPI(entry)), nil
+	return gen.LinkCraftItem200JSONResponse(h.craftStockToAPI(entry)), nil
 }
 
 // ListCraftInventory implements GET /api/v1/workspaces/{id}/inventory.
@@ -214,7 +214,7 @@ func (h *handlers) ListCraftInventory(ctx context.Context, request gen.ListCraft
 	}
 	out := make(gen.ListCraftInventory200JSONResponse, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, craftStockToAPI(row))
+		out = append(out, h.craftStockToAPI(row))
 	}
 	return out, nil
 }
@@ -243,7 +243,7 @@ func (h *handlers) SetCraftInventoryQty(ctx context.Context, request gen.SetCraf
 		}
 		return nil, err
 	}
-	return gen.SetCraftInventoryQty200JSONResponse(craftStockToAPI(entry)), nil
+	return gen.SetCraftInventoryQty200JSONResponse(h.craftStockToAPI(entry)), nil
 }
 
 // AdjustCraftInventoryQty implements POST /api/v1/workspaces/{id}/inventory/{item_id}/adjust.
@@ -272,7 +272,7 @@ func (h *handlers) AdjustCraftInventoryQty(ctx context.Context, request gen.Adju
 		}
 		return nil, err
 	}
-	return gen.AdjustCraftInventoryQty200JSONResponse(craftStockToAPI(entry)), nil
+	return gen.AdjustCraftInventoryQty200JSONResponse(h.craftStockToAPI(entry)), nil
 }
 
 // UpdateCraftInventoryMeta implements PATCH /api/v1/workspaces/{id}/inventory/{item_id}.
@@ -315,8 +315,16 @@ func (h *handlers) RemoveCraftInventory(ctx context.Context, request gen.RemoveC
 	return gen.RemoveCraftInventory204Response{}, nil
 }
 
+// proxied is the address a picture is shown from; empty without a proxy.
+func (h *handlers) proxied(raw string) string {
+	if h.deps.Images == nil {
+		return ""
+	}
+	return h.deps.Images.URL(raw)
+}
+
 // craftItemToAPI maps a catalogue item of the service to the API schema.
-func craftItemToAPI(item craft.Item) gen.CraftItem {
+func (h *handlers) craftItemToAPI(item craft.Item) gen.CraftItem {
 	var workspaceID *string
 	if item.WorkspaceID != "" {
 		id := item.WorkspaceID
@@ -327,34 +335,35 @@ func craftItemToAPI(item craft.Item) gen.CraftItem {
 		attrs = map[string]any{}
 	}
 	return gen.CraftItem{
-		Id:           item.ID,
-		WorkspaceId:  workspaceID,
-		Private:      item.Private(),
-		Category:     item.Category,
-		CategoryName: item.CategoryName,
-		Manufacturer: item.Manufacturer,
-		Article:      item.Article,
-		Series:       item.Series,
-		Name:         item.Name,
-		ColorName:    item.ColorName,
-		ColorHex:     item.ColorHex,
-		ColorSource:  item.ColorSource,
-		Size:         item.Size,
-		Finish:       item.Finish,
-		Unit:         item.Unit,
-		PackSize:     item.PackSize,
-		Attrs:        attrs,
-		Source:       item.Source,
-		SourceUrl:    item.SourceURL,
-		ImageUrl:     item.ImageURL,
-		StockQty:     item.StockQty,
-		InInventory:  item.InInventory,
+		Id:            item.ID,
+		WorkspaceId:   workspaceID,
+		Private:       item.Private(),
+		Category:      item.Category,
+		CategoryName:  item.CategoryName,
+		Manufacturer:  item.Manufacturer,
+		Article:       item.Article,
+		Series:        item.Series,
+		Name:          item.Name,
+		ColorName:     item.ColorName,
+		ColorHex:      item.ColorHex,
+		ColorSource:   item.ColorSource,
+		Size:          item.Size,
+		Finish:        item.Finish,
+		Unit:          item.Unit,
+		PackSize:      item.PackSize,
+		Attrs:         attrs,
+		Source:        item.Source,
+		SourceUrl:     item.SourceURL,
+		ImageUrl:      item.ImageURL,
+		ImageProxyUrl: h.proxied(item.ImageURL),
+		StockQty:      item.StockQty,
+		InInventory:   item.InInventory,
 	}
 }
 
-func craftStockToAPI(entry craft.StockEntry) gen.CraftStockEntry {
+func (h *handlers) craftStockToAPI(entry craft.StockEntry) gen.CraftStockEntry {
 	return gen.CraftStockEntry{
-		Item:      craftItemToAPI(entry.Item),
+		Item:      h.craftItemToAPI(entry.Item),
 		Qty:       entry.Qty,
 		Location:  entry.Location,
 		Notes:     entry.Notes,

@@ -72,11 +72,11 @@ type Item struct {
 	Name         string
 	ColorName    string
 	ColorHex     string
-	// ColorSource is "official", "approx", "photo" or empty.
+	// ColorSource is "official", "approx", "table", "photo" or empty.
 	ColorSource string
-	// photoHex is the colour read from the product photo; withStockColors
-	// shows it when nothing better is known.
-	photoHex string
+	// shopHex comes from a shop's colour table and photoHex from the product
+	// photo; withStockColors shows them when nothing better is known.
+	shopHex, photoHex string
 	Size        string
 	Finish      string
 	Unit        string
@@ -189,6 +189,7 @@ func (s *Service) SearchCatalog(ctx context.Context, userID, workspaceID string,
 			ColorName: r.ColorName, ColorHex: r.ColorHex, ColorSource: r.ColorSource, Size: r.Size,
 			Finish: r.Finish, Unit: r.Unit, PackSize: r.PackSize, Attrs: r.Attrs, Source: r.Source,
 			SourceUrl: r.SourceUrl, ImageUrl: r.ImageUrl, PhotoColorHex: r.PhotoColorHex,
+			ShopColorHex: r.ShopColorHex,
 		}, r.CategorySlug, r.CategoryName, deref(r.ManufacturerName))
 		item.StockQty = numFloat(r.StockQty)
 		item.InInventory = r.InInventory
@@ -347,7 +348,7 @@ func (s *Service) ListInventory(ctx context.Context, userID, workspaceID string,
 			Category: r.CategorySlug, CategoryName: r.CategoryName, Manufacturer: deref(r.ManufacturerName),
 			Article: r.Article, Series: r.Series, Name: r.Name, ColorName: r.ColorName, ColorHex: r.ColorHex,
 			ColorSource: r.ColorSource, Size: r.Size, Finish: r.Finish, Unit: r.Unit, PackSize: numFloatPtr(r.PackSize),
-			StockQty: numFloat(r.Qty), InInventory: true, photoHex: r.PhotoColorHex,
+			StockQty: numFloat(r.Qty), InInventory: true, shopHex: r.ShopColorHex, photoHex: r.PhotoColorHex,
 			Source: r.Source, SourceURL: r.SourceUrl, ImageURL: r.ImageUrl, Attrs: map[string]any{},
 		}
 		_ = json.Unmarshal(r.ItemAttrs, &item.Attrs)
@@ -792,7 +793,7 @@ func itemFromRow(r db.CraftCatalogItem, categorySlug, categoryName, manufacturer
 		Article: r.Article, Series: r.Series, Name: r.Name, ColorName: r.ColorName,
 		ColorHex: r.ColorHex, ColorSource: r.ColorSource, Size: r.Size, Finish: r.Finish,
 		Unit: r.Unit, PackSize: numFloatPtr(r.PackSize), Attrs: attrs,
-		Source: r.Source, SourceURL: r.SourceUrl, ImageURL: r.ImageUrl, photoHex: r.PhotoColorHex,
+		Source: r.Source, SourceURL: r.SourceUrl, ImageURL: r.ImageUrl, shopHex: r.ShopColorHex, photoHex: r.PhotoColorHex,
 	}
 }
 

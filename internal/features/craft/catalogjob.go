@@ -22,7 +22,9 @@ type CatalogSyncJob struct {
 	syncer   *catalog.Syncer
 	sources  []catalog.Source
 	interval time.Duration
-	// photos, when set, reads colours from new product photos after each check.
+	// shop and photos, when set, add approximate colours after each check: the
+	// shop's table weekly, new product photos at once.
+	shop   *catalog.BiserShop
 	photos *catalog.PhotoColors
 	logger *slog.Logger
 }
@@ -86,10 +88,24 @@ func (j *CatalogSyncJob) syncAll(ctx context.Context) {
 			)
 		}
 	}
+	j.syncShopColors(ctx)
 	if j.photos == nil || ctx.Err() != nil {
 		return
 	}
 	if _, err := j.photos.Run(ctx); err != nil && ctx.Err() == nil {
 		j.logger.Error("craft photo colours failed", slog.String("error", err.Error()))
+	}
+}
+
+func (j *CatalogSyncJob) syncShopColors(ctx context.Context) {
+	if j.shop == nil || ctx.Err() != nil {
+		return
+	}
+	due, err := j.syncer.Due(ctx, catalog.BiserShopSource, j.interval, time.Now())
+	if err == nil && due {
+		_, err = j.syncer.RunShopColors(ctx, j.shop)
+	}
+	if err != nil && ctx.Err() == nil {
+		j.logger.Error("craft shop colours failed", slog.String("error", err.Error()))
 	}
 }

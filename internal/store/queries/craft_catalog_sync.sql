@@ -115,3 +115,15 @@ SET photo_color_hex = sqlc.arg(hex),
     photo_color_at  = now()
 WHERE id = sqlc.arg(id)
   AND workspace_id IS NULL;
+
+-- name: ListCraftShopColorTargets :many
+-- Global items of one catalogue with the shop colour they have now.
+SELECT id, article, shop_color_hex FROM craft_catalog_items
+WHERE workspace_id IS NULL
+  AND source = $1;
+
+-- name: SetCraftShopColor :exec
+UPDATE craft_catalog_items
+SET shop_color_hex = $2
+WHERE id = $1
+  AND workspace_id IS NULL;

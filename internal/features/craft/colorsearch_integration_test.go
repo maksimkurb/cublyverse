@@ -58,6 +58,15 @@ func TestColorSearch(t *testing.T) {
 	_, err = e.craft.ListInventory(ctx, user, home.ID, craft.CatalogFilter{Color: "red"})
 	wantInvalid(t, "a colour that is not #RRGGBB", err)
 
+	// A shop's table is preferred to the photo.
+	if _, err := e.st.Pool().Exec(ctx, "UPDATE craft_catalog_items SET shop_color_hex = '#B01122' WHERE id = $1", official); err != nil {
+		t.Fatal(err)
+	}
+	tabled, err := e.craft.GetItem(ctx, user, home.ID, official)
+	if err != nil || tabled.ColorHex != "#B01122" || tabled.ColorSource != "table" {
+		t.Fatalf("table colour = %+v %v", tabled, err)
+	}
+
 	if _, err := e.craft.Adjust(ctx, user, home.ID, official, 1, ""); err != nil {
 		t.Fatal(err)
 	}

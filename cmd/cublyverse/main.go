@@ -43,7 +43,7 @@ commands:
   catalog sync <source>
                    refresh the global craft catalogue from an official source
                    (dmc, preciosa or all)
-  catalog colors   read approximate colours from new product photos
+  catalog colors   approximate colours: shop table and new product photos
   docs mcp [--write] [--names]
                    print the MCP tool reference, rewrite docs/MCP.md between
                    the generated markers, or list the registered tool names

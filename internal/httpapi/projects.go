@@ -35,7 +35,7 @@ func (h *handlers) ListProjects(ctx context.Context, request gen.ListProjectsReq
 	}
 	out := make(gen.ListProjects200JSONResponse, 0, len(projects))
 	for _, project := range projects {
-		out = append(out, projectToAPI(project))
+		out = append(out, h.projectToAPI(project))
 	}
 	return out, nil
 }
@@ -64,7 +64,7 @@ func (h *handlers) CreateProject(ctx context.Context, request gen.CreateProjectR
 		}
 		return nil, err
 	}
-	return gen.CreateProject201JSONResponse(projectToAPI(created)), nil
+	return gen.CreateProject201JSONResponse(h.projectToAPI(created)), nil
 }
 
 // GetProject implements GET /api/v1/workspaces/{id}/projects/{project_id}.
@@ -85,7 +85,7 @@ func (h *handlers) GetProject(ctx context.Context, request gen.GetProjectRequest
 		}
 		return nil, err
 	}
-	return gen.GetProject200JSONResponse(projectToAPI(project)), nil
+	return gen.GetProject200JSONResponse(h.projectToAPI(project)), nil
 }
 
 // UpdateProject implements PATCH /api/v1/workspaces/{id}/projects/{project_id}.
@@ -112,7 +112,7 @@ func (h *handlers) UpdateProject(ctx context.Context, request gen.UpdateProjectR
 		}
 		return nil, err
 	}
-	return gen.UpdateProject200JSONResponse(projectToAPI(updated)), nil
+	return gen.UpdateProject200JSONResponse(h.projectToAPI(updated)), nil
 }
 
 // DeleteProject implements DELETE /api/v1/workspaces/{id}/projects/{project_id}.
@@ -157,7 +157,7 @@ func (h *handlers) SetProjectMaterial(ctx context.Context, request gen.SetProjec
 		}
 		return nil, err
 	}
-	return gen.SetProjectMaterial200JSONResponse(projectToAPI(project)), nil
+	return gen.SetProjectMaterial200JSONResponse(h.projectToAPI(project)), nil
 }
 
 // RemoveProjectMaterial implements DELETE /api/v1/workspaces/{id}/projects/{project_id}/materials/{item_id}.
@@ -202,7 +202,7 @@ func (h *handlers) UseProjectMaterial(ctx context.Context, request gen.UseProjec
 		}
 		return nil, err
 	}
-	return gen.UseProjectMaterial200JSONResponse(projectToAPI(project)), nil
+	return gen.UseProjectMaterial200JSONResponse(h.projectToAPI(project)), nil
 }
 
 // ShortageToWishlist implements POST /api/v1/workspaces/{id}/projects/{project_id}/shortage-to-wishlist.
@@ -228,7 +228,7 @@ func (h *handlers) ShortageToWishlist(ctx context.Context, request gen.ShortageT
 	}
 	out := make(gen.ShortageToWishlist200JSONResponse, 0, len(added))
 	for _, wish := range added {
-		out = append(out, wishToAPI(wish))
+		out = append(out, h.wishToAPI(wish))
 	}
 	return out, nil
 }
@@ -239,11 +239,11 @@ func projectInput(body gen.ProjectInput) craft.ProjectInput {
 }
 
 // projectToAPI maps a project of the service to the API schema.
-func projectToAPI(project craft.Project) gen.Project {
+func (h *handlers) projectToAPI(project craft.Project) gen.Project {
 	materials := make([]gen.ProjectMaterial, 0, len(project.Materials))
 	for _, material := range project.Materials {
 		materials = append(materials, gen.ProjectMaterial{
-			Item:       craftItemToAPI(material.Item),
+			Item:       h.craftItemToAPI(material.Item),
 			QtyPlanned: material.QtyPlanned,
 			QtyUsed:    material.QtyUsed,
 			Shortage:   material.Shortage,

@@ -7,7 +7,7 @@ import { ColorTag } from "./ColorTag";
 import { swatchStyle } from "./format";
 
 type SwatchItem = Pick<CraftItem, "color_hex"> &
-  Partial<Pick<CraftItem, "image_url" | "source_url" | "name" | "color_source">>;
+  Partial<Pick<CraftItem, "image_proxy_url" | "source_url" | "name" | "color_source">>;
 
 /**
  * The colour of an item: the manufacturer's photo when there is one (a single
@@ -18,9 +18,9 @@ export function Swatch({ item, zoomable }: { item: SwatchItem; zoomable?: boolea
   const [broken, setBroken] = useState(false);
   const [open, setOpen] = useState(false);
 
-  if (item.image_url && !broken) {
+  if (item.image_proxy_url && !broken) {
     const photo = (
-      <img src={item.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
+      <img src={item.image_proxy_url} alt="" loading="lazy" onError={() => setBroken(true)} />
     );
     if (!zoomable) {
       return (
@@ -57,7 +57,7 @@ function PhotoSheet({ item, onClose }: { item: SwatchItem; onClose: () => void }
   return (
     <Sheet title={item.name ?? "Фото"} onClose={onClose}>
       <div className="cv-form">
-        <img className="craft-photo" src={item.image_url} alt={item.name ?? ""} referrerPolicy="no-referrer" />
+        <img className="craft-photo" src={item.image_proxy_url} alt={item.name ?? ""} />
         <ColorTag item={{ color_hex: item.color_hex, color_source: item.color_source ?? "" }} />
         {item.source_url && (
           <a href={item.source_url} target="_blank" rel="noopener noreferrer">

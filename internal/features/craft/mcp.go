@@ -131,7 +131,7 @@ type mcpItem struct {
 	Name         string         `json:"name" jsonschema:"item name"`
 	ColorName    string         `json:"color_name,omitempty" jsonschema:"colour name"`
 	ColorHex     string         `json:"color_hex,omitempty" jsonschema:"colour as #RRGGBB"`
-	ColorSource  string         `json:"color_source,omitempty" jsonschema:"how trustworthy color_hex is: official, approx, or photo (computed from the product photo, rough)"`
+	ColorSource  string         `json:"color_source,omitempty" jsonschema:"how trustworthy color_hex is: official, approx, table (a shop colour table) or photo (computed from the product photo, rough)"`
 	Size         string         `json:"size,omitempty" jsonschema:"size, free text"`
 	Finish       string         `json:"finish,omitempty" jsonschema:"finish or coating, free text"`
 	Unit         string         `json:"unit" jsonschema:"unit the quantity is counted in"`

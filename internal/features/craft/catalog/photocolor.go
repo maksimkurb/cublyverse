@@ -23,9 +23,11 @@ import (
 )
 
 const (
-	// maxPhotoBytes and maxPhotoSide bound what one photo may cost.
-	maxPhotoBytes = 4 << 20
-	maxPhotoSide  = 4096
+	// maxPhotoBytes and maxPhotoPixels bound what one photo may cost. Some
+	// product photos are 4288 pixels wide; decoding 16 megapixels takes at most
+	// a couple of hundred megabytes.
+	maxPhotoBytes  = 4 << 20
+	maxPhotoPixels = 16 << 20
 	// maxPhotoFailures stops a pass when the site keeps failing.
 	maxPhotoFailures = 10
 	// photoRetry is how long an unreadable photo is left alone.
@@ -182,7 +184,7 @@ func readPhotoColor(ctx context.Context, client *http.Client, base *url.URL, raw
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", errUnreadablePhoto, err)
 	}
-	if config.Width > maxPhotoSide || config.Height > maxPhotoSide {
+	if int64(config.Width)*int64(config.Height) > maxPhotoPixels {
 		return "", fmt.Errorf("%w: %d×%d pixels", errUnreadablePhoto, config.Width, config.Height)
 	}
 	photo, _, err := image.Decode(bytes.NewReader(body))

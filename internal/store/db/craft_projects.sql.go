@@ -142,7 +142,7 @@ func (q *Queries) IncrementCraftProjectMaterialUsed(ctx context.Context, arg Inc
 
 const listCraftProjectMaterials = `-- name: ListCraftProjectMaterials :many
 SELECT pm.project_id, pm.catalog_item_id, pm.qty_planned, pm.qty_used,
-       i.id, i.workspace_id, i.category_id, i.manufacturer_id, i.article, i.series, i.name, i.color_name, i.color_hex, i.color_source, i.size, i.finish, i.unit, i.pack_size, i.attrs, i.source, i.source_url, i.image_url, i.external_id, i.fetched_at, i.manual_override, i.deprecated_at, i.created_at, i.updated_at, i.photo_color_hex, i.photo_color_url, i.photo_color_at,
+       i.id, i.workspace_id, i.category_id, i.manufacturer_id, i.article, i.series, i.name, i.color_name, i.color_hex, i.color_source, i.size, i.finish, i.unit, i.pack_size, i.attrs, i.source, i.source_url, i.image_url, i.external_id, i.fetched_at, i.manual_override, i.deprecated_at, i.created_at, i.updated_at, i.photo_color_hex, i.photo_color_url, i.photo_color_at, i.shop_color_hex,
        COALESCE(sc.slug, rc.slug)::text AS category_slug,
        COALESCE(sc.name, rc.name)::text AS category_name,
        m.name  AS manufacturer_name,
@@ -197,6 +197,7 @@ type ListCraftProjectMaterialsRow struct {
 	PhotoColorHex    string             `json:"photo_color_hex"`
 	PhotoColorUrl    string             `json:"photo_color_url"`
 	PhotoColorAt     pgtype.Timestamptz `json:"photo_color_at"`
+	ShopColorHex     string             `json:"shop_color_hex"`
 	CategorySlug     string             `json:"category_slug"`
 	CategoryName     string             `json:"category_name"`
 	ManufacturerName *string            `json:"manufacturer_name"`
@@ -248,6 +249,7 @@ func (q *Queries) ListCraftProjectMaterials(ctx context.Context, arg ListCraftPr
 			&i.PhotoColorHex,
 			&i.PhotoColorUrl,
 			&i.PhotoColorAt,
+			&i.ShopColorHex,
 			&i.CategorySlug,
 			&i.CategoryName,
 			&i.ManufacturerName,

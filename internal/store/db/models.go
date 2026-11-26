@@ -23,6 +23,12 @@ type ApiToken struct {
 	CreatedAt   time.Time          `json:"created_at"`
 }
 
+type AppKey struct {
+	Name      string    `json:"name"`
+	Value     []byte    `json:"value"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type AuthPending struct {
 	ID                 pgtype.UUID        `json:"id"`
 	StateHash          []byte             `json:"state_hash"`
@@ -70,6 +76,7 @@ type CraftCatalogItem struct {
 	PhotoColorHex  string             `json:"photo_color_hex"`
 	PhotoColorUrl  string             `json:"photo_color_url"`
 	PhotoColorAt   pgtype.Timestamptz `json:"photo_color_at"`
+	ShopColorHex   string             `json:"shop_color_hex"`
 }
 
 type CraftCatalogSyncRun struct {

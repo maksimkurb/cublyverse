@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/jpeg" // product photos
 	_ "image/png"  // product photos
 	"io"
@@ -14,6 +15,8 @@ import (
 	"net/url"
 	"slices"
 	"time"
+
+	"golang.org/x/image/webp"
 
 	"github.com/maksimkurb/cublyverse/internal/store"
 	"github.com/maksimkurb/cublyverse/internal/store/db"
@@ -174,8 +177,8 @@ func readPhotoColor(ctx context.Context, client *http.Client, base *url.URL, raw
 		return "", fmt.Errorf("%w: larger than %d bytes", errUnreadablePhoto, maxPhotoBytes)
 	}
 	// The size is checked before decoding allocates the pixels. The format is
-	// taken from the content: the site labels JPEG files as WebP.
-	config, _, err := image.DecodeConfig(bytes.NewReader(body))
+	// taken from the content: of the files named .webp some are JPEG.
+	config, format, err := image.DecodeConfig(bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", errUnreadablePhoto, err)
 	}
@@ -186,7 +189,43 @@ func readPhotoColor(ctx context.Context, client *http.Client, base *url.URL, raw
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", errUnreadablePhoto, err)
 	}
+	if format == "webp" {
+		photo = limitedRange(photo)
+	}
 	return PhotoColor(photo), nil
+}
+
+// webpFormat keeps the webp decoder imported and registered with image.Decode.
+var _ = webp.Decode
+
+// limitedRange corrects the colours of a lossy WebP. It stores luma in 16..235
+// (BT.601), but the decoder returns an image.YCbCr, which Go reads as the full
+// range of JPEG: the picture comes out pale. Lossless files are already RGB.
+func limitedRange(photo image.Image) image.Image {
+	switch p := photo.(type) {
+	case *image.YCbCr:
+		return videoRange{p}
+	case *image.NYCbCrA:
+		return videoRange{&p.YCbCr}
+	}
+	return photo
+}
+
+type videoRange struct{ *image.YCbCr }
+
+func (v videoRange) ColorModel() color.Model { return color.RGBAModel }
+
+func (v videoRange) At(x, y int) color.Color {
+	c := v.YCbCrAt(x, y)
+	luma := 1.164383 * (float64(c.Y) - 16)
+	blue, red := float64(c.Cb)-128, float64(c.Cr)-128
+	clamp := func(value float64) uint8 { return uint8(min(max(value+0.5, 0), 255)) }
+	return color.RGBA{
+		R: clamp(luma + 1.596027*red),
+		G: clamp(luma - 0.391762*blue - 0.812968*red),
+		B: clamp(luma + 2.017232*blue),
+		A: 255,
+	}
 }
 
 // PhotoColor is the median of each channel over the lower left of a product

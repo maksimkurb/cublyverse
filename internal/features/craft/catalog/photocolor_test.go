@@ -29,3 +29,22 @@ func TestPhotoColorTakesTheMedianOfTheLowerLeft(t *testing.T) {
 		t.Errorf("PhotoColor = %s, want #0A783C", got)
 	}
 }
+
+// A lossy WebP keeps black at 16 and white at 235.
+func TestLimitedRangeRestoresBlackAndWhite(t *testing.T) {
+	for _, tc := range []struct {
+		luma uint8
+		want string
+	}{{16, "#000000"}, {235, "#FFFFFF"}} {
+		photo := image.NewYCbCr(image.Rect(0, 0, 8, 8), image.YCbCrSubsampleRatio420)
+		for i := range photo.Y {
+			photo.Y[i] = tc.luma
+		}
+		for i := range photo.Cb {
+			photo.Cb[i], photo.Cr[i] = 128, 128
+		}
+		if got := PhotoColor(limitedRange(photo)); got != tc.want {
+			t.Errorf("luma %d = %s, want %s", tc.luma, got, tc.want)
+		}
+	}
+}
